@@ -21,9 +21,12 @@
     barracks:  {name:"Caserne", desc:"Permet d'entraîner des troupes.", baseCost:{wood:100,clay:85,iron:45}, factor:{wood:1.26,clay:1.28,iron:1.26}, baseTime:600, max:25, requires:{hq:1}},
     wall:      {name:"Muraille", desc:"Renforce la défense du village (+5%/niveau).", baseCost:{wood:25,clay:50,iron:10}, factor:{wood:1.26,clay:1.275,iron:1.26}, baseTime:1200, max:20},
     hide:      {name:"Cachette", desc:"Protège une partie des ressources en cas de pillage (5%/niveau).", baseCost:{wood:25,clay:30,iron:25}, factor:{wood:1.25,clay:1.25,iron:1.25}, baseTime:600, max:10},
-    academy:   {name:"Académie", desc:"Permet de former des Nobles pour conquérir des villages.", baseCost:{wood:7500,clay:12500,iron:5000}, factor:{wood:2,clay:2,iron:2}, baseTime:195600, max:1, requires:{hq:20}}
+    academy:   {name:"Académie", desc:"Permet de former des Nobles pour conquérir des villages.", baseCost:{wood:7500,clay:12500,iron:5000}, factor:{wood:2,clay:2,iron:2}, baseTime:195600, max:1, requires:{hq:20}},
+    guildHall: {name:"Hall de guilde", desc:"Permet de faire don de ressources à la guilde pour obtenir un bonus de production pour tous ses membres. Plus son niveau est élevé, plus vous pouvez donner en une fois.", baseCost:{wood:2000,clay:2000,iron:2000}, factor:{wood:1.5,clay:1.5,iron:1.5}, baseTime:3600, max:5, requires:{hq:5}}
   };
   const BUILD_ORDER = ["hq","wood","clay","iron","warehouse","farm","barracks","wall","hide","academy"];
+  // Le Hall de guilde n'est volontairement PAS dans BUILD_ORDER : il n'a pas d'emplacement dans la
+  // scène du village (octogone de bâtiments déjà plein) et se construit depuis l'onglet Guilde.
 
   const TROOPS = {
     spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
