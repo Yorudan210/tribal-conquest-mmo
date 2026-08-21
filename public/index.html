@@ -249,6 +249,9 @@
   .loyalty-bar{width:120px;}
   .report.defense{border-left:4px solid #7a3fae;}
   .report.announcement{border-left:4px solid var(--gold);}
+  .report.support{border-left:4px solid var(--green);}
+  .report.gift{border-left:4px solid var(--gold);}
+  .report.guild{border-left:4px solid #7a3fae;}
   .report .title .actions{display:flex; align-items:center; gap:8px; font-weight:normal;}
   .report-del{background:none; border:none; cursor:pointer; font-size:13px; opacity:.55; padding:2px 5px; border-radius:4px; line-height:1;}
   .report-del:hover{opacity:1; background:rgba(255,255,255,.08);}
@@ -850,6 +853,7 @@ let mapJustDragged = false;
 let sparkleUntil = {};
 let scoutIntel = {};         // villageId -> {resources, troops, wallLevel, loyalty, time, isPlayer} — dernier renseignement connu
 let adminPlayers = null;     // liste des joueurs (panneau Admin), chargée à la demande
+let adminMissions = null;    // liste des missions en cours (panneau Admin), chargée à la demande
 let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des joueurs)
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
@@ -861,8 +865,12 @@ const REPORT_FILTERS = [
   {key:"defense", label:"🛡️ Attaques subies"},
   {key:"scout", label:"🔭 Reconnaissances"},
   {key:"raid", label:"⚠️ Raids de pillards"},
+  {key:"support", label:"🤝 Soutien", kinds:["supportIn","supportOut"]},
+  {key:"gift", label:"🎁 Dons", kinds:["giftIn","giftOut"]},
+  {key:"guildInvite", label:"👥 Guilde"},
   {key:"announcement", label:"📢 Annonces"}
 ];
+function reportMatchesFilter(r, f){ return f.kinds ? f.kinds.includes(r.kind) : r.kind===f.key; }
 
 function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
 
@@ -971,6 +979,7 @@ async function adminAction(promiseFn, successMsg){
     const data = await promiseFn();
     if(data.snapshot) applySnapshot(data.snapshot);
     if(data.players) adminPlayers = data.players;
+    if(data.missions) adminMissions = data.missions;
     if(data.speedMultiplier!=null) adminSpeed = data.speedMultiplier;
     if(successMsg) toast(successMsg);
     renderTabs(); renderTopBar(); renderSidebar(); renderActiveTabContent();
@@ -983,6 +992,7 @@ async function refreshAdminData(){
   try{
     const data = await apiCall("/api/admin/players","GET");
     adminPlayers = data.players;
+    adminMissions = data.missions;
     adminSpeed = data.speedMultiplier||1;
     if(activeTab==="admin") renderActiveTabContent();
   }catch(err){ toast("⚠️ "+err.message); }
@@ -1033,10 +1043,38 @@ function sendMission(villageId, kind){
   if(!any){ toast("Sélectionnez au moins une troupe à envoyer."); return; }
   if(kind==="scout" && !troops.scout){ toast("Une reconnaissance nécessite au moins un éclaireur."); return; }
   const target=state.villages.find(v=>v.id===villageId);
+  if(kind==="support"){
+    doAction(
+      ()=>apiCall("/api/support/send","POST",{targetId:villageId, troops}),
+      "🤝 Renfort envoyé"+(target?(" vers "+target.name+" ("+target.x+"|"+target.y+")"):"")+".",
+      "depart"
+    );
+    return;
+  }
   doAction(
     ()=>apiCall("/api/mission","POST",{targetId:villageId, kind, troops}),
     (kind==="attack"?"⚔️ Attaque":"🔭 Reconnaissance")+" envoyée"+(target?(" vers "+target.name+" ("+target.x+"|"+target.y+")"):"")+".",
     "depart"
+  );
+}
+
+function sendGift(villageId){
+  const target=state.villages.find(v=>v.id===villageId);
+  if(!target || !target.isPlayer){ toast("Cible invalide."); return; }
+  const amt={};
+  let any=false;
+  for(const r of ["wood","clay","iron"]){
+    const el=document.getElementById("gift_"+villageId+"_"+r);
+    if(!el) continue;
+    let n=Math.floor(Number(el.value)||0);
+    n=Math.max(0, Math.min(n, Math.floor(state.village.resources[r]||0)));
+    if(n>0){ amt[r]=n; any=true; }
+  }
+  if(!any){ toast("Indiquez au moins une ressource à donner."); return; }
+  doAction(
+    ()=>apiCall("/api/gift","POST",{username:target.owner, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
+    "🎁 Don envoyé à "+target.owner+".",
+    null
   );
 }
 
@@ -1157,7 +1195,7 @@ function enterGame(data){
 function logout(silent){
   stopPolling();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
-  adminPlayers=null; adminSelected=null; adminPlayerFilter="";
+  adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("app").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
@@ -1271,21 +1309,25 @@ function updateTopBarStats(){
 
 function renderTabs(){
   const questsDone=state.quests.filter(q=>q.claimed).length;
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
   if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
   nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; renderTabs(); renderActiveTabContent(); });
 }
 
+function fmtTroops(troops){
+  return TROOP_ORDER.filter(k=>(troops[k]||0)>0).map(k=>TROOPS[k].name+" "+troops[k]).join(", ") || "aucune";
+}
+
 function renderSidebar(){
   const side=document.getElementById("sidebar");
   const now=estimateNow();
-  const bq=state.village.buildQueue.map(item=>{
+  const bq=state.village.buildQueue.map((item,i)=>{
     const b=BUILDINGS[item.key];
     const timeLeft=Math.max(0, item.startAt+item.duration-now);
     const pct=100*(1-timeLeft/item.duration);
-    return `<div class="queue-item"><div class="flex-between"><span>${b.name} → niv. ${item.level}</span><span>${fmtTime(timeLeft)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+    return `<div class="queue-item"><div class="flex-between"><span>${b.name} → niv. ${item.level}</span><span>${fmtTime(timeLeft)} <a href="#" data-cancel-build="${i}" title="Annuler (remboursé)" style="margin-left:6px;">✖</a></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
   }).join("") || `<div class="muted small">File vide.</div>`;
 
   const tq=state.village.trainQueue.map(o=>{
@@ -1295,12 +1337,14 @@ function renderSidebar(){
 
   const activeMissions=state.missions.filter(m=>m.kind!=="raid");
   const incomingRaids=state.missions.filter(m=>m.kind==="raid" && !m.resolveDone);
+  const MISSION_LABEL = { attack:"⚔️ Attaque", scout:"🔭 Reconnaissance", support:"🤝 Soutien", supportReturn:"🤝 Soutien" };
 
   const missions=activeMissions.map(m=>{
     const target=state.villages.find(v=>v.id===m.targetId);
-    const label = m.kind==="attack"?"⚔️ Attaque":"🔭 Reconnaissance";
+    const label = MISSION_LABEL[m.kind]||m.kind;
     let phase, remain;
-    if(!m.resolveDone){ phase="en route vers"; remain=m.arriveAt-now; }
+    if(m.kind==="supportReturn"){ phase="revient vers"; remain=m.returnAt-now; }
+    else if(!m.resolveDone){ phase="en route vers"; remain=m.arriveAt-now; }
     else { phase="retour de"; remain=m.returnAt-now; }
     return `<div class="mission-item"><div class="flex-between"><span>${label} ${phase} ${target?target.name:'?'}</span><span>${fmtTime(remain)}</span></div></div>`;
   }).join("") || `<div class="muted small">Aucune troupe en mission.</div>`;
@@ -1311,12 +1355,40 @@ function renderSidebar(){
       return `<div class="mission-item"><div class="flex-between"><span>${m.raidSourceName||'Village barbare'} approche</span><span>${fmtTime(remain)}</span></div></div>`;
     }).join("")}</div>` : '';
 
+  const incomingSupport = state.village.support||[];
+  const supportInBox = incomingSupport.length ? `
+    <div class="box"><h3>🤝 Renforts reçus</h3>${incomingSupport.map(s=>`
+      <div class="mission-item"><div class="flex-between"><span>De ${escapeHtml(s.from)}</span><span class="small muted">${fmtTroops(s.troops)}</span></div></div>
+    `).join("")}</div>` : '';
+
+  const mySupport = state.mySupport||[];
+  const supportOutBox = mySupport.length ? `
+    <div class="box"><h3>🤝 Vos renforts envoyés</h3>${mySupport.map(s=>`
+      <div class="mission-item">
+        <div class="flex-between"><span>Chez ${escapeHtml(s.atVillageName)} (${s.atCoord})</span><a href="#" data-recall-support="${s.id}">↩️ Rappeler</a></div>
+        <div class="small muted">${fmtTroops(s.troops)}</div>
+      </div>
+    `).join("")}</div>` : '';
+
   side.innerHTML = `
     <div class="box"><h3>🏗️ File de construction</h3>${bq}</div>
     <div class="box"><h3>⚔️ File d'entraînement</h3>${tq}</div>
     <div class="box"><h3>🚩 Missions en cours</h3>${missions}</div>
     ${enemyBox}
+    ${supportInBox}
+    ${supportOutBox}
   `;
+
+  side.querySelectorAll("[data-cancel-build]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    const index=Number(el.dataset.cancelBuild);
+    doAction(()=>apiCall("/api/build/cancel","POST",{index}), "Construction annulée, ressources remboursées.", null);
+  });
+  side.querySelectorAll("[data-recall-support]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    const supportId=el.dataset.recallSupport;
+    doAction(()=>apiCall("/api/support/recall","POST",{supportId}), "🤝 Rappel envoyé, vos troupes reviennent.", null);
+  });
 }
 
 /* Widget de chat flottant, indépendant du système d'onglets : reconstruit la coquille (ouvert/fermé)
@@ -1373,10 +1445,12 @@ function renderActiveTabContent(){
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
+  else if(activeTab==="guild") main.innerHTML=renderGuild();
   else if(activeTab==="admin" && state.isAdmin) main.innerHTML=renderAdmin();
   else main.innerHTML=renderHelp();
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); attachMapHandlers(); }
+  if(activeTab==="guild") attachGuildHandlers();
   if(activeTab==="admin" && state.isAdmin){
     attachAdminHandlers();
     if(!adminPlayers) refreshAdminData();
@@ -1693,6 +1767,16 @@ function renderVillageDetail(){
       <a href="#" data-max="${t.id}_${k}" style="font-size:10px;">max ${avail}</a>
     </div>`;
   }).join("");
+
+  const giftBox = t.isPlayer ? `
+    <div class="send-form open" style="margin-top:10px;">
+      <div class="small muted" style="margin-bottom:6px;">🎁 Donner des ressources (immédiat, sans marchand)</div>
+      <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap;">
+        ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" max="${Math.floor(v.resources[r])}" value="0" id="gift_${t.id}_${r}"></div>`).join("")}
+      </div>
+      <button data-gift="${t.id}">🎁 Envoyer le don</button>
+    </div>` : "";
+
   return `<div class="box">
     <div class="flex-between">
       <h3 style="margin-bottom:0;">${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
@@ -1703,7 +1787,9 @@ function renderVillageDetail(){
       <div class="inputs">${troopInputs}</div>
       <button data-send="${t.id}_attack" class="primary">⚔️ Attaquer</button>
       <button data-send="${t.id}_scout">🔭 Reconnaître</button>
+      ${t.isPlayer?`<button data-send="${t.id}_support">🤝 Envoyer en soutien</button>`:''}
     </div>
+    ${giftBox}
   </div>`;
 }
 
@@ -1909,7 +1995,7 @@ function attachMapHandlers(){
 
 function renderReportFilters(){
   return `<div class="report-filters">${REPORT_FILTERS.map(f=>{
-    const count = f.key==="all" ? state.reports.length : state.reports.filter(r=>r.kind===f.key).length;
+    const count = f.key==="all" ? state.reports.length : state.reports.filter(r=>reportMatchesFilter(r,f)).length;
     return `<button class="filter-btn ${reportFilter===f.key?'active':''}" data-report-filter="${f.key}">${f.label} (${count})</button>`;
   }).join("")}</div>`;
 }
@@ -1921,7 +2007,8 @@ function reportActions(r){
 function renderReports(){
   const filterBar = renderReportFilters();
   if(!state.reports.length) return `<h2>Rapports</h2>${filterBar}<p class="muted">Aucun rapport pour l'instant.</p>`;
-  const filtered = reportFilter==="all" ? state.reports : state.reports.filter(r=>r.kind===reportFilter);
+  const activeFilterObj = REPORT_FILTERS.find(f=>f.key===reportFilter);
+  const filtered = reportFilter==="all" ? state.reports : state.reports.filter(r=>reportMatchesFilter(r, activeFilterObj));
   const bulkLabel = reportFilter==="all" ? "tous les rapports" : "les rapports affichés";
   const bulkBar = `<div class="flex-between" style="margin-bottom:10px;">
     <span class="small muted">${filtered.length} rapport${filtered.length>1?'s':''} affiché${filtered.length>1?'s':''}</span>
@@ -1971,6 +2058,34 @@ function renderReports(){
         <div class="title" data-toggle="${r.id}"><span>⚠️ Raid de pillards</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">Ressources perdues : 🪵${(r.lost&&r.lost.wood)||0} 🧱${(r.lost&&r.lost.clay)||0} ⛏️${(r.lost&&r.lost.iron)||0}</div>
       </div>`;
+    } else if(r.kind==="supportIn"){
+      return `<div class="report support">
+        <div class="title"><span>🤝 Renfort reçu de ${escapeHtml(r.from)}</span>${reportActions(r)}</div>
+        <div class="details open">${fmtTroops(r.troops)}</div>
+      </div>`;
+    } else if(r.kind==="supportOut"){
+      return `<div class="report support">
+        <div class="title"><span>🤝 Renfort envoyé${r.lost?'':(' vers '+r.target+' ('+r.coord+')')}</span>${reportActions(r)}</div>
+        <div class="details open">${r.lost?escapeHtml(r.text||''):fmtTroops(r.troops)}</div>
+      </div>`;
+    } else if(r.kind==="giftIn"){
+      return `<div class="report gift">
+        <div class="title"><span>🎁 Don reçu de ${escapeHtml(r.from)}</span>${reportActions(r)}</div>
+        <div class="details open">🪵${fmt(r.wood)} 🧱${fmt(r.clay)} ⛏️${fmt(r.iron)}</div>
+      </div>`;
+    } else if(r.kind==="giftOut"){
+      return `<div class="report gift">
+        <div class="title"><span>🎁 Don envoyé à ${escapeHtml(r.target)}</span>${reportActions(r)}</div>
+        <div class="details open">🪵${fmt(r.wood)} 🧱${fmt(r.clay)} ⛏️${fmt(r.iron)}</div>
+      </div>`;
+    } else if(r.kind==="guildInvite"){
+      return `<div class="report guild">
+        <div class="title"><span>👥 Invitation de guilde : [${escapeHtml(r.guildTag)}] ${escapeHtml(r.guildName)} (par ${escapeHtml(r.from)})</span>${reportActions(r)}</div>
+        <div class="details open">
+          <button data-guild-invite-accept="${r.guildId}" class="primary">✅ Rejoindre</button>
+          <button data-guild-invite-decline="${r.guildId}">❌ Refuser</button>
+        </div>
+      </div>`;
     } else if(r.kind==="announcement"){
       return `<div class="report announcement">
         <div class="title"><span>📢 Annonce${r.author?(' de '+escapeHtml(r.author)):''}</span>${reportActions(r)}</div>
@@ -1980,6 +2095,133 @@ function renderReports(){
     return `<div class="report"><div class="title"><span>${r.text||''}</span>${reportActions(r)}</div></div>`;
   }).join("");
   return `<h2>Rapports</h2>${filterBar}${bulkBar}${items}`;
+}
+
+function renderGuild(){
+  const g = state.guild;
+  if(!g){
+    return `<h2>👥 Guilde</h2>
+    <p class="muted small">Rejoignez ou fondez une guilde pour construire un Hall de guilde dans votre village : il permet de donner des ressources à la guilde pour obtenir un bonus de production partagé par tous ses membres.</p>
+    <div class="box">
+      <h3>➕ Fonder une guilde</h3>
+      <form id="guildCreateForm" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <label class="small">Nom<br><input type="text" id="guildCreateName" maxlength="30" placeholder="Les Braves"></label>
+        <label class="small">Tag<br><input type="text" id="guildCreateTag" maxlength="6" placeholder="BRV" style="width:80px; text-transform:uppercase;"></label>
+        <button type="submit" class="primary">Fonder</button>
+      </form>
+    </div>
+    <p class="muted small">Si un chef de guilde vous a invité, vous trouverez son invitation dans l'onglet <b>Rapports</b> (catégorie « Guilde »), avec un bouton pour l'accepter ou la refuser.</p>`;
+  }
+
+  const v = state.village;
+  const hallLvl = v.buildings.guildHall||0;
+  const b = BUILDINGS.guildHall;
+  const nextLevel = hallLvl+1;
+  const maxed = nextLevel>b.max;
+  const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
+  const cost = maxed?null:buildCost("guildHall", nextLevel);
+  const time = maxed?null:vBuildTime("guildHall", nextLevel);
+  const affordable = cost && canAffordAll(cost);
+  const pendingHall = state.village.buildQueue.filter(o=>o.key==="guildHall").length;
+  const hallCard = `<div class="box">
+    <h3>🏛️ Hall de guilde ${hallLvl>0?('(niveau '+hallLvl+')'):''}</h3>
+    <div class="desc">${b.desc}</div>
+    ${lockedReq?`<div class="req-note">Nécessite : ${Object.entries(b.requires).map(([rk,rv])=>BUILDINGS[rk].name+" niv. "+rv).join(", ")}</div>`
+      : maxed ? `<p class="muted small">Niveau maximum atteint.</p>` : `
+      <div class="cost" style="margin:8px 0;">
+        <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
+        <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
+        <span class="${v.resources.iron<cost.iron?'short':''}">⛏️ ${fmt(cost.iron)}</span>
+        <span>⏱ ${fmtTime(time)}</span>
+      </div>
+      ${pendingHall?`<div class="unit-note">${pendingHall} déjà en file d'attente</div>`:''}
+      <button id="btnBuildGuildHall" class="primary" ${!affordable?'disabled':''}>${hallLvl<=0?'Construire':'Améliorer'} → niveau ${nextLevel}</button>
+    `}
+  </div>`;
+
+  const donateBox = hallLvl>0 ? `
+    <div class="box">
+      <h3>🎁 Faire un don à la guilde</h3>
+      <p class="small muted">Chaque don augmente définitivement le bonus de production de TOUS les membres (plafonné à ${GUILD_MAX_BONUS_PERCENT_CLIENT}%). Votre Hall de guilde (niveau ${hallLvl}) limite chaque don à ${1000*hallLvl} ressources au total.</p>
+      <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+        ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" value="0" id="guildDonate_${r}"></div>`).join("")}
+      </div>
+      <button id="btnGuildDonate" class="primary">Donner</button>
+    </div>` : `<p class="muted small">Construisez le Hall de guilde ci-dessus pour pouvoir faire des dons.</p>`;
+
+  const membersRows = g.members.map(m=>`<tr>
+    <td>${escapeHtml(m)}${m===g.leader?' <span class="tag strong">CHEF</span>':''}${m===username?' (vous)':''}</td>
+    <td>${g.isLeader && m!==username ? `<button data-guild-kick="${escapeHtml(m)}">Exclure</button>` : ''}</td>
+  </tr>`).join("");
+
+  const inviteBox = g.isLeader ? `
+    <div class="box">
+      <h3>✉️ Inviter un joueur</h3>
+      <form id="guildInviteForm" style="display:flex; gap:8px;">
+        <input type="text" id="guildInviteUsername" placeholder="Pseudo du joueur">
+        <button type="submit" class="primary">Inviter</button>
+      </form>
+      ${g.invites.length?`<p class="small muted" style="margin-top:8px;">Invitations en attente : ${g.invites.map(escapeHtml).join(", ")}</p>`:''}
+    </div>` : '';
+
+  return `<h2>👥 [${escapeHtml(g.tag)}] ${escapeHtml(g.name)}</h2>
+    <p class="muted small">Bonus de production actuel : <b>+${g.bonusPercent}%</b> pour tous les membres (basé sur ${fmt(g.totalDonated)} ressources données au total).</p>
+    <div class="box">
+      <h3>👥 Membres (${g.members.length})</h3>
+      <table><thead><tr><th>Pseudo</th><th></th></tr></thead><tbody>${membersRows}</tbody></table>
+    </div>
+    ${inviteBox}
+    ${hallCard}
+    ${donateBox}
+    <div class="box">
+      <button id="btnGuildLeave">🚪 Quitter la guilde</button>
+      ${g.isLeader?`<button id="btnGuildDisband" style="margin-left:8px;">💥 Dissoudre la guilde</button>`:''}
+    </div>`;
+}
+
+const GUILD_MAX_BONUS_PERCENT_CLIENT = 25;
+
+function attachGuildHandlers(){
+  const createForm=document.getElementById("guildCreateForm");
+  if(createForm) createForm.onsubmit=(e)=>{
+    e.preventDefault();
+    const name=document.getElementById("guildCreateName").value.trim();
+    const tag=document.getElementById("guildCreateTag").value.trim();
+    if(!name || !tag){ toast("⚠️ Indiquez un nom et un tag."); return; }
+    doAction(()=>apiCall("/api/guild/create","POST",{name, tag}), "👥 Guilde fondée !", null);
+  };
+  const buildHallBtn=document.getElementById("btnBuildGuildHall");
+  if(buildHallBtn) buildHallBtn.onclick=()=>queueBuild("guildHall");
+  const donateBtn=document.getElementById("btnGuildDonate");
+  if(donateBtn) donateBtn.onclick=()=>{
+    const wood=Number(document.getElementById("guildDonate_wood").value)||0;
+    const clay=Number(document.getElementById("guildDonate_clay").value)||0;
+    const iron=Number(document.getElementById("guildDonate_iron").value)||0;
+    if(!wood && !clay && !iron){ toast("⚠️ Indiquez au moins une ressource à donner."); return; }
+    doAction(()=>apiCall("/api/guild/donate","POST",{wood, clay, iron}), "🎁 Don envoyé à la guilde !", null);
+  };
+  const inviteForm=document.getElementById("guildInviteForm");
+  if(inviteForm) inviteForm.onsubmit=(e)=>{
+    e.preventDefault();
+    const inp=document.getElementById("guildInviteUsername");
+    const u=inp.value.trim();
+    if(!u){ toast("⚠️ Indiquez un pseudo."); return; }
+    doAction(()=>apiCall("/api/guild/invite","POST",{username:u}), "✉️ Invitation envoyée à "+u+".", null);
+    inp.value="";
+  };
+  document.querySelectorAll("[data-guild-kick]").forEach(b=>b.onclick=()=>{
+    doAction(()=>apiCall("/api/guild/kick","POST",{username:b.dataset.guildKick}), b.dataset.guildKick+" exclu de la guilde.", null);
+  });
+  const leaveBtn=document.getElementById("btnGuildLeave");
+  if(leaveBtn) leaveBtn.onclick=()=>{
+    if(!confirm("Quitter la guilde ?")) return;
+    doAction(()=>apiCall("/api/guild/leave","POST"), "Vous avez quitté la guilde.", null);
+  };
+  const disbandBtn=document.getElementById("btnGuildDisband");
+  if(disbandBtn) disbandBtn.onclick=()=>{
+    if(!confirm("Dissoudre définitivement la guilde pour tous les membres ?")) return;
+    doAction(()=>apiCall("/api/guild/disband","POST"), "Guilde dissoute.", null);
+  };
 }
 
 function renderAdmin(){
@@ -2028,6 +2270,21 @@ function renderAdmin(){
     <div class="inputs" style="display:flex; gap:14px; margin-bottom:8px; flex-wrap:wrap;">
       ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminGiveAll_${r}" min="0" value="0"></div>`).join("")}
       <button id="btnGiveAll" class="primary">➕ Donner à tous</button>
+    </div>
+  </div>
+
+  <div class="box" style="margin-bottom:14px;">
+    <h3>🚩 Missions en cours (${(adminMissions||[]).length})</h3>
+    <p class="small muted">Force la résolution/arrivée immédiate d'une mission (attaque, reconnaissance, soutien...), utile pour débloquer un joueur ou tester.</p>
+    <div style="max-height:220px; overflow:auto;">
+      <table><thead><tr><th>Type</th><th>Joueur</th><th>Cible</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${(adminMissions||[]).map(m=>`<tr>
+        <td>${m.kindLabel}</td>
+        <td>${escapeHtml(m.attacker||'-')}</td>
+        <td>${m.targetName?escapeHtml(m.targetName)+' ('+m.targetCoord+')':'-'}</td>
+        <td>${m.resolveDone?'retour':'en route'}</td>
+        <td><button data-finish-mission="${m.id}">✅ Terminer</button></td>
+      </tr>`).join("") || `<tr><td colspan="5" class="muted">Aucune mission en cours.</td></tr>`}</tbody></table>
     </div>
   </div>
 
@@ -2128,6 +2385,9 @@ function attachAdminHandlers(){
     const u=toggleBtn.dataset.user, flag=toggleBtn.dataset.flag==="1";
     adminAction(()=>apiCall("/api/admin/setadmin","POST",{username:u, isAdmin:flag}), flag?("Droits admin accordés à "+u+"."):("Droits admin retirés à "+u+"."));
   };
+  document.querySelectorAll("[data-finish-mission]").forEach(b=>b.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/finish-mission","POST",{missionId:b.dataset.finishMission}), "Mission résolue instantanément.");
+  });
   const finishBuildBtn=document.getElementById("btnFinishBuild");
   if(finishBuildBtn) finishBuildBtn.onclick=()=>{
     adminAction(()=>apiCall("/api/admin/finish-build","POST",{username:finishBuildBtn.dataset.user}), "Construction(s) terminée(s) instantanément.");
@@ -2237,6 +2497,7 @@ function attachTabHandlers(){
     const id=b.dataset.send.slice(0,idx), kind=b.dataset.send.slice(idx+1);
     sendMission(id, kind);
   });
+  document.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ sendGift(b.dataset.gift); });
   document.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{
     const i=el.dataset.toggle;
     if(ui.openReport.has(i)) ui.openReport.delete(i); else ui.openReport.add(i);
@@ -2257,6 +2518,14 @@ function attachTabHandlers(){
   document.querySelectorAll("[data-report-filter]").forEach(b=>b.onclick=()=>{
     reportFilter = b.dataset.reportFilter;
     renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-guild-invite-accept]").forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    doAction(()=>apiCall("/api/guild/accept","POST",{guildId:b.dataset.guildInviteAccept}), "👥 Vous avez rejoint la guilde !", null);
+  });
+  document.querySelectorAll("[data-guild-invite-decline]").forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    doAction(()=>apiCall("/api/guild/decline","POST",{guildId:b.dataset.guildInviteDecline}), "Invitation refusée.", null);
   });
 }
 
