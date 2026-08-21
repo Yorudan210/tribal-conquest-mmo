@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const GameData = require("../shared/gameData.js");
+const backup = require("./backup.js");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
@@ -20,6 +21,7 @@ function emptyDb(){
     missions: [],         // in-flight attack/scout missions
     reports: {},          // username -> [report,...] (most recent first)
     chat: [],             // [{id, username, text, time}, ...] (chronologique, plus ancien en premier)
+    announcements: [],   // [{id, author, text, time}, ...] annonces admin (plus récentes en premier)
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
@@ -34,10 +36,35 @@ function ensureDataDir(){
    serveur (avant l'ajout du chat / des réglages admin), pour rester rétro-compatible. */
 function migrateDb(){
   if(!db.chat) db.chat = [];
+  if(!db.announcements) db.announcements = [];
   if(!db.settings) db.settings = {};
   if(!db.settings.speedMultiplier) db.settings.speedMultiplier = 1;
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
+  }
+}
+
+/* Si aucune base locale n'existe (disque réinitialisé par un redéploiement) et qu'une
+   sauvegarde distante (Gist GitHub) est configurée, la restaure AVANT le premier load() —
+   c'est ce qui permet aux comptes de survivre à un redéploiement sur un plan gratuit. */
+async function restoreFromRemoteIfNeeded(){
+  ensureDataDir();
+  if(fs.existsSync(DB_FILE)){
+    return { restored:false, reason:"base locale déjà présente" };
+  }
+  if(!backup.enabled()){
+    return { restored:false, reason:"GITHUB_BACKUP_TOKEN non défini : persistance entre redéploiements désactivée" };
+  }
+  const content = await backup.restoreLatest();
+  if(!content){
+    return { restored:false, reason:"aucune sauvegarde distante disponible" };
+  }
+  try{
+    JSON.parse(content); // valide avant d'écrire, pour ne jamais écraser avec du contenu corrompu
+    fs.writeFileSync(DB_FILE, content);
+    return { restored:true, bytes: content.length };
+  }catch(e){
+    return { restored:false, reason:"sauvegarde distante illisible ("+e.message+")" };
   }
 }
 
@@ -64,7 +91,26 @@ function save(){
   ensureDataDir();
   fs.writeFileSync(DB_FILE, JSON.stringify(db));
 }
+
+let remoteBackupTimer = null;
+let lastRemoteBackupAt = 0;
+const REMOTE_BACKUP_MIN_INTERVAL_MS = 60000; // au plus une sauvegarde distante par minute
+function scheduleRemoteBackup(){
+  if(!backup.enabled()) return;
+  if(remoteBackupTimer) return;
+  const wait = Math.max(5000, REMOTE_BACKUP_MIN_INTERVAL_MS-(Date.now()-lastRemoteBackupAt));
+  remoteBackupTimer = setTimeout(()=>{
+    remoteBackupTimer = null;
+    lastRemoteBackupAt = Date.now();
+    backup.backupNow(JSON.stringify(db)).catch(e=>console.error("[store] échec de sauvegarde distante", e.message));
+  }, wait);
+}
+async function backupNowRemote(){
+  if(!backup.enabled()) return false;
+  return backup.backupNow(JSON.stringify(db));
+}
 function scheduleSave(){
+  scheduleRemoteBackup();
   if(saveTimer) return;
   saveTimer = setTimeout(()=>{ saveTimer = null; try{ save(); }catch(e){ console.error("[store] échec de sauvegarde", e.message); } }, 2000);
 }
@@ -147,5 +193,7 @@ function getWorldBounds(){ return WORLD; }
 
 module.exports = {
   load, save, scheduleSave, getDb, getWorldBounds,
-  findFreeCoord, createPlayerVillage, generateBarbarians
+  findFreeCoord, createPlayerVillage, generateBarbarians,
+  restoreFromRemoteIfNeeded, backupNowRemote,
+  backupEnabled: backup.enabled
 };

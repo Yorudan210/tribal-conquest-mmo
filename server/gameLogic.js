@@ -39,15 +39,23 @@ function doBuild(db, username, key){
   const b = BUILDINGS[key];
   if(!b) return { error: "Bâtiment inconnu." };
   const cur = v.buildings[key]||0;
-  if(cur>=b.max) return { error: "Niveau maximum atteint pour "+b.name+"." };
-  if(b.requires){ for(const rk in b.requires){ if((v.buildings[rk]||0) < b.requires[rk]) return { error: "Prérequis manquant pour "+b.name+"." }; } }
   if(v.buildQueue.length>=6) return { error: "File de construction pleine (max 6)." };
-  const nextLevel = cur+1;
+  // Niveau visé = niveau actuel + nombre de mises à niveau déjà en file pour CE bâtiment :
+  // sans ça, spammer le bouton "améliorer" facturait plusieurs fois le coût du même niveau
+  // au lieu de faire progresser le coût comme il se doit (bug corrigé).
+  const pendingForKey = v.buildQueue.filter(o=>o.key===key).length;
+  const nextLevel = cur+pendingForKey+1;
+  if(nextLevel > b.max) return { error: "Niveau maximum atteint pour "+b.name+"." };
+  if(b.requires){ for(const rk in b.requires){ if((v.buildings[rk]||0) < b.requires[rk]) return { error: "Prérequis manquant pour "+b.name+"." }; } }
   const cost = buildCost(key, nextLevel);
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  const t = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db);
-  v.buildQueue.push({ key, level: nextLevel, startAt: now(), duration: t });
+  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db);
+  // Les mises à niveau d'un même bâtiment s'enchaînent : celle-ci démarre seulement à la fin
+  // de la dernière déjà en file pour ce bâtiment (pas immédiatement), pour un minutage correct.
+  let chainStart = now();
+  for(const o of v.buildQueue){ if(o.key===key){ const end=o.startAt+o.duration; if(end>chainStart) chainStart=end; } }
+  v.buildQueue.push({ key, level: nextLevel, startAt: chainStart, duration: dur });
   return { ok: true };
 }
 
@@ -181,8 +189,10 @@ function resolveAttack(db, m){
     winner="defender"; defenderLossFrac=clamp(Math.pow(effAttack/defensePower,2),0,1); attackerLossFrac=1;
   }
 
+  const originalNobleCount = m.troops.noble||0;
   const attackerLosses={}, defenderLosses={};
   for(const k in m.troops){
+    if(k==="noble") continue; // le noble a sa propre règle de survie ci-dessous, pas la fraction générale
     const survivors=Math.floor(m.troops[k]*(1-attackerLossFrac));
     attackerLosses[k]=m.troops[k]-survivors;
     m.troops[k]=survivors;
@@ -193,6 +203,25 @@ function resolveAttack(db, m){
     const survivors=Math.floor(c*(1-defenderLossFrac));
     defenderLosses[k]=c-survivors;
     target.troops[k]=survivors;
+  }
+
+  /* Survie du noble : avec l'ancienne règle (même fraction de pertes que le reste de l'armée),
+     un noble envoyé seul (le cas le plus courant) mourait TOUJOURS dès qu'il y avait la moindre
+     perte, même infime (Math.floor(1*0.98)=0) — impossible de conquérir quoi que ce soit.
+     Nouvelle règle : chaque noble est tiré au sort indépendamment, avec une chance de survie qui
+     augmente avec la domination de l'attaque (donc avec l'escorte envoyée pour le protéger). */
+  if(originalNobleCount>0){
+    let noblesSurviving=0;
+    if(winner==="attacker"){
+      const dominance = clamp(1-attackerLossFrac, 0, 1); // proche de 1 si l'attaque écrase la défense
+      const survivalChance = clamp(0.15+dominance*0.8, 0.05, 0.97);
+      for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
+    } else {
+      const survivalChance = 0.05; // défaite : le noble a une petite chance de s'échapper malgré tout
+      for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
+    }
+    m.troops.noble = noblesSurviving;
+    attackerLosses.noble = originalNobleCount-noblesSurviving;
   }
 
   let wallDamage=0, storageDamageFrac=0, loyaltyReduced=0, conquered=false;
@@ -336,8 +365,9 @@ function runTick(db){
     if(v.owner==="barbarian") continue;
     const cap = storageCap(v.buildings.warehouse);
     const empireMult = 1+0.02*(v.conqueredCount||0);
+    const speedMult = getSpeedMultiplier(db);
     for(const r of ["wood","clay","iron"]){
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -612,9 +642,57 @@ function adminFinishTrainQueue(db, targetUsername){
 function adminSetSpeed(db, multiplier){
   const n = Number(multiplier);
   if(!Number.isFinite(n) || n<=0 || n>1000) return { error:"Multiplicateur invalide (doit être entre 0.01 et 1000)." };
+  const old = getSpeedMultiplier(db);
   db.settings = db.settings||{};
   db.settings.speedMultiplier = n;
+  // Rétroactif : les files déjà en cours sont aussi recalées sur le nouveau multiplicateur
+  // (avant ce correctif, changer la vitesse ne touchait que les NOUVELLES files — un joueur
+  // qui mettait 1000x en pensant accélérer ce qui tournait déjà ne voyait donc rien changer).
+  if(n!==old){
+    const t = now();
+    const ratio = old/n; // n>old (plus rapide) => ratio<1 => durée restante réduite
+    for(const id in db.villages){
+      const v = db.villages[id];
+      if(v.owner==="barbarian") continue;
+      for(const item of (v.buildQueue||[])){
+        const elapsed = t-item.startAt;
+        const remaining = Math.max(0, item.duration-elapsed)*ratio;
+        item.duration = elapsed+remaining;
+      }
+      for(const order of (v.trainQueue||[])){
+        const elapsed = t-order.unitStartAt;
+        const remaining = Math.max(0, order.unitDuration-elapsed)*ratio;
+        order.unitDuration = elapsed+remaining;
+      }
+    }
+  }
   return { ok:true };
+}
+
+function adminAnnounce(db, authorUsername, text){
+  text = String(text||"").trim();
+  if(!text) return { error:"Le message d'annonce ne peut pas être vide." };
+  if(text.length>500) text = text.slice(0,500);
+  db.announcements = db.announcements||[];
+  const entry = { id:"a"+Date.now()+Math.floor(Math.random()*100000), author:authorUsername, text, time: now() };
+  db.announcements.unshift(entry);
+  if(db.announcements.length>50) db.announcements.length=50;
+  for(const uname in db.users){
+    pushReport(db, uname, { kind:"announcement", time: entry.time, author: authorUsername, text });
+  }
+  return { ok:true };
+}
+
+function adminGiveResourcesToAll(db, wood, clay, iron){
+  const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
+  let count=0;
+  for(const uname in db.users){
+    const v = villageByUser(db, uname);
+    if(!v) continue;
+    for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]+add[r], 0, 1e12);
+    count++;
+  }
+  return { ok:true, count };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -656,7 +734,8 @@ function buildSnapshot(db, username){
     quests: questStatus,
     leaderboard,
     isAdmin: isAdminUser(db, username),
-    chat: (db.chat||[]).slice(-50)
+    chat: (db.chat||[]).slice(-50),
+    speedMultiplier: getSpeedMultiplier(db)
   };
 }
 
@@ -664,5 +743,6 @@ module.exports = {
   now, villageByUser, villageWall, villageHide, villageResCap, popUsed,
   doBuild, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
   doChatSend, isAdminUser, adminListPlayers, adminSetAdmin, adminUpdateVillage,
-  adminGiveResources, adminFinishBuildQueue, adminFinishTrainQueue, adminSetSpeed, getSpeedMultiplier
+  adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue, adminFinishTrainQueue,
+  adminSetSpeed, adminAnnounce, getSpeedMultiplier
 };

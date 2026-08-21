@@ -28,14 +28,38 @@ function ensureSecret(){
 }
 const SECRET = ensureSecret();
 
-const db = store.load();
-setInterval(()=>{
-  try{ game.runTick(db); store.scheduleSave(); }
-  catch(e){ console.error("[tick] erreur:", e); }
-}, 2000);
+let db = null; // assigné dans startServer(), après une éventuelle restauration distante
 
-process.on("SIGINT", ()=>{ try{ store.save(); }catch(e){} process.exit(0); });
-process.on("SIGTERM", ()=>{ try{ store.save(); }catch(e){} process.exit(0); });
+async function shutdown(signal){
+  console.log("["+signal+"] arrêt en cours, sauvegarde finale...");
+  try{ store.save(); }catch(e){ console.error("[shutdown] échec sauvegarde locale:", e.message); }
+  try{ await store.backupNowRemote(); }catch(e){ console.error("[shutdown] échec sauvegarde distante:", e.message); }
+  process.exit(0);
+}
+process.on("SIGINT", ()=>shutdown("SIGINT"));
+process.on("SIGTERM", ()=>shutdown("SIGTERM"));
+
+async function startServer(){
+  if(!store.backupEnabled()){
+    console.log("[backup] GITHUB_BACKUP_TOKEN non défini : les comptes ne survivront PAS à un redéploiement (voir README).");
+  } else {
+    console.log("[backup] sauvegarde distante activée (Gist GitHub).");
+  }
+  const restoreResult = await store.restoreFromRemoteIfNeeded();
+  if(restoreResult.restored) console.log("[backup] base restaurée depuis la sauvegarde distante ("+restoreResult.bytes+" octets).");
+  else console.log("[backup] pas de restauration :", restoreResult.reason);
+
+  db = store.load();
+
+  setInterval(()=>{
+    try{ game.runTick(db); store.scheduleSave(); }
+    catch(e){ console.error("[tick] erreur:", e); }
+  }, 2000);
+
+  server.listen(PORT, ()=>{
+    console.log("Conquête Tribale (multijoueur) en écoute sur le port "+PORT);
+  });
+}
 
 const MIME = {
   ".html":"text/html; charset=utf-8", ".js":"application/javascript; charset=utf-8",
@@ -194,6 +218,20 @@ async function handleApi(req, res, pathname){
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
     }
+    if(pathname==="/api/admin/give-all" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminGiveResourcesToAll(db, body.wood, body.clay, body.iron);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/announce" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminAnnounce(db, username, body.text);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+    }
     if(pathname==="/api/admin/finish-build" && req.method==="POST"){
       const body = await readBody(req);
       const result = game.adminFinishBuildQueue(db, String(body.username||""));
@@ -250,6 +288,7 @@ const server = http.createServer((req, res)=>{
   serveStatic(req, res, pathname);
 });
 
-server.listen(PORT, ()=>{
-  console.log("Conquête Tribale (multijoueur) en écoute sur le port "+PORT);
+startServer().catch(err=>{
+  console.error("[startup] erreur fatale au démarrage:", err);
+  process.exit(1);
 });
