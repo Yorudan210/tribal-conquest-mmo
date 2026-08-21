@@ -42,6 +42,13 @@ function migrateDb(){
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
   }
+  // Anciens rapports créés avant l'ajout de la suppression : leur donner un id stable une fois.
+  let seq = 0;
+  for(const uname in db.reports){
+    const arr = db.reports[uname];
+    if(!Array.isArray(arr)) continue;
+    for(const r of arr){ if(!r.id) r.id = "rpmig"+Date.now()+"_"+(seq++); }
+  }
 }
 
 /* Si aucune base locale n'existe (disque réinitialisé par un redéploiement) et qu'une

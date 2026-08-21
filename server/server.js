@@ -180,6 +180,20 @@ async function handleApi(req, res, pathname){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/reports/delete" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doReportDelete(db, username, body.ids);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/reports/clear" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doReportClear(db, username, body.kind);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
+  }
 
   // ---- Administration : débloqué avec le code ADMIN_SECRET, puis réservé aux comptes isAdmin ----
   if(pathname==="/api/admin/claim" && req.method==="POST"){

@@ -6,9 +6,8 @@ const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp,
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
 
 /* Multiplicateur de vitesse global, réglable par un administrateur (panneau Admin).
-   S'applique aux NOUVELLES files de construction/entraînement lancées après le changement
-   (les files déjà en cours gardent leur durée d'origine — utiliser "Terminer instantanément"
-   depuis le panneau Admin pour accélérer une file déjà lancée). */
+   S'applique immédiatement à tout : production de ressources, files de construction et
+   d'entraînement déjà en cours (recalées par adminSetSpeed) et nouvelles files. */
 function getSpeedMultiplier(db){
   return (db.settings && db.settings.speedMultiplier) || 1;
 }
@@ -19,8 +18,35 @@ function villageResCap(v){ return v.owner==="barbarian" ? (v.resCap||600) : stor
 
 function pushReport(db, username, report){
   if(!db.reports[username]) db.reports[username] = [];
+  // Identifiant stable pour permettre au joueur de supprimer un rapport précis côté client.
+  if(!report.id) report.id = "rp"+Date.now()+"_"+Math.floor(Math.random()*1000000);
   db.reports[username].unshift(report);
   if(db.reports[username].length>60) db.reports[username].length=60;
+}
+
+/* Supprime un ou plusieurs rapports (par id) de la boîte de rapports d'un joueur. */
+function doReportDelete(db, username, ids){
+  const arr = db.reports[username];
+  if(!arr || !arr.length) return { error:"Aucun rapport à supprimer." };
+  const idList = Array.isArray(ids) ? ids : [ids];
+  const idSet = new Set(idList.map(String).filter(Boolean));
+  if(!idSet.size) return { error:"Aucun identifiant de rapport fourni." };
+  const before = arr.length;
+  db.reports[username] = arr.filter(r=>!idSet.has(String(r.id)));
+  const removed = before - db.reports[username].length;
+  if(removed<=0) return { error:"Rapport introuvable (déjà supprimé ?)." };
+  return { ok:true, removed };
+}
+
+/* Supprime en masse les rapports d'un joueur, éventuellement filtrés par catégorie (kind). */
+function doReportClear(db, username, kind){
+  const arr = db.reports[username];
+  if(!arr || !arr.length) return { error:"Aucun rapport à supprimer." };
+  const before = arr.length;
+  db.reports[username] = kind ? arr.filter(r=>r.kind!==kind) : [];
+  const removed = before - db.reports[username].length;
+  if(removed<=0) return { error:"Aucun rapport correspondant à cette catégorie." };
+  return { ok:true, removed };
 }
 
 function villageByUser(db, username){
@@ -742,7 +768,7 @@ function buildSnapshot(db, username){
 module.exports = {
   now, villageByUser, villageWall, villageHide, villageResCap, popUsed,
   doBuild, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
-  doChatSend, isAdminUser, adminListPlayers, adminSetAdmin, adminUpdateVillage,
-  adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue, adminFinishTrainQueue,
-  adminSetSpeed, adminAnnounce, getSpeedMultiplier
+  doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
+  adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
+  adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier
 };
