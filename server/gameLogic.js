@@ -77,11 +77,43 @@ function doBuild(db, username, key){
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
   const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db);
-  // Les mises à niveau d'un même bâtiment s'enchaînent : celle-ci démarre seulement à la fin
-  // de la dernière déjà en file pour ce bâtiment (pas immédiatement), pour un minutage correct.
+  // Une seule construction est réellement en cours à la fois dans le village (peu importe le
+  // bâtiment) : chaque nouvel ordre démarre à la fin du DERNIER de toute la file, jamais
+  // immédiatement. Avant ce correctif, deux bâtiments DIFFÉRENTS démarraient tous les deux à
+  // now() ; comme runTick() ne fait avancer que le premier de la file, les suivants avaient déjà
+  // dépassé leur propre durée en attendant leur tour et se terminaient donc instantanément dès
+  // qu'ils passaient en tête de file, au lieu d'attendre leur vrai temps de construction.
   let chainStart = now();
-  for(const o of v.buildQueue){ if(o.key===key){ const end=o.startAt+o.duration; if(end>chainStart) chainStart=end; } }
+  if(v.buildQueue.length){
+    const last = v.buildQueue[v.buildQueue.length-1];
+    chainStart = last.startAt + last.duration;
+  }
   v.buildQueue.push({ key, level: nextLevel, startAt: chainStart, duration: dur });
+  return { ok: true };
+}
+
+/* Annule un ordre de construction en file (par son index) et rembourse intégralement son coût.
+   Si c'est le premier de la file (en cours), le suivant démarre immédiatement ; les éléments
+   après l'annulation sont réenchaînés correctement (sans jamais toucher au minutage de l'élément
+   toujours en tête s'il n'est pas celui annulé). */
+function doBuildCancel(db, username, index){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  index = Math.floor(Number(index));
+  if(!Number.isInteger(index) || index<0 || index>=v.buildQueue.length) return { error: "Élément de file introuvable." };
+  const item = v.buildQueue[index];
+  const cost = buildCost(item.key, item.level);
+  const cap = storageCap(v.buildings.warehouse);
+  // Comme pour la production (runTick) : ne jamais faire REDESCENDRE un stock déjà au-dessus du
+  // plafond (ex. après un ajustement admin) — le remboursement ne fait jamais perdre de ressources.
+  for(const r of ["wood","clay","iron"]){
+    v.resources[r] = Math.max(v.resources[r], Math.min(v.resources[r]+cost[r], cap));
+  }
+  v.buildQueue.splice(index, 1);
+  if(index===0 && v.buildQueue.length) v.buildQueue[0].startAt = now();
+  for(let i=1;i<v.buildQueue.length;i++){
+    v.buildQueue[i].startAt = v.buildQueue[i-1].startAt + v.buildQueue[i-1].duration;
+  }
   return { ok: true };
 }
 
@@ -148,6 +180,84 @@ function doMission(db, username, targetId, kind, troopsWanted){
   return { ok:true, travel };
 }
 
+/* Envoie des troupes en renfort dans un village allié (joueur) : elles voyagent puis se stationnent
+   là-bas (v.support) où elles comptent pour la défense, jusqu'à un rappel explicite. */
+function doSendSupport(db, username, targetId, troopsWanted){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  const target = db.villages[String(targetId)];
+  if(!target) return { error: "Village ciblé introuvable." };
+  if(target.owner==="barbarian") return { error: "Impossible d'envoyer du soutien à un village barbare." };
+  const troops={};
+  let any=false, maxSpeed=0;
+  for(const k of TROOP_ORDER){
+    let n = Math.floor(Number(troopsWanted[k])||0);
+    n = Math.max(0, Math.min(n, v.troops[k]||0));
+    if(n>0){ troops[k]=n; any=true; maxSpeed=Math.max(maxSpeed, TROOPS[k].speed); }
+  }
+  if(!any) return { error: "Sélectionnez au moins une troupe à envoyer." };
+  for(const k in troops) v.troops[k]-=troops[k];
+  const dx=target.x-v.x, dy=target.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
+  const travel = Math.max(4, Math.round(dist*maxSpeed));
+  const t = now();
+  db.missions.push({
+    id: "sp"+Date.now()+Math.floor(Math.random()*100000),
+    kind:"support", attackerUsername: username, sourceVillageId: v.id, targetId: target.id, troops,
+    departAt: t, arriveAt: t+travel, travel, resolveDone:false, returnAt:null, completed:false
+  });
+  return { ok:true, travel };
+}
+
+/* Rappelle chez soi un contingent de soutien précédemment envoyé (par son id de station) : les
+   troupes quittent immédiatement la défense du village hôte et voyagent vers le village d'origine. */
+function doRecallSupport(db, username, supportId){
+  let hostVillage=null, entry=null;
+  for(const id in db.villages){
+    const v = db.villages[id];
+    if(!v.support) continue;
+    const s = v.support.find(x=>x.id===supportId);
+    if(s){ hostVillage=v; entry=s; break; }
+  }
+  if(!entry) return { error: "Soutien introuvable (déjà rappelé ?)." };
+  if(entry.from!==username) return { error: "Vous ne pouvez rappeler que vos propres troupes en soutien." };
+  hostVillage.support = hostVillage.support.filter(x=>x.id!==supportId);
+  const homeVillage = villageByUser(db, username);
+  if(!homeVillage) return { ok:true };
+  const dx=homeVillage.x-hostVillage.x, dy=homeVillage.y-hostVillage.y, dist=Math.sqrt(dx*dx+dy*dy);
+  let maxSpeed=0;
+  for(const k in entry.troops) if(entry.troops[k]>0) maxSpeed=Math.max(maxSpeed, TROOPS[k].speed);
+  const travel = Math.max(4, Math.round(dist*maxSpeed));
+  const t = now();
+  db.missions.push({
+    id: "spr"+Date.now()+Math.floor(Math.random()*100000),
+    kind:"supportReturn", attackerUsername: username, sourceVillageId: hostVillage.id, targetId: homeVillage.id,
+    troops: {...entry.troops}, departAt: t, arriveAt: t+travel, travel, resolveDone:true, returnAt: t+travel, completed:false
+  });
+  return { ok:true };
+}
+
+/* Don direct de ressources à un autre joueur (abstraction sans marchand ni délai de trajet, pour
+   rester simple) : prélevées immédiatement chez le donateur, livrées immédiatement chez le
+   destinataire (plafonnées par sa capacité de stockage, comme un surplus de production). */
+function doGiveResources(db, username, targetUsername, wood, clay, iron){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  targetUsername = String(targetUsername||"").trim();
+  if(targetUsername===username) return { error: "Impossible de vous donner des ressources à vous-même." };
+  const target = villageByUser(db, targetUsername);
+  if(!target) return { error: "Joueur cible introuvable." };
+  const amt = { wood:Math.max(0,Math.floor(Number(wood)||0)), clay:Math.max(0,Math.floor(Number(clay)||0)), iron:Math.max(0,Math.floor(Number(iron)||0)) };
+  if(!amt.wood && !amt.clay && !amt.iron) return { error: "Indiquez au moins une ressource à donner." };
+  if(v.resources.wood<amt.wood || v.resources.clay<amt.clay || v.resources.iron<amt.iron) return { error: "Ressources insuffisantes." };
+  v.resources.wood-=amt.wood; v.resources.clay-=amt.clay; v.resources.iron-=amt.iron;
+  const cap = storageCap(target.buildings.warehouse);
+  // Comme un surplus de production : ne fait jamais perdre de ressources déjà au-dessus du plafond.
+  for(const r of ["wood","clay","iron"]) target.resources[r]=Math.max(target.resources[r], Math.min(target.resources[r]+amt[r], cap));
+  pushReport(db, targetUsername, { kind:"giftIn", time:now(), from:username, wood:amt.wood, clay:amt.clay, iron:amt.iron });
+  pushReport(db, username, { kind:"giftOut", time:now(), target:targetUsername, wood:amt.wood, clay:amt.clay, iron:amt.iron });
+  return { ok:true };
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Résolution des combats                                                 */
 /* ---------------------------------------------------------------------- */
@@ -181,6 +291,47 @@ function defensePowerOf(defTroops, shareInf, shareCav, shareArch, wallLevel){
   return defensePower;
 }
 
+/* Troupes du village + toutes les troupes de soutien qui y sont stationnées (comptent pour la
+   défense au même titre que les troupes du propriétaire). */
+function combinedDefenseTroops(v){
+  if(!v.support || !v.support.length) return v.troops;
+  const combined = {...v.troops};
+  for(const s of v.support){ for(const k in s.troops) combined[k]=(combined[k]||0)+(s.troops[k]||0); }
+  return combined;
+}
+
+/* Applique une fraction de pertes au total (troupes du village + soutien confondus) pour chaque
+   type de troupe, puis répartit les pertes réelles : d'abord sur les troupes du village (au
+   prorata, arrondi à l'entier inférieur), le reste sur les contingents de soutien dans l'ordre —
+   ce qui garantit que la somme des pertes correspond exactement au total calculé. */
+function applyDefenseLosses(v, lossFrac){
+  const survivorFrac = 1-lossFrac;
+  const defenderLosses = {};
+  for(const k of TROOP_ORDER){
+    const homeCount = v.troops[k]||0;
+    const support = v.support||[];
+    const total = homeCount + support.reduce((s,e)=>s+(e.troops[k]||0),0);
+    if(!total) continue;
+    const survivors = Math.floor(total*survivorFrac);
+    const losses = total-survivors;
+    defenderLosses[k]=losses;
+    let toRemove = losses;
+    const homeRemove = Math.min(homeCount, Math.floor(losses*homeCount/total));
+    v.troops[k] = homeCount-homeRemove;
+    toRemove -= homeRemove;
+    for(const e of support){
+      if(toRemove<=0) break;
+      const cnt = e.troops[k]||0;
+      if(!cnt) continue;
+      const take = Math.min(cnt, toRemove);
+      e.troops[k] = cnt-take;
+      toRemove -= take;
+    }
+  }
+  if(v.support) v.support = v.support.filter(e=>TROOP_ORDER.some(k=>(e.troops[k]||0)>0));
+  return defenderLosses;
+}
+
 function resolveScout(db, m){
   const target = db.villages[m.targetId];
   m.resolveDone=true; m.returnAt=m.arriveAt+m.travel;
@@ -193,6 +344,24 @@ function resolveScout(db, m){
   });
 }
 
+/* Arrivée d'un renfort : les troupes se stationnent dans le village visé (v.support) au lieu de
+   revenir — contrairement aux autres missions, elle n'a pas de trajet retour automatique (seul un
+   rappel explicite en crée un). */
+function resolveSupportArrival(db, m){
+  m.resolveDone=true; m.completed=true;
+  const target = db.villages[m.targetId];
+  if(!target){
+    pushReport(db, m.attackerUsername, { kind:"supportOut", time:now(), lost:true, text:"Le village visé n'existe plus : troupes perdues." });
+    return;
+  }
+  target.support = target.support||[];
+  target.support.push({ id:"spst"+Date.now()+Math.floor(Math.random()*100000), from:m.attackerUsername, fromVillageId:m.sourceVillageId, troops:{...m.troops}, arrivedAt: now() });
+  if(target.owner!==m.attackerUsername){
+    pushReport(db, target.owner, { kind:"supportIn", time:now(), from:m.attackerUsername, troops:{...m.troops} });
+  }
+  pushReport(db, m.attackerUsername, { kind:"supportOut", time:now(), target:target.name, coord:target.x+"|"+target.y, troops:{...m.troops} });
+}
+
 function resolveAttack(db, m){
   const target = db.villages[m.targetId];
   m.resolveDone=true; m.returnAt=m.arriveAt+m.travel;
@@ -200,7 +369,7 @@ function resolveAttack(db, m){
   if(!target){ pushReport(db, m.attackerUsername, {kind:"attack", time:now(), lost:true, text:"Le village ciblé n'existe plus."}); return; }
 
   const { power: attackPower, shareInf, shareCav, shareArch } = computePower(m.troops);
-  const defensePower = defensePowerOf(target.troops, shareInf, shareCav, shareArch, villageWall(target));
+  const defensePower = defensePowerOf(combinedDefenseTroops(target), shareInf, shareCav, shareArch, villageWall(target));
   const luck = (Math.random()*2-1)*0.25;
   const effAttack = attackPower*(1+luck);
 
@@ -216,20 +385,15 @@ function resolveAttack(db, m){
   }
 
   const originalNobleCount = m.troops.noble||0;
-  const attackerLosses={}, defenderLosses={};
+  const attackerLosses={};
   for(const k in m.troops){
     if(k==="noble") continue; // le noble a sa propre règle de survie ci-dessous, pas la fraction générale
     const survivors=Math.floor(m.troops[k]*(1-attackerLossFrac));
     attackerLosses[k]=m.troops[k]-survivors;
     m.troops[k]=survivors;
   }
-  for(const k of TROOP_ORDER){
-    const c=target.troops[k]||0;
-    if(!c) continue;
-    const survivors=Math.floor(c*(1-defenderLossFrac));
-    defenderLosses[k]=c-survivors;
-    target.troops[k]=survivors;
-  }
+  // Répartit les pertes du défenseur entre ses propres troupes et les renforts alliés stationnés.
+  const defenderLosses = applyDefenseLosses(target, defenderLossFrac);
 
   /* Survie du noble : avec l'ancienne règle (même fraction de pertes que le reste de l'armée),
      un noble envoyé seul (le cas le plus courant) mourait TOUJOURS dès qu'il y avait la moindre
@@ -326,7 +490,7 @@ function resolveRaid(db, m){
   m.resolveDone=true; m.returnAt=m.arriveAt+m.travel;
   if(!target){ return; }
   const { power: attackPower, shareInf, shareCav, shareArch } = computePower(m.troops);
-  const defensePower = defensePowerOf(target.troops, shareInf, shareCav, shareArch, target.buildings.wall);
+  const defensePower = defensePowerOf(combinedDefenseTroops(target), shareInf, shareCav, shareArch, target.buildings.wall);
   const luck=(Math.random()*2-1)*0.25;
   const effAttack=attackPower*(1+luck);
   let winner, attackerLossFrac, defenderLossFrac;
@@ -338,12 +502,7 @@ function resolveRaid(db, m){
   } else {
     winner="defender"; defenderLossFrac=clamp(Math.pow(effAttack/defensePower,2),0,1); attackerLossFrac=1;
   }
-  const defenderLosses={};
-  for(const k of TROOP_ORDER){
-    const c=target.troops[k]||0; if(!c) continue;
-    const survivors=Math.floor(c*(1-defenderLossFrac));
-    defenderLosses[k]=c-survivors; target.troops[k]=survivors;
-  }
+  const defenderLosses = applyDefenseLosses(target, defenderLossFrac);
   let loot={wood:0,clay:0,iron:0};
   if(winner==="attacker"){
     let carryCap=0; for(const k in m.troops) carryCap+=(m.troops[k]||0)*TROOPS[k].carry;
@@ -392,8 +551,9 @@ function runTick(db){
     const cap = storageCap(v.buildings.warehouse);
     const empireMult = 1+0.02*(v.conqueredCount||0);
     const speedMult = getSpeedMultiplier(db);
+    const guildMult = guildBonusMultiplier(guildOf(db, v.owner));
     for(const r of ["wood","clay","iron"]){
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -424,6 +584,7 @@ function runTick(db){
     if(!m.resolveDone && t>=m.arriveAt){
       if(m.kind==="scout") resolveScout(db, m);
       else if(m.kind==="raid") resolveRaid(db, m);
+      else if(m.kind==="support") resolveSupportArrival(db, m);
       else resolveAttack(db, m);
     } else if(m.resolveDone && !m.completed && t>=m.returnAt){
       completeMission(db, m);
@@ -549,6 +710,139 @@ function doClaimQuest(db, username, key){
   }
   if(q.reward.troops) for(const tk in q.reward.troops) v.troops[tk]=(v.troops[tk]||0)+q.reward.troops[tk];
   v.claimedQuests.push(key);
+  return { ok:true };
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Guildes (alliances de joueurs)                                         */
+/* ---------------------------------------------------------------------- */
+
+// % de bonus de production par tranche de ressources données cumulativement, plafonné.
+const GUILD_DONATION_PER_PERCENT = 2000;
+const GUILD_MAX_BONUS_PERCENT = 25;
+
+function guildOf(db, username){
+  const u = db.users[username];
+  if(!u || !u.guildId) return null;
+  return db.guilds[u.guildId] || null;
+}
+
+function guildBonusMultiplier(guild){
+  if(!guild) return 1;
+  const pct = Math.min(GUILD_MAX_BONUS_PERCENT, Math.floor((guild.totalDonated||0)/GUILD_DONATION_PER_PERCENT));
+  return 1 + pct/100;
+}
+
+function publicGuildView(db, guild, username){
+  return {
+    id: guild.id, name: guild.name, tag: guild.tag, leader: guild.leader,
+    members: guild.members, invites: guild.invites,
+    bank: {...guild.bank}, totalDonated: guild.totalDonated||0,
+    bonusPercent: Math.min(GUILD_MAX_BONUS_PERCENT, Math.floor((guild.totalDonated||0)/GUILD_DONATION_PER_PERCENT)),
+    isLeader: guild.leader===username
+  };
+}
+
+function doGuildCreate(db, username, name, tag){
+  if(guildOf(db, username)) return { error:"Vous êtes déjà dans une guilde." };
+  name = String(name||"").trim().slice(0,30);
+  tag = String(tag||"").trim().toUpperCase().slice(0,6);
+  if(!name) return { error:"Le nom de la guilde ne peut pas être vide." };
+  if(!tag) return { error:"Le tag de la guilde ne peut pas être vide (2 à 6 caractères)." };
+  if(Object.values(db.guilds).some(g=>g.name.toLowerCase()===name.toLowerCase())) return { error:"Ce nom de guilde est déjà pris." };
+  if(Object.values(db.guilds).some(g=>g.tag===tag)) return { error:"Ce tag de guilde est déjà pris." };
+  const id = String(db.nextGuildId++);
+  db.guilds[id] = { id, name, tag, leader:username, members:[username], invites:[], bank:{wood:0,clay:0,iron:0}, totalDonated:0, createdAt: now() };
+  db.users[username].guildId = id;
+  return { ok:true };
+}
+
+function doGuildInvite(db, username, targetUsername){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut inviter des membres." };
+  targetUsername = String(targetUsername||"").trim();
+  const targetUser = db.users[targetUsername];
+  if(!targetUser) return { error:"Joueur introuvable." };
+  if(targetUser.guildId) return { error:"Ce joueur est déjà dans une guilde." };
+  if(guild.members.includes(targetUsername)) return { error:"Ce joueur est déjà membre de la guilde." };
+  if(guild.invites.includes(targetUsername)) return { error:"Ce joueur a déjà une invitation en attente." };
+  guild.invites.push(targetUsername);
+  pushReport(db, targetUsername, { kind:"guildInvite", time:now(), guildId:guild.id, guildName:guild.name, guildTag:guild.tag, from:username });
+  return { ok:true };
+}
+
+function doGuildAccept(db, username, guildId){
+  if(guildOf(db, username)) return { error:"Vous êtes déjà dans une guilde." };
+  const guild = db.guilds[String(guildId)];
+  if(!guild) return { error:"Guilde introuvable." };
+  if(!guild.invites.includes(username)) return { error:"Aucune invitation en attente pour cette guilde." };
+  guild.invites = guild.invites.filter(u=>u!==username);
+  guild.members.push(username);
+  db.users[username].guildId = guild.id;
+  return { ok:true };
+}
+
+function doGuildDecline(db, username, guildId){
+  const guild = db.guilds[String(guildId)];
+  if(!guild) return { error:"Guilde introuvable." };
+  if(!guild.invites.includes(username)) return { error:"Aucune invitation en attente pour cette guilde." };
+  guild.invites = guild.invites.filter(u=>u!==username);
+  return { ok:true };
+}
+
+function doGuildKick(db, username, targetUsername){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut exclure un membre." };
+  targetUsername = String(targetUsername||"").trim();
+  if(targetUsername===username) return { error:"Utilisez « Quitter la guilde » pour vous-même." };
+  if(!guild.members.includes(targetUsername)) return { error:"Ce joueur n'est pas membre de la guilde." };
+  guild.members = guild.members.filter(u=>u!==targetUsername);
+  if(db.users[targetUsername]) db.users[targetUsername].guildId = null;
+  return { ok:true };
+}
+
+function doGuildLeave(db, username){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  guild.members = guild.members.filter(u=>u!==username);
+  db.users[username].guildId = null;
+  if(guild.leader===username){
+    if(guild.members.length){
+      guild.leader = guild.members[0]; // transmission automatique au membre le plus ancien restant
+    } else {
+      delete db.guilds[guild.id]; // dernier membre parti : la guilde disparaît
+    }
+  }
+  return { ok:true };
+}
+
+function doGuildDonate(db, username, wood, clay, iron){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  const v = villageByUser(db, username);
+  if(!v) return { error:"Village introuvable." };
+  const hallLvl = v.buildings.guildHall||0;
+  if(hallLvl<=0) return { error:"Construisez d'abord un Hall de guilde pour pouvoir faire des dons." };
+  const amt = { wood:Math.max(0,Math.floor(Number(wood)||0)), clay:Math.max(0,Math.floor(Number(clay)||0)), iron:Math.max(0,Math.floor(Number(iron)||0)) };
+  const total = amt.wood+amt.clay+amt.iron;
+  if(total<=0) return { error:"Indiquez au moins une ressource à donner." };
+  const cap = 1000*hallLvl;
+  if(total>cap) return { error:"Votre Hall de guilde (niveau "+hallLvl+") limite chaque don à "+cap+" ressources au total." };
+  if(v.resources.wood<amt.wood || v.resources.clay<amt.clay || v.resources.iron<amt.iron) return { error:"Ressources insuffisantes." };
+  v.resources.wood-=amt.wood; v.resources.clay-=amt.clay; v.resources.iron-=amt.iron;
+  guild.bank.wood+=amt.wood; guild.bank.clay+=amt.clay; guild.bank.iron+=amt.iron;
+  guild.totalDonated=(guild.totalDonated||0)+total;
+  return { ok:true };
+}
+
+function doGuildDisband(db, username){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut dissoudre la guilde." };
+  for(const m of guild.members) if(db.users[m]) db.users[m].guildId = null;
+  delete db.guilds[guild.id];
   return { ok:true };
 }
 
@@ -709,6 +1003,36 @@ function adminAnnounce(db, authorUsername, text){
   return { ok:true };
 }
 
+function adminListMissions(db){
+  const KIND_LABEL = { attack:"⚔️ Attaque", scout:"🔭 Reconnaissance", raid:"⚠️ Raid barbare", support:"🤝 Soutien", supportReturn:"🤝 Retour de soutien" };
+  return db.missions.map(m=>{
+    const target = db.villages[m.targetId];
+    return {
+      id: m.id, kind: m.kind, kindLabel: KIND_LABEL[m.kind]||m.kind,
+      attacker: m.attackerUsername||null,
+      targetName: target?target.name:null, targetCoord: target?(target.x+"|"+target.y):null,
+      resolveDone: !!m.resolveDone, arriveAt: m.arriveAt, returnAt: m.returnAt
+    };
+  }).sort((a,b)=>(a.resolveDone?a.returnAt:a.arriveAt)-(b.resolveDone?b.returnAt:b.arriveAt));
+}
+
+/* Force la résolution/complétion immédiate d'une mission en cours (utile pour débloquer un joueur
+   ou tester rapidement) : réutilise directement les fonctions de résolution existantes plutôt que
+   de dupliquer la logique de combat/arrivée. */
+function adminFinishMission(db, missionId){
+  const m = db.missions.find(x=>x.id===missionId);
+  if(!m) return { error:"Mission introuvable (déjà résolue ?)." };
+  if(!m.resolveDone){
+    if(m.kind==="scout") resolveScout(db, m);
+    else if(m.kind==="raid") resolveRaid(db, m);
+    else if(m.kind==="support") resolveSupportArrival(db, m);
+    else resolveAttack(db, m);
+  }
+  if(!m.completed) completeMission(db, m);
+  db.missions = db.missions.filter(x=>!x.completed);
+  return { ok:true };
+}
+
 function adminGiveResourcesToAll(db, wood, clay, iron){
   const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
   let count=0;
@@ -751,6 +1075,24 @@ function buildSnapshot(db, username){
     return { username: uname, hq: hq||0, conquered: pv.conqueredCount||0, points };
   }).filter(Boolean).sort((a,b)=>b.points-a.points).slice(0,20);
 
+  // Renforts envoyés par ce joueur, où qu'ils soient stationnés (pour l'écran "mes soutiens" avec rappel).
+  const mySupport = [];
+  for(const vid in db.villages){
+    const hv = db.villages[vid];
+    if(!hv.support) continue;
+    for(const s of hv.support){
+      if(s.from!==username) continue;
+      mySupport.push({ id:s.id, troops:{...s.troops}, arrivedAt:s.arrivedAt, atVillageId:hv.id, atVillageName:hv.name, atCoord:hv.x+"|"+hv.y, atOwner:hv.owner });
+    }
+  }
+
+  const guild = guildOf(db, username);
+  const guildInvites = [];
+  for(const gid in db.guilds){
+    const g = db.guilds[gid];
+    if(g.invites.includes(username)) guildInvites.push({ id:g.id, name:g.name, tag:g.tag, leader:g.leader });
+  }
+
   return {
     serverTime: now(),
     village: v,
@@ -761,14 +1103,21 @@ function buildSnapshot(db, username){
     leaderboard,
     isAdmin: isAdminUser(db, username),
     chat: (db.chat||[]).slice(-50),
-    speedMultiplier: getSpeedMultiplier(db)
+    speedMultiplier: getSpeedMultiplier(db),
+    mySupport,
+    guild: guild ? publicGuildView(db, guild, username) : null,
+    guildInvites
   };
 }
 
 module.exports = {
   now, villageByUser, villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
+  doBuild, doBuildCancel, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
-  adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier
+  adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
+  adminListMissions, adminFinishMission,
+  doSendSupport, doRecallSupport, doGiveResources,
+  doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
+  doGuildDonate, doGuildDisband
 };

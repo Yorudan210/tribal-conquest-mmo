@@ -115,7 +115,7 @@ async function handleApi(req, res, pathname){
     if(db.users[username]) return sendJson(res, 409, { error:"Ce pseudo est déjà pris." });
     const { salt, hash } = auth.hashPassword(password);
     const villageId = store.createPlayerVillage(username);
-    db.users[username] = { passwordHash: hash, salt, villageId, createdAt: Date.now(), isAdmin: false };
+    db.users[username] = { passwordHash: hash, salt, villageId, createdAt: Date.now(), isAdmin: false, guildId: null };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
     return sendJson(res, 200, { token, username, snapshot: game.buildSnapshot(db, username) });
@@ -194,6 +194,90 @@ async function handleApi(req, res, pathname){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/build/cancel" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doBuildCancel(db, username, body.index);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/support/send" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doSendSupport(db, username, body.targetId, body.troops||{});
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/support/recall" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doRecallSupport(db, username, body.supportId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/gift" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGiveResources(db, username, body.username, body.wood, body.clay, body.iron);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+
+  // ---- Guildes ----
+  if(pathname==="/api/guild/create" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildCreate(db, username, body.name, body.tag);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/invite" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildInvite(db, username, body.username);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/kick" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildKick(db, username, body.username);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/leave" && req.method==="POST"){
+    const result = game.doGuildLeave(db, username);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/accept" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildAccept(db, username, body.guildId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/decline" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildDecline(db, username, body.guildId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/donate" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildDonate(db, username, body.wood, body.clay, body.iron);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/disband" && req.method==="POST"){
+    const result = game.doGuildDisband(db, username);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
 
   // ---- Administration : débloqué avec le code ADMIN_SECRET, puis réservé aux comptes isAdmin ----
   if(pathname==="/api/admin/claim" && req.method==="POST"){
@@ -209,7 +293,14 @@ async function handleApi(req, res, pathname){
     if(!game.isAdminUser(db, username)) return sendJson(res, 403, { error:"Accès réservé aux administrateurs." });
 
     if(pathname==="/api/admin/players" && req.method==="GET"){
-      return sendJson(res, 200, { players: game.adminListPlayers(db), speedMultiplier: game.getSpeedMultiplier(db) });
+      return sendJson(res, 200, { players: game.adminListPlayers(db), speedMultiplier: game.getSpeedMultiplier(db), missions: game.adminListMissions(db) });
+    }
+    if(pathname==="/api/admin/finish-mission" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminFinishMission(db, String(body.missionId||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), missions: game.adminListMissions(db), snapshot: game.buildSnapshot(db, username) });
     }
     if(pathname==="/api/admin/setadmin" && req.method==="POST"){
       const body = await readBody(req);

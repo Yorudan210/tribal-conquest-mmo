@@ -22,6 +22,8 @@ function emptyDb(){
     reports: {},          // username -> [report,...] (most recent first)
     chat: [],             // [{id, username, text, time}, ...] (chronologique, plus ancien en premier)
     announcements: [],   // [{id, author, text, time}, ...] annonces admin (plus récentes en premier)
+    guilds: {},           // id -> {id, name, tag, leader, members:[username,...], invites:[username,...], bank:{wood,clay,iron}, totalDonated, createdAt}
+    nextGuildId: 1,
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
@@ -37,10 +39,17 @@ function ensureDataDir(){
 function migrateDb(){
   if(!db.chat) db.chat = [];
   if(!db.announcements) db.announcements = [];
+  if(!db.guilds) db.guilds = {};
+  if(!db.nextGuildId) db.nextGuildId = 1;
   if(!db.settings) db.settings = {};
   if(!db.settings.speedMultiplier) db.settings.speedMultiplier = 1;
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
+    if(db.users[uname].guildId === undefined) db.users[uname].guildId = null;
+  }
+  for(const id in db.villages){
+    const v = db.villages[id];
+    if(v.owner!=="barbarian" && !v.support) v.support = [];
   }
   // Anciens rapports créés avant l'ajout de la suppression : leur donner un id stable une fois.
   let seq = 0;
@@ -187,7 +196,7 @@ function createPlayerVillage(username){
     buildings: {hq:1,wood:1,clay:1,iron:1,warehouse:1,farm:1,barracks:0,wall:0,hide:0,academy:0},
     resources: {wood:600,clay:600,iron:600},
     troops: Object.fromEntries(GameData.TROOP_ORDER.map(k=>[k,0])),
-    buildQueue: [], trainQueue: [],
+    buildQueue: [], trainQueue: [], support: [],
     conqueredCount: 0,
     claimedQuests: [],
     createdAt: Date.now()
