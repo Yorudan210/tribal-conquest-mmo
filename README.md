@@ -130,6 +130,16 @@ envoyé sans escorte suffisante contre une défense sérieuse a de bonnes chance
 de mourir ; avec une escorte largement supérieure à la défense adverse, ses
 chances de survie sont élevées (mais jamais garanties à 100%).
 
+## Gestion des rapports
+
+Dans l'onglet **Rapports**, des filtres par catégorie (Tous / Attaques
+envoyées / Attaques subies / Reconnaissances / Raids de pillards / Annonces)
+permettent de n'afficher qu'un type de rapport, avec un compteur à jour pour
+chaque catégorie. Chaque rapport possède un bouton 🗑️ pour le supprimer
+individuellement, et un bouton de suppression groupée permet d'effacer en une
+fois soit tous les rapports, soit uniquement ceux de la catégorie actuellement
+affichée (une confirmation est demandée avant toute suppression groupée).
+
 ## Carte interactive
 
 En plus du glisser-déposer, la molette de la souris zoome sur la carte en
