@@ -12,6 +12,9 @@ const store = require("./store.js");
 const game = require("./gameLogic.js");
 
 const PORT = process.env.PORT || 3000;
+// Code secret à saisir dans le jeu (onglet Aide) pour débloquer le panneau Admin sur son compte.
+// Définissez la variable d'environnement ADMIN_SECRET sur votre hébergeur pour choisir votre propre code.
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "changeme-admin-secret";
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const SHARED_DIR = path.join(__dirname, "..", "shared");
 const SECRET_FILE = path.join(__dirname, "..", "data", "secret.txt");
@@ -88,7 +91,7 @@ async function handleApi(req, res, pathname){
     if(db.users[username]) return sendJson(res, 409, { error:"Ce pseudo est déjà pris." });
     const { salt, hash } = auth.hashPassword(password);
     const villageId = store.createPlayerVillage(username);
-    db.users[username] = { passwordHash: hash, salt, villageId, createdAt: Date.now() };
+    db.users[username] = { passwordHash: hash, salt, villageId, createdAt: Date.now(), isAdmin: false };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
     return sendJson(res, 200, { token, username, snapshot: game.buildSnapshot(db, username) });
@@ -145,6 +148,74 @@ async function handleApi(req, res, pathname){
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/chat/send" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doChatSend(db, username, body.text);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+
+  // ---- Administration : débloqué avec le code ADMIN_SECRET, puis réservé aux comptes isAdmin ----
+  if(pathname==="/api/admin/claim" && req.method==="POST"){
+    const body = await readBody(req);
+    const code = String(body.code||"");
+    if(!code || code!==ADMIN_SECRET) return sendJson(res, 403, { error:"Code administrateur invalide." });
+    const result = game.adminSetAdmin(db, username, true);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname.startsWith("/api/admin/")){
+    if(!game.isAdminUser(db, username)) return sendJson(res, 403, { error:"Accès réservé aux administrateurs." });
+
+    if(pathname==="/api/admin/players" && req.method==="GET"){
+      return sendJson(res, 200, { players: game.adminListPlayers(db), speedMultiplier: game.getSpeedMultiplier(db) });
+    }
+    if(pathname==="/api/admin/setadmin" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminSetAdmin(db, String(body.username||""), !!body.isAdmin);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/village" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminUpdateVillage(db, String(body.username||""), { resources: body.resources, buildings: body.buildings, troops: body.troops });
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/give" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminGiveResources(db, String(body.username||""), body.wood, body.clay, body.iron);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/finish-build" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminFinishBuildQueue(db, String(body.username||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/finish-train" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminFinishTrainQueue(db, String(body.username||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/speed" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminSetSpeed(db, body.multiplier);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), speedMultiplier: game.getSpeedMultiplier(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    return sendJson(res, 404, { error:"Route Admin inconnue." });
   }
 
   return sendJson(res, 404, { error:"Route API inconnue." });

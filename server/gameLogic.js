@@ -5,6 +5,14 @@ const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp,
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
 
+/* Multiplicateur de vitesse global, réglable par un administrateur (panneau Admin).
+   S'applique aux NOUVELLES files de construction/entraînement lancées après le changement
+   (les files déjà en cours gardent leur durée d'origine — utiliser "Terminer instantanément"
+   depuis le panneau Admin pour accélérer une file déjà lancée). */
+function getSpeedMultiplier(db){
+  return (db.settings && db.settings.speedMultiplier) || 1;
+}
+
 function villageWall(v){ return v.owner==="barbarian" ? (v.wallLevel||0) : (v.buildings.wall||0); }
 function villageHide(v){ return v.owner==="barbarian" ? (v.hideLevel||0) : (v.buildings.hide||0); }
 function villageResCap(v){ return v.owner==="barbarian" ? (v.resCap||600) : storageCap(v.buildings.warehouse); }
@@ -38,7 +46,7 @@ function doBuild(db, username, key){
   const cost = buildCost(key, nextLevel);
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  const t = buildTime(key, nextLevel, v.buildings.hq);
+  const t = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db);
   v.buildQueue.push({ key, level: nextLevel, startAt: now(), duration: t });
   return { ok: true };
 }
@@ -63,7 +71,7 @@ function doTrain(db, username, key, count){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) });
   return { ok: true };
 }
 
@@ -330,7 +338,10 @@ function runTick(db){
     const empireMult = 1+0.02*(v.conqueredCount||0);
     for(const r of ["wood","clay","iron"]){
       const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult;
-      v.resources[r] = clamp(v.resources[r]+perSec*dt, 0, cap);
+      // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
+      // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
+      const upperBound = Math.max(cap, v.resources[r]);
+      v.resources[r] = clamp(v.resources[r]+perSec*dt, 0, upperBound);
     }
     // file de construction (basée sur startAt+duration, robuste aux redémarrages)
     while(v.buildQueue.length){
@@ -347,7 +358,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db); }
       } else break;
     }
   }
@@ -486,6 +497,127 @@ function doClaimQuest(db, username, key){
 }
 
 /* ---------------------------------------------------------------------- */
+/*  Chat mondial (un seul salon, tous les joueurs)                         */
+/* ---------------------------------------------------------------------- */
+
+function doChatSend(db, username, text){
+  text = String(text||"").trim();
+  if(!text) return { error:"Message vide." };
+  if(text.length>300) text = text.slice(0,300);
+  const u = db.users[username];
+  const t = Date.now();
+  if(u && u.lastChatAt && (t-u.lastChatAt) < 1200) return { error:"Vous envoyez des messages trop vite, patientez un instant." };
+  if(u) u.lastChatAt = t;
+  db.chat = db.chat||[];
+  db.chat.push({ id:"c"+t+Math.floor(Math.random()*100000), username, text, time: now() });
+  if(db.chat.length>200) db.chat.splice(0, db.chat.length-200);
+  return { ok:true };
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Administration (réservé aux comptes marqués isAdmin)                   */
+/* ---------------------------------------------------------------------- */
+
+function isAdminUser(db, username){
+  return !!(db.users[username] && db.users[username].isAdmin);
+}
+
+function adminListPlayers(db){
+  return Object.keys(db.users).map(uname=>{
+    const u = db.users[uname];
+    const v = db.villages[u.villageId];
+    return {
+      username: uname,
+      isAdmin: !!u.isAdmin,
+      createdAt: u.createdAt||null,
+      villageId: v ? v.id : null,
+      villageName: v ? v.name : null,
+      coord: v ? (v.x+"|"+v.y) : null,
+      resources: v ? { ...v.resources } : null,
+      buildings: v ? { ...v.buildings } : null,
+      troops: v ? { ...v.troops } : null,
+      buildQueueLen: v ? v.buildQueue.length : 0,
+      trainQueueLen: v ? v.trainQueue.length : 0
+    };
+  }).sort((a,b)=>a.username.localeCompare(b.username));
+}
+
+function adminSetAdmin(db, targetUsername, flag){
+  const u = db.users[targetUsername];
+  if(!u) return { error:"Joueur introuvable." };
+  u.isAdmin = !!flag;
+  return { ok:true };
+}
+
+function adminUpdateVillage(db, targetUsername, patch){
+  const v = villageByUser(db, targetUsername);
+  if(!v) return { error:"Village introuvable pour "+targetUsername+"." };
+  if(patch.resources && typeof patch.resources==="object"){
+    for(const r of ["wood","clay","iron"]){
+      if(patch.resources[r]==null) continue;
+      const n = Number(patch.resources[r]);
+      if(!Number.isFinite(n) || n<0) return { error:"Valeur de ressource invalide." };
+      v.resources[r] = clamp(n, 0, 1e12);
+    }
+  }
+  if(patch.buildings && typeof patch.buildings==="object"){
+    for(const k in patch.buildings){
+      const b = BUILDINGS[k];
+      if(!b) continue;
+      const n = Math.round(Number(patch.buildings[k]));
+      if(!Number.isFinite(n) || n<0) return { error:"Niveau de bâtiment invalide." };
+      v.buildings[k] = clamp(n, 0, b.max);
+    }
+  }
+  if(patch.troops && typeof patch.troops==="object"){
+    for(const k in patch.troops){
+      if(!TROOPS[k]) continue;
+      const n = Math.round(Number(patch.troops[k]));
+      if(!Number.isFinite(n) || n<0) return { error:"Nombre de troupes invalide." };
+      v.troops[k] = n;
+    }
+  }
+  return { ok:true };
+}
+
+function adminGiveResources(db, targetUsername, wood, clay, iron){
+  const v = villageByUser(db, targetUsername);
+  if(!v) return { error:"Village introuvable pour "+targetUsername+"." };
+  const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
+  for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]+add[r], 0, 1e12);
+  return { ok:true };
+}
+
+function adminFinishBuildQueue(db, targetUsername){
+  const v = villageByUser(db, targetUsername);
+  if(!v) return { error:"Village introuvable." };
+  if(!v.buildQueue.length) return { error:"File de construction déjà vide." };
+  for(const item of v.buildQueue){
+    const b = BUILDINGS[item.key];
+    v.buildings[item.key] = Math.min(b?b.max:99, (v.buildings[item.key]||0)+1);
+  }
+  v.buildQueue = [];
+  return { ok:true };
+}
+
+function adminFinishTrainQueue(db, targetUsername){
+  const v = villageByUser(db, targetUsername);
+  if(!v) return { error:"Village introuvable." };
+  if(!v.trainQueue.length) return { error:"File d'entraînement déjà vide." };
+  for(const order of v.trainQueue) v.troops[order.troop] = (v.troops[order.troop]||0)+order.count;
+  v.trainQueue = [];
+  return { ok:true };
+}
+
+function adminSetSpeed(db, multiplier){
+  const n = Number(multiplier);
+  if(!Number.isFinite(n) || n<=0 || n>1000) return { error:"Multiplicateur invalide (doit être entre 0.01 et 1000)." };
+  db.settings = db.settings||{};
+  db.settings.speedMultiplier = n;
+  return { ok:true };
+}
+
+/* ---------------------------------------------------------------------- */
 /*  Instantané d'état envoyé au client                                     */
 /* ---------------------------------------------------------------------- */
 
@@ -522,11 +654,15 @@ function buildSnapshot(db, username){
     reports: (db.reports[username]||[]).slice(0,60),
     villages,
     quests: questStatus,
-    leaderboard
+    leaderboard,
+    isAdmin: isAdminUser(db, username),
+    chat: (db.chat||[]).slice(-50)
   };
 }
 
 module.exports = {
   now, villageByUser, villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS
+  doBuild, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
+  doChatSend, isAdminUser, adminListPlayers, adminSetAdmin, adminUpdateVillage,
+  adminGiveResources, adminFinishBuildQueue, adminFinishTrainQueue, adminSetSpeed, getSpeedMultiplier
 };

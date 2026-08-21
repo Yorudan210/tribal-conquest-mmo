@@ -14,11 +14,13 @@ let db = null;
 
 function emptyDb(){
   return {
-    users: {},          // username -> { passwordHash, salt, villageId, createdAt }
+    users: {},          // username -> { passwordHash, salt, villageId, createdAt, isAdmin }
     villages: {},        // id (string) -> village object
     nextVillageId: 1,
     missions: [],         // in-flight attack/scout missions
     reports: {},          // username -> [report,...] (most recent first)
+    chat: [],             // [{id, username, text, time}, ...] (chronologique, plus ancien en premier)
+    settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
   };
@@ -28,11 +30,23 @@ function ensureDataDir(){
   if(!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+/* Complète les champs manquants sur une base sauvegardée par une version antérieure du
+   serveur (avant l'ajout du chat / des réglages admin), pour rester rétro-compatible. */
+function migrateDb(){
+  if(!db.chat) db.chat = [];
+  if(!db.settings) db.settings = {};
+  if(!db.settings.speedMultiplier) db.settings.speedMultiplier = 1;
+  for(const uname in db.users){
+    if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
+  }
+}
+
 function load(){
   ensureDataDir();
   if(fs.existsSync(DB_FILE)){
     try{
       db = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+      migrateDb();
       console.log("[store] base chargée :", Object.keys(db.villages).length, "villages,", Object.keys(db.users).length, "joueurs.");
       return db;
     }catch(e){
