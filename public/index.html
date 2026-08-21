@@ -248,6 +248,7 @@
   .unit-note{font-size:10px; color:var(--gold); margin-top:4px;}
   .loyalty-bar{width:120px;}
   .report.defense{border-left:4px solid #7a3fae;}
+  .report.announcement{border-left:4px solid var(--gold);}
 
   #battleBanner{
     position:fixed; top:76px; left:50%; transform:translateX(-50%) translateY(-16px);
@@ -835,12 +836,15 @@ let serverTimeOffset = 0;    // estimateNow() = Date.now()/1000 + serverTimeOffs
 let activeTab = "buildings";
 let ui = { openReport:new Set(), selectedBuilding:"hq", selectedVillage:null };
 let mapView = null;          // {cx, cy, ppf} — affichage de la carte : purement client, ne vient pas du serveur
+let mapDragging = false;     // true pendant un glissé de la carte : bloque les re-rendus périodiques
+                              // (sinon le sondage toutes les 2,5s recrée la carte en plein glissé et le bloque)
 let pollHandle = null;
 let mapJustDragged = false;
 let sparkleUntil = {};
 let scoutIntel = {};         // villageId -> {resources, troops, wallLevel, loyalty, time, isPlayer} — dernier renseignement connu
 let adminPlayers = null;     // liste des joueurs (panneau Admin), chargée à la demande
-let adminSpeed = 1;          // multiplicateur de vitesse global, connu une fois le panneau Admin ouvert
+let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des joueurs)
+let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
 let chatOpen = true;         // état d'ouverture du widget de chat (purement client, non persisté)
 
@@ -848,8 +852,8 @@ function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
 
 /* ============================= FORMULES (au-dessus des données partagées GameData) ============================= */
 /* buildTime/trainTime dépendent du niveau HQ / Caserne du village actif : petits adaptateurs locaux. */
-function vBuildTime(key, level){ return buildTime(key, level, state.village.buildings.hq||0); }
-function vTrainTime(key){ return trainTime(key, state.village.buildings.barracks||0); }
+function vBuildTime(key, level){ return buildTime(key, level, state.village.buildings.hq||0) / (adminSpeed||1); }
+function vTrainTime(key){ return trainTime(key, state.village.buildings.barracks||0) / (adminSpeed||1); }
 
 function popUsed(){
   let used=0;
@@ -898,6 +902,7 @@ function applySnapshot(snap){
   const prevState = state;
   serverTimeOffset = snap.serverTime - Date.now()/1000;
   state = snap;
+  if(snap.speedMultiplier!=null) adminSpeed = snap.speedMultiplier;
   for(const r of state.reports){
     if(r.kind==="scout" && r.targetId!=null){
       const ex = scoutIntel[r.targetId];
@@ -1135,8 +1140,8 @@ function enterGame(data){
 
 function logout(silent){
   stopPolling();
-  authToken=null; username=null; state=null; mapView=null; scoutIntel={};
-  adminPlayers=null; adminSelected=null;
+  authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
+  adminPlayers=null; adminSelected=null; adminPlayerFilter="";
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("app").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
@@ -1342,6 +1347,9 @@ function updateChatMessages(){
 }
 
 function renderActiveTabContent(){
+  // Ne jamais recréer la carte pendant un glissé en cours : sinon le sondage périodique
+  // (toutes les 2,5s) remplace #mapCanvas en plein milieu du drag et le bloque (bug corrigé).
+  if(activeTab==="map" && mapDragging) return;
   const main=document.getElementById("tabContent");
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
   else if(activeTab==="barracks") main.innerHTML=renderBarracks();
@@ -1458,7 +1466,9 @@ function renderBuildings(){
   const v=state.village;
 
   const sel = (ui.selectedBuilding && BUILDINGS[ui.selectedBuilding]) ? ui.selectedBuilding : "hq";
-  const b=BUILDINGS[sel], lvl=v.buildings[sel]||0, maxed=lvl>=b.max, nextLevel=lvl+1;
+  const b=BUILDINGS[sel], lvl=v.buildings[sel]||0, atMax=lvl>=b.max;
+  const pendingForSel = state.village.buildQueue.filter(o=>o.key===sel).length;
+  const nextLevel=lvl+pendingForSel+1, maxed=nextLevel>b.max;
   const cost = maxed?null:buildCost(sel,nextLevel);
   const time = maxed?null:vBuildTime(sel,nextLevel);
   const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
@@ -1470,15 +1480,16 @@ function renderBuildings(){
     <div class="building-detail box">
       <div class="icon-big">${buildingIconSvg(sel, lvl)}</div>
       <div class="info">
-        <h3 style="margin-bottom:2px;">${b.name} <span style="color:var(--text-dim); font-size:13px; font-weight:normal;">— niveau ${lvl}${maxed?' (max)':''}</span></h3>
+        <h3 style="margin-bottom:2px;">${b.name} <span style="color:var(--text-dim); font-size:13px; font-weight:normal;">— niveau ${lvl}${atMax?' (max)':''}</span></h3>
         <div class="desc" style="margin-bottom:8px;">${b.desc}</div>
-        ${maxed ? '<p class="muted small">Niveau maximum atteint.</p>' : `
+        ${maxed ? `<p class="muted small">${atMax?'Niveau maximum atteint.':'Toutes les améliorations jusqu\'au niveau maximum sont déjà en file.'}</p>` : `
           <div class="cost" style="margin-bottom:8px;">
             <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
             <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
             <span class="${v.resources.iron<cost.iron?'short':''}">⛏️ ${fmt(cost.iron)}</span>
             <span>⏱ ${fmtTime(time)}</span>
           </div>
+          ${pendingForSel?`<div class="unit-note">${pendingForSel} déjà en file d'attente</div>`:''}
           ${lockedReq?`<div class="req-note">Nécessite : ${Object.entries(b.requires).map(([rk,rv])=>BUILDINGS[rk].name+" niv. "+rv).join(", ")}</div>`:''}
           ${queueFull?`<div class="req-note">File de construction pleine (max 6).</div>`:''}
           <button data-build="${sel}" class="primary" ${(!affordable||lockedReq||queueFull)?'disabled':''}>${isEmpty?'Construire':'Améliorer'} → niveau ${nextLevel}</button>
@@ -1504,21 +1515,22 @@ function renderBuildings(){
 
 function renderBuildMenuCard(key){
   const v=state.village;
-  const b=BUILDINGS[key], lvl=v.buildings[key]||0, maxed=lvl>=b.max, nextLevel=lvl+1;
+  const b=BUILDINGS[key], lvl=v.buildings[key]||0, atMax=lvl>=b.max;
+  const queuedCount = state.village.buildQueue.filter(q=>q.key===key).length;
+  const nextLevel=lvl+queuedCount+1, maxed=nextLevel>b.max;
   const cost = maxed?null:buildCost(key,nextLevel);
   const time = maxed?null:vBuildTime(key,nextLevel);
   const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
   const affordable = cost && canAffordAll(cost);
   const isEmpty = lvl<=0;
   const queueFull = state.village.buildQueue.length>=6;
-  const queuedCount = state.village.buildQueue.filter(q=>q.key===key).length;
   return `<div class="card">
     <div class="card-head">
       <div class="icon-mini">${buildingIconSvg(key, lvl)}</div>
-      <h4>${b.name}<span class="small muted" style="font-weight:normal;">niveau ${lvl}${maxed?' (max)':''}</span></h4>
+      <h4>${b.name}<span class="small muted" style="font-weight:normal;">niveau ${lvl}${atMax?' (max)':''}</span></h4>
     </div>
     <div class="desc">${b.desc}</div>
-    ${maxed ? '<p class="muted small">Niveau maximum atteint.</p>' : `
+    ${maxed ? `<p class="muted small">${atMax?'Niveau maximum atteint.':'Toutes les améliorations jusqu\'au niveau maximum sont déjà en file.'}</p>` : `
       <div class="cost">
         <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
         <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
@@ -1783,7 +1795,7 @@ function renderMap(){
     background-size:${ppf}px ${ppf}px, ${ppf}px ${ppf}px, ${ppf*10}px ${ppf*10}px, ${ppf*10}px ${ppf*10}px;`;
 
   return `<h2>Carte du monde</h2>
-    <p class="muted small">Glissez la carte pour explorer, cliquez sur un village pour l'attaquer ou le reconnaître. 👤 = village d'un autre joueur.</p>
+    <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour l'attaquer ou le reconnaître. 👤 = village d'un autre joueur.</p>
     ${renderMapToolbar()}
     <div id="mapCanvas">
       <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
@@ -1811,7 +1823,7 @@ function attachMapHandlers(){
 
   let dragging=false, moved=false, startX=0, startY=0, baseLeft=0, baseTop=0;
   canvas.onpointerdown=(e)=>{
-    dragging=true; moved=false; startX=e.clientX; startY=e.clientY;
+    dragging=true; moved=false; mapDragging=true; startX=e.clientX; startY=e.clientY;
     baseLeft=parseFloat(world.style.left)||0; baseTop=parseFloat(world.style.top)||0;
     canvas.classList.add("dragging");
     canvas.setPointerCapture(e.pointerId);
@@ -1826,6 +1838,7 @@ function attachMapHandlers(){
   const endDrag=(e)=>{
     if(!dragging) return;
     dragging=false;
+    mapDragging=false;
     canvas.classList.remove("dragging");
     if(e && e.pointerId!=null){ try{ canvas.releasePointerCapture(e.pointerId); }catch(err){} }
     if(moved){
@@ -1834,6 +1847,7 @@ function attachMapHandlers(){
       mapView.cx = minX + (canvas.clientWidth/2-left)/mapView.ppf;
       mapView.cy = minY + (canvas.clientHeight/2-top)/mapView.ppf;
       mapJustDragged=true;
+      renderActiveTabContent(); // re-synchronise avec les données reçues pendant le glissé (bloqué le temps du drag)
     } else if(e){
       // simple tap (no drag): select whichever village pin is under the pointer.
       // pointer capture retargets the native click to the canvas itself, so we
@@ -1843,12 +1857,30 @@ function attachMapHandlers(){
       if(pinEl){
         const raw=pinEl.dataset.villagePin;
         ui.selectedVillage = raw==="home" ? "home" : raw;
-        renderActiveTabContent();
       }
+      renderActiveTabContent();
     }
   };
   canvas.onpointerup=endDrag;
   canvas.onpointercancel=endDrag;
+
+  // Molette de la souris : zoom centré sur le curseur, pour une carte plus interactive.
+  canvas.onwheel=(e)=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+    const oldPpf=mapView.ppf;
+    const newPpf=Math.max(12, Math.min(48, oldPpf + (e.deltaY<0?4:-4)));
+    if(newPpf===oldPpf) return;
+    // garde le point du monde sous le curseur immobile pendant le zoom
+    const cursorX=e.clientX-rect.left, cursorY=e.clientY-rect.top;
+    const worldX = mapView.cx + (cursorX-canvas.clientWidth/2)/oldPpf;
+    const worldY = mapView.cy + (cursorY-canvas.clientHeight/2)/oldPpf;
+    mapView.ppf=newPpf;
+    mapView.cx = worldX - (cursorX-canvas.clientWidth/2)/newPpf;
+    mapView.cy = worldY - (cursorY-canvas.clientHeight/2)/newPpf;
+    renderActiveTabContent();
+  };
 
   document.getElementById("btnZoomIn").onclick=()=>{ mapView.ppf=Math.min(48, mapView.ppf+6); renderActiveTabContent(); };
   document.getElementById("btnZoomOut").onclick=()=>{ mapView.ppf=Math.max(12, mapView.ppf-6); renderActiveTabContent(); };
@@ -1904,6 +1936,11 @@ function renderReports(){
         <div class="title" data-toggle="${i}"><span>⚠️ Raid de pillards</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
         <div class="details ${open?'open':''}">Ressources perdues : 🪵${(r.lost&&r.lost.wood)||0} 🧱${(r.lost&&r.lost.clay)||0} ⛏️${(r.lost&&r.lost.iron)||0}</div>
       </div>`;
+    } else if(r.kind==="announcement"){
+      return `<div class="report announcement">
+        <div class="title"><span>📢 Annonce${r.author?(' de '+escapeHtml(r.author)):''}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="details open" style="white-space:pre-wrap;">${escapeHtml(r.text||'')}</div>
+      </div>`;
     }
     return `<div class="report"><div class="title">${r.text||''}</div></div>`;
   }).join("");
@@ -1911,7 +1948,9 @@ function renderReports(){
 }
 
 function renderAdmin(){
-  const rows = (adminPlayers||[]).map(p=>{
+  const filter = adminPlayerFilter.trim().toLowerCase();
+  const filteredPlayers = (adminPlayers||[]).filter(p=>!filter || p.username.toLowerCase().includes(filter) || (p.villageName||"").toLowerCase().includes(filter));
+  const rows = filteredPlayers.map(p=>{
     const sel = adminSelected===p.username;
     return `<tr class="${sel?'admin-selected':''}" data-admin-select="${p.username}">
       <td>${escapeHtml(p.username)}${p.isAdmin?' <span class="tag strong">ADMIN</span>':''}</td>
@@ -1921,7 +1960,7 @@ function renderAdmin(){
       <td>🏛️ ${p.buildings?p.buildings.hq||0:0}</td>
       <td>${p.buildQueueLen||0} / ${p.trainQueueLen||0}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="muted">Chargement…</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">${(adminPlayers||[]).length?'Aucun joueur ne correspond à la recherche.':'Chargement…'}</td></tr>`;
 
   const selP = (adminPlayers||[]).find(p=>p.username===adminSelected);
 
@@ -1931,7 +1970,7 @@ function renderAdmin(){
   <div class="box" style="margin-bottom:14px;">
     <h3>⚡ Vitesse du monde</h3>
     <div class="flex-between">
-      <span class="small">Multiplicateur actuel : <b>${adminSpeed}×</b> — s'applique aux <i>nouvelles</i> files de construction et d'entraînement (temps divisé par ce facteur).</span>
+      <span class="small">Multiplicateur actuel : <b>${adminSpeed}×</b> — s'applique immédiatement à tout : ressources, files de construction et d'entraînement déjà en cours <i>et</i> nouvelles (temps divisé par ce facteur).</span>
       <div style="display:flex; gap:6px;">
         <input type="number" id="adminSpeedInput" min="0.01" max="1000" step="0.1" value="${adminSpeed}">
         <button id="btnSetSpeed" class="primary">Appliquer</button>
@@ -1940,7 +1979,28 @@ function renderAdmin(){
   </div>
 
   <div class="box" style="margin-bottom:14px;">
-    <h3>👥 Joueurs (${(adminPlayers||[]).length})</h3>
+    <h3>📢 Annonce à tous les joueurs</h3>
+    <p class="small muted">Envoie un message qui apparaît immédiatement dans la boîte de rapports de tous les joueurs actuels.</p>
+    <form id="adminAnnounceForm" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
+      <textarea id="adminAnnounceText" rows="2" maxlength="500" placeholder="Message de l'administration…" style="flex:1 1 260px;"></textarea>
+      <button type="submit" class="primary">Publier</button>
+    </form>
+  </div>
+
+  <div class="box" style="margin-bottom:14px;">
+    <h3>🎁 Ressources pour tous les joueurs</h3>
+    <p class="small muted">Ajoute ces montants au stock actuel de chaque joueur, en une seule fois.</p>
+    <div class="inputs" style="display:flex; gap:14px; margin-bottom:8px; flex-wrap:wrap;">
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminGiveAll_${r}" min="0" value="0"></div>`).join("")}
+      <button id="btnGiveAll" class="primary">➕ Donner à tous</button>
+    </div>
+  </div>
+
+  <div class="box" style="margin-bottom:14px;">
+    <div class="flex-between">
+      <h3 style="margin:0;">👥 Joueurs (${filteredPlayers.length}${filteredPlayers.length!==(adminPlayers||[]).length?(' / '+(adminPlayers||[]).length):''})</h3>
+      <input type="text" id="adminPlayerFilter" placeholder="🔎 Filtrer par pseudo ou village…" value="${escapeHtml(adminPlayerFilter)}" style="max-width:240px;">
+    </div>
     <p class="small muted">Cliquez sur un joueur pour modifier son village (ressources, bâtiments, troupes).</p>
     <div style="max-height:280px; overflow:auto;">
       <table><thead><tr><th>Pseudo</th><th>Village</th><th>Coord.</th><th>Ressources</th><th>HdV</th><th>Files (constr./entr.)</th></tr></thead>
@@ -2005,6 +2065,28 @@ function attachAdminHandlers(){
     const v=Number(document.getElementById("adminSpeedInput").value);
     if(!v || v<=0){ toast("⚠️ Valeur invalide."); return; }
     adminAction(()=>apiCall("/api/admin/speed","POST",{multiplier:v}), "Vitesse du monde réglée sur "+v+"×.");
+  };
+  const announceForm=document.getElementById("adminAnnounceForm");
+  if(announceForm) announceForm.onsubmit=(e)=>{
+    e.preventDefault();
+    const inp=document.getElementById("adminAnnounceText");
+    const text=(inp.value||"").trim();
+    if(!text){ toast("⚠️ Message vide."); return; }
+    doAction(()=>apiCall("/api/admin/announce","POST",{text}), "📢 Annonce publiée à tous les joueurs.", null);
+    inp.value="";
+  };
+  const giveAllBtn=document.getElementById("btnGiveAll");
+  if(giveAllBtn) giveAllBtn.onclick=()=>{
+    const wood=Number(document.getElementById("adminGiveAll_wood").value)||0;
+    const clay=Number(document.getElementById("adminGiveAll_clay").value)||0;
+    const iron=Number(document.getElementById("adminGiveAll_iron").value)||0;
+    if(!wood && !clay && !iron){ toast("⚠️ Indiquez au moins une ressource à donner."); return; }
+    adminAction(()=>apiCall("/api/admin/give-all","POST",{wood, clay, iron}), "Ressources données à tous les joueurs.");
+  };
+  const filterInput=document.getElementById("adminPlayerFilter");
+  if(filterInput) filterInput.oninput=()=>{
+    adminPlayerFilter = filterInput.value;
+    rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
   };
   const toggleBtn=document.getElementById("btnToggleAdmin");
   if(toggleBtn) toggleBtn.onclick=()=>{
