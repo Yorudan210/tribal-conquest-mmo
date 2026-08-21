@@ -249,6 +249,13 @@
   .loyalty-bar{width:120px;}
   .report.defense{border-left:4px solid #7a3fae;}
   .report.announcement{border-left:4px solid var(--gold);}
+  .report .title .actions{display:flex; align-items:center; gap:8px; font-weight:normal;}
+  .report-del{background:none; border:none; cursor:pointer; font-size:13px; opacity:.55; padding:2px 5px; border-radius:4px; line-height:1;}
+  .report-del:hover{opacity:1; background:rgba(255,255,255,.08);}
+  .report-filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .filter-btn{background:var(--panel2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; padding:4px 12px; font-size:11px; cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;}
+  .filter-btn:hover{color:var(--text);}
+  .filter-btn.active{background:var(--gold); border-color:var(--gold); color:#2a1c07; font-weight:bold;}
 
   #battleBanner{
     position:fixed; top:76px; left:50%; transform:translateX(-50%) translateY(-16px);
@@ -847,6 +854,15 @@ let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des jo
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
 let chatOpen = true;         // état d'ouverture du widget de chat (purement client, non persisté)
+let reportFilter = "all";    // filtre de catégorie pour l'onglet Rapports (purement client)
+const REPORT_FILTERS = [
+  {key:"all", label:"Tous"},
+  {key:"attack", label:"⚔️ Attaques envoyées"},
+  {key:"defense", label:"🛡️ Attaques subies"},
+  {key:"scout", label:"🔭 Reconnaissances"},
+  {key:"raid", label:"⚠️ Raids de pillards"},
+  {key:"announcement", label:"📢 Annonces"}
+];
 
 function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
 
@@ -1891,15 +1907,34 @@ function attachMapHandlers(){
   };
 }
 
+function renderReportFilters(){
+  return `<div class="report-filters">${REPORT_FILTERS.map(f=>{
+    const count = f.key==="all" ? state.reports.length : state.reports.filter(r=>r.kind===f.key).length;
+    return `<button class="filter-btn ${reportFilter===f.key?'active':''}" data-report-filter="${f.key}">${f.label} (${count})</button>`;
+  }).join("")}</div>`;
+}
+
+function reportActions(r){
+  return `<span class="actions"><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span><button class="report-del" data-delete-report="${r.id}" title="Supprimer ce rapport">🗑️</button></span>`;
+}
+
 function renderReports(){
-  if(!state.reports.length) return `<h2>Rapports</h2><p class="muted">Aucun rapport pour l'instant.</p>`;
-  const items=state.reports.map((r,i)=>{
-    const open=ui.openReport.has(i);
+  const filterBar = renderReportFilters();
+  if(!state.reports.length) return `<h2>Rapports</h2>${filterBar}<p class="muted">Aucun rapport pour l'instant.</p>`;
+  const filtered = reportFilter==="all" ? state.reports : state.reports.filter(r=>r.kind===reportFilter);
+  const bulkLabel = reportFilter==="all" ? "tous les rapports" : "les rapports affichés";
+  const bulkBar = `<div class="flex-between" style="margin-bottom:10px;">
+    <span class="small muted">${filtered.length} rapport${filtered.length>1?'s':''} affiché${filtered.length>1?'s':''}</span>
+    <button id="btnClearReports" class="small" ${filtered.length?'':'disabled'} data-clear-kind="${reportFilter==="all"?"":reportFilter}">🗑️ Supprimer ${bulkLabel}</button>
+  </div>`;
+  if(!filtered.length) return `<h2>Rapports</h2>${filterBar}${bulkBar}<p class="muted">Aucun rapport dans cette catégorie.</p>`;
+  const items=filtered.map((r)=>{
+    const open=ui.openReport.has(r.id);
     if(r.kind==="attack"){
       const win=r.winner==="attacker";
       const titleLabel = r.conquered ? "👑 Village conquis" : (win?'🏆 Victoire':'💀 Défaite');
       return `<div class="report ${win?'win':'lose'}">
-        <div class="title" data-toggle="${i}"><span>${titleLabel} contre ${r.target} (${r.coord})${r.targetIsPlayer?(' — joueur '+r.targetOwner):''}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="title" data-toggle="${r.id}"><span>${titleLabel} contre ${r.target} (${r.coord})${r.targetIsPlayer?(' — joueur '+r.targetOwner):''}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
           Puissance d'attaque : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
           Puissance de défense : ${r.defensePower}<br>
@@ -1914,7 +1949,7 @@ function renderReports(){
     } else if(r.kind==="defense"){
       const win=r.winner==="attacker";
       return `<div class="report defense">
-        <div class="title" data-toggle="${i}"><span>${win?'💀 Raid subi de ':'🛡️ Attaque repoussée de '}${r.source}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="title" data-toggle="${r.id}"><span>${win?'💀 Raid subi de ':'🛡️ Attaque repoussée de '}${r.source}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
           Puissance ennemie : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
           Votre puissance défensive : ${r.defensePower}<br>
@@ -1924,7 +1959,7 @@ function renderReports(){
       </div>`;
     } else if(r.kind==="scout"){
       return `<div class="report scout">
-        <div class="title" data-toggle="${i}"><span>🔭 Reconnaissance de ${r.target} (${r.coord})</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="title" data-toggle="${r.id}"><span>🔭 Reconnaissance de ${r.target} (${r.coord})</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
           Ressources : 🪵${fmt(r.resources.wood)} 🧱${fmt(r.resources.clay)} ⛏️${fmt(r.resources.iron)}<br>
           Troupes : ${TROOP_ORDER.map(k=>TROOPS[k].name+" "+(r.troops[k]||0)).join(", ")}<br>
@@ -1933,18 +1968,18 @@ function renderReports(){
       </div>`;
     } else if(r.kind==="raid"){
       return `<div class="report raid">
-        <div class="title" data-toggle="${i}"><span>⚠️ Raid de pillards</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="title" data-toggle="${r.id}"><span>⚠️ Raid de pillards</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">Ressources perdues : 🪵${(r.lost&&r.lost.wood)||0} 🧱${(r.lost&&r.lost.clay)||0} ⛏️${(r.lost&&r.lost.iron)||0}</div>
       </div>`;
     } else if(r.kind==="announcement"){
       return `<div class="report announcement">
-        <div class="title"><span>📢 Annonce${r.author?(' de '+escapeHtml(r.author)):''}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="title"><span>📢 Annonce${r.author?(' de '+escapeHtml(r.author)):''}</span>${reportActions(r)}</div>
         <div class="details open" style="white-space:pre-wrap;">${escapeHtml(r.text||'')}</div>
       </div>`;
     }
-    return `<div class="report"><div class="title">${r.text||''}</div></div>`;
+    return `<div class="report"><div class="title"><span>${r.text||''}</span>${reportActions(r)}</div></div>`;
   }).join("");
-  return `<h2>Rapports</h2>${items}`;
+  return `<h2>Rapports</h2>${filterBar}${bulkBar}${items}`;
 }
 
 function renderAdmin(){
@@ -2203,8 +2238,24 @@ function attachTabHandlers(){
     sendMission(id, kind);
   });
   document.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{
-    const i=Number(el.dataset.toggle);
+    const i=el.dataset.toggle;
     if(ui.openReport.has(i)) ui.openReport.delete(i); else ui.openReport.add(i);
+    renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-delete-report]").forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    const id=b.dataset.deleteReport;
+    doAction(()=>apiCall("/api/reports/delete","POST",{ids:[id]}), "🗑️ Rapport supprimé", null);
+  });
+  const clearBtn=document.getElementById("btnClearReports");
+  if(clearBtn) clearBtn.onclick=()=>{
+    const kind=clearBtn.dataset.clearKind||undefined;
+    const label=kind?"les rapports affichés":"tous les rapports";
+    if(!confirm("Supprimer "+label+" ? Cette action est irréversible.")) return;
+    doAction(()=>apiCall("/api/reports/clear","POST",{kind}), "🗑️ Rapports supprimés", null);
+  };
+  document.querySelectorAll("[data-report-filter]").forEach(b=>b.onclick=()=>{
+    reportFilter = b.dataset.reportFilter;
     renderActiveTabContent();
   });
 }
