@@ -117,7 +117,9 @@ tribal-mmo/
   - régler un multiplicateur de vitesse mondial — s'applique **immédiatement à tout** : production
     de ressources, files déjà en cours et nouvelles files (temps divisé par ce facteur) ;
   - publier une **annonce** qui apparaît aussitôt dans la boîte de rapports de tous les joueurs ;
-  - promouvoir ou révoquer les droits administrateur d'un autre compte.
+  - promouvoir ou révoquer les droits administrateur d'un autre compte ;
+  - voir la liste des **missions en cours** (attaques, reconnaissances, soutiens...) et forcer la
+    résolution/arrivée immédiate de l'une d'entre elles.
 
   Un joueur non-administrateur ne voit jamais cet onglet ni ces actions.
 
@@ -129,6 +131,38 @@ envoyée avec lui (plus vous dominez le combat, plus il est protégé). Un Noble
 envoyé sans escorte suffisante contre une défense sérieuse a de bonnes chances
 de mourir ; avec une escorte largement supérieure à la défense adverse, ses
 chances de survie sont élevées (mais jamais garanties à 100%).
+
+## File de construction (une seule à la fois) et annulation
+
+Une seule construction est réellement en cours à la fois dans un village, quel que soit le
+bâtiment : les suivantes commandées attendent leur tour dans la file (jusqu'à 6), chacune démarrant
+exactement à la fin de la précédente. Chaque élément de la file (dans la barre latérale) a un bouton
+✖ pour l'**annuler** : les ressources sont intégralement remboursées et les éléments suivants sont
+réenchaînés correctement (celui qui devient le premier de la file démarre alors immédiatement).
+
+## Guildes
+
+Un joueur peut fonder ou rejoindre une guilde depuis le nouvel onglet **Guilde** :
+
+- Le chef d'une guilde peut **inviter** un joueur par son pseudo (l'invitation apparaît dans la boîte
+  de rapports du joueur invité, avec des boutons Rejoindre/Refuser), et **exclure** un membre.
+- Tout membre peut **quitter** la guilde à tout moment ; si le chef part, la direction est transmise
+  automatiquement au membre restant le plus ancien (ou la guilde est dissoute s'il était seul).
+- Construisez un **Hall de guilde** dans votre village (jusqu'au niveau 5) pour pouvoir **donner des
+  ressources** à la guilde — chaque don augmente définitivement un bonus de production partagé par
+  **tous les membres** (jusqu'à +25%, au prorata du total donné par la guilde). Le niveau du Hall
+  limite le montant d'un don unique (1000 ressources par niveau).
+
+## Renforts et dons entre joueurs
+
+Depuis la fiche d'un village appartenant à un autre joueur (carte), en plus d'attaquer ou reconnaître :
+
+- **Envoyer en soutien** : vos troupes voyagent puis se stationnent dans son village, où elles
+  comptent pour sa défense au même titre que ses propres troupes (et se répartissent les pertes en
+  cas d'attaque). Retrouvez vos renforts envoyés dans la barre latérale, avec un bouton **Rappeler**
+  pour les faire revenir chez vous (nouveau trajet de retour, comme une mission classique).
+- **Donner des ressources** : un don immédiat (sans marchand ni délai de trajet, pour rester simple),
+  plafonné par vos ressources disponibles et par la capacité de stockage du destinataire.
 
 ## Gestion des rapports
 
