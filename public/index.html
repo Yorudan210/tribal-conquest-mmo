@@ -312,6 +312,36 @@
   .tutorial-actions{display:flex; justify-content:space-between; align-items:center; gap:10px;}
   .tutorial-skip{background:transparent; border:none; box-shadow:none; color:var(--text-dim); font-weight:normal; text-decoration:underline; padding:8px 4px;}
   .tutorial-skip:hover{background:transparent; box-shadow:none; color:var(--text); transform:none;}
+
+  /* ---- Chat mondial (widget flottant) ---- */
+  #chatWidget{position:fixed; bottom:14px; left:14px; z-index:150; font-size:13px;}
+  .chat-bubble{
+    width:50px; height:50px; border-radius:50%; font-size:22px;
+    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-lg);
+  }
+  .chat-panel{
+    width:300px; max-width:calc(100vw - 28px); max-height:70vh;
+    background:var(--panel); border:1px solid var(--gold); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .chat-head{
+    display:flex; justify-content:space-between; align-items:center; padding:8px 12px;
+    background:var(--panel2); border-bottom:1px solid var(--border); font-weight:bold; color:var(--gold);
+  }
+  .chat-head .chat-toggle{background:transparent; border:none; box-shadow:none; padding:2px 6px; font-size:12px;}
+  .chat-head .chat-toggle:hover{background:rgba(217,164,65,.15); transform:none; box-shadow:none;}
+  .chat-messages{max-height:240px; min-height:120px; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:6px;}
+  .chat-msg{font-size:12px; line-height:1.4; word-break:break-word;}
+  .chat-msg .chat-user{font-weight:bold; color:var(--gold); margin-right:6px;}
+  .chat-msg.me .chat-user{color:var(--green);}
+  .chat-form{display:flex; border-top:1px solid var(--border);}
+  .chat-form input{flex:1; border:none; border-radius:0; background:#211a13; padding:8px 10px; box-shadow:none;}
+  .chat-form button{border:none; border-radius:0; box-shadow:none; background:var(--panel2); padding:8px 12px;}
+  @media(max-width:480px){ #chatWidget{left:8px; bottom:8px;} .chat-panel{width:calc(100vw - 16px);} }
+
+  /* ---- Panneau Admin ---- */
+  #tabContent tr.admin-selected{background:rgba(217,164,65,.16);}
+  #tabContent tr[data-admin-select]{cursor:pointer;}
 </style>
 </head>
 <body>
@@ -328,6 +358,7 @@
 <div id="battleBanner"></div>
 <div id="tutorialModal"></div>
 <div id="authScreen"></div>
+<div id="chatWidget"></div>
 
 <script src="/shared/gameData.js"></script>
 <script>
@@ -808,6 +839,10 @@ let pollHandle = null;
 let mapJustDragged = false;
 let sparkleUntil = {};
 let scoutIntel = {};         // villageId -> {resources, troops, wallLevel, loyalty, time, isPlayer} — dernier renseignement connu
+let adminPlayers = null;     // liste des joueurs (panneau Admin), chargée à la demande
+let adminSpeed = 1;          // multiplicateur de vitesse global, connu une fois le panneau Admin ouvert
+let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
+let chatOpen = true;         // état d'ouverture du widget de chat (purement client, non persisté)
 
 function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
 
@@ -891,6 +926,7 @@ function applySnapshot(snap){
       });
     }
   }
+  renderChat();
 }
 
 /* Exécute une action serveur, fusionne la réponse et rafraîchit l'affichage ; affiche l'erreur sinon. */
@@ -905,6 +941,43 @@ async function doAction(promiseFn, successMsg, sfx){
     Audio.SFX.error();
     toast("⚠️ "+err.message);
   }
+}
+
+/* Comme doAction, mais pour les routes /api/admin/* : la réponse renvoie aussi la liste des
+   joueurs à jour (et parfois le multiplicateur de vitesse), utilisée par le panneau Admin. */
+async function adminAction(promiseFn, successMsg){
+  try{
+    const data = await promiseFn();
+    if(data.snapshot) applySnapshot(data.snapshot);
+    if(data.players) adminPlayers = data.players;
+    if(data.speedMultiplier!=null) adminSpeed = data.speedMultiplier;
+    if(successMsg) toast(successMsg);
+    renderTabs(); renderTopBar(); renderSidebar(); renderActiveTabContent();
+  }catch(err){
+    toast("⚠️ "+err.message);
+  }
+}
+
+async function refreshAdminData(){
+  try{
+    const data = await apiCall("/api/admin/players","GET");
+    adminPlayers = data.players;
+    adminSpeed = data.speedMultiplier||1;
+    if(activeTab==="admin") renderActiveTabContent();
+  }catch(err){ toast("⚠️ "+err.message); }
+}
+
+function sendChat(){
+  const inp=document.getElementById("chatInput");
+  if(!inp) return;
+  const text=inp.value.trim();
+  if(!text) return;
+  inp.value="";
+  doAction(()=>apiCall("/api/chat/send","POST",{text}), null, null);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 /* ============================= ACTIONS ============================= */
@@ -1063,9 +1136,11 @@ function enterGame(data){
 function logout(silent){
   stopPolling();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={};
+  adminPlayers=null; adminSelected=null;
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("app").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
+  document.getElementById("chatWidget").innerHTML="";
   renderAuthScreen("login", silent?"Session expirée, reconnectez-vous.":"");
 }
 
@@ -1105,7 +1180,7 @@ function renderTopBar(){
         <span class="name" id="villageNameDisplay">🏰 ${v.name}</span>
         <button class="btn-rename" id="btnRenameVillage" title="Renommer le village">✏️</button>
       </div>
-      <span class="coord">${v.x}|${v.y} · ${username}</span>
+      <span class="coord">${v.x}|${v.y} · ${username}${state.isAdmin?' <span class="tag strong">ADMIN</span>':''}</span>
     </div>
     <div class="res-group">
       ${["wood","clay","iron"].map(r=>`
@@ -1176,6 +1251,7 @@ function updateTopBarStats(){
 function renderTabs(){
   const questsDone=state.quests.filter(q=>q.claimed).length;
   const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
+  if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
   nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; renderTabs(); renderActiveTabContent(); });
@@ -1222,6 +1298,49 @@ function renderSidebar(){
   `;
 }
 
+/* Widget de chat flottant, indépendant du système d'onglets : reconstruit la coquille (ouvert/fermé)
+   seulement quand l'état change, et se contente sinon de rafraîchir la liste des messages pour ne
+   jamais couper la saisie en cours dans le champ de texte. */
+function renderChat(){
+  if(!state) return;
+  const el=document.getElementById("chatWidget");
+  if(!el) return;
+  if(chatOpen && el.querySelector(".chat-panel")){ updateChatMessages(); return; }
+  if(!chatOpen && el.querySelector(".chat-bubble")) return;
+
+  if(chatOpen){
+    el.innerHTML = `
+      <div class="chat-panel">
+        <div class="chat-head">
+          <span>💬 Chat mondial</span>
+          <button class="chat-toggle" id="chatCollapseBtn" title="Réduire">➖</button>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <form id="chatForm" class="chat-form">
+          <input type="text" id="chatInput" maxlength="300" placeholder="Écrire un message…" autocomplete="off">
+          <button type="submit">➤</button>
+        </form>
+      </div>`;
+    updateChatMessages();
+    document.getElementById("chatCollapseBtn").onclick=()=>{ chatOpen=false; renderChat(); };
+    document.getElementById("chatForm").onsubmit=(e)=>{ e.preventDefault(); sendChat(); };
+  } else {
+    el.innerHTML = `<button class="chat-bubble" id="chatExpandBtn" title="Ouvrir le chat">💬</button>`;
+    document.getElementById("chatExpandBtn").onclick=()=>{ chatOpen=true; renderChat(); };
+  }
+}
+
+function updateChatMessages(){
+  const box=document.getElementById("chatMessages");
+  if(!box || !state) return;
+  const messages=state.chat||[];
+  const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+  box.innerHTML = messages.length
+    ? messages.map(m=>`<div class="chat-msg${m.username===username?' me':''}"><span class="chat-user">${escapeHtml(m.username)}</span><span class="chat-text">${escapeHtml(m.text)}</span></div>`).join("")
+    : `<div class="muted small" style="padding:8px;">Aucun message pour l'instant. Dites bonjour !</div>`;
+  if(nearBottom) box.scrollTop = box.scrollHeight;
+}
+
 function renderActiveTabContent(){
   const main=document.getElementById("tabContent");
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
@@ -1230,9 +1349,14 @@ function renderActiveTabContent(){
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
+  else if(activeTab==="admin" && state.isAdmin) main.innerHTML=renderAdmin();
   else main.innerHTML=renderHelp();
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); attachMapHandlers(); }
+  if(activeTab==="admin" && state.isAdmin){
+    attachAdminHandlers();
+    if(!adminPlayers) refreshAdminData();
+  }
 }
 
 function svgPos(pos){ return {x: pos.x/100*1000, y: pos.y/100*625}; }
@@ -1786,6 +1910,149 @@ function renderReports(){
   return `<h2>Rapports</h2>${items}`;
 }
 
+function renderAdmin(){
+  const rows = (adminPlayers||[]).map(p=>{
+    const sel = adminSelected===p.username;
+    return `<tr class="${sel?'admin-selected':''}" data-admin-select="${p.username}">
+      <td>${escapeHtml(p.username)}${p.isAdmin?' <span class="tag strong">ADMIN</span>':''}</td>
+      <td>${p.villageName?escapeHtml(p.villageName):'-'}</td>
+      <td>${p.coord||'-'}</td>
+      <td>🪵${fmt(p.resources?p.resources.wood:0)} 🧱${fmt(p.resources?p.resources.clay:0)} ⛏️${fmt(p.resources?p.resources.iron:0)}</td>
+      <td>🏛️ ${p.buildings?p.buildings.hq||0:0}</td>
+      <td>${p.buildQueueLen||0} / ${p.trainQueueLen||0}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">Chargement…</td></tr>`;
+
+  const selP = (adminPlayers||[]).find(p=>p.username===adminSelected);
+
+  return `<h2>🛠️ Panneau d'administration</h2>
+  <p class="muted small">Réservé aux comptes administrateurs. Ces actions modifient directement le monde — utilisez-les avec prudence.</p>
+
+  <div class="box" style="margin-bottom:14px;">
+    <h3>⚡ Vitesse du monde</h3>
+    <div class="flex-between">
+      <span class="small">Multiplicateur actuel : <b>${adminSpeed}×</b> — s'applique aux <i>nouvelles</i> files de construction et d'entraînement (temps divisé par ce facteur).</span>
+      <div style="display:flex; gap:6px;">
+        <input type="number" id="adminSpeedInput" min="0.01" max="1000" step="0.1" value="${adminSpeed}">
+        <button id="btnSetSpeed" class="primary">Appliquer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" style="margin-bottom:14px;">
+    <h3>👥 Joueurs (${(adminPlayers||[]).length})</h3>
+    <p class="small muted">Cliquez sur un joueur pour modifier son village (ressources, bâtiments, troupes).</p>
+    <div style="max-height:280px; overflow:auto;">
+      <table><thead><tr><th>Pseudo</th><th>Village</th><th>Coord.</th><th>Ressources</th><th>HdV</th><th>Files (constr./entr.)</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </div>
+
+  ${selP ? `<div class="box">${renderAdminEditor(selP)}</div>` : `<p class="muted small">Sélectionnez un joueur ci-dessus pour l'éditer.</p>`}
+  `;
+}
+
+function renderAdminEditor(p){
+  const buildingRows = BUILD_ORDER.map(k=>{
+    const b=BUILDINGS[k];
+    return `<div class="troop-row">
+      <span class="tname">${b.name}</span>
+      <input type="number" id="adminBuild_${k}" min="0" max="${b.max}" value="${p.buildings?p.buildings[k]||0:0}">
+    </div>`;
+  }).join("");
+  const troopRows = TROOP_ORDER.map(k=>{
+    return `<div class="troop-row">
+      <span class="tname">${TROOPS[k].name}</span>
+      <input type="number" id="adminTroop_${k}" min="0" value="${p.troops?p.troops[k]||0:0}">
+    </div>`;
+  }).join("");
+  return `
+    <div class="flex-between" style="margin-bottom:10px;">
+      <h3 style="margin:0;">✏️ ${escapeHtml(p.username)} ${p.isAdmin?'<span class="tag strong">ADMIN</span>':''}</h3>
+      <button id="btnToggleAdmin" data-user="${escapeHtml(p.username)}" data-flag="${p.isAdmin?0:1}">${p.isAdmin?'Retirer les droits admin':'Promouvoir administrateur'}</button>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button id="btnFinishBuild" data-user="${escapeHtml(p.username)}">✅ Terminer la construction en cours</button>
+      <button id="btnFinishTrain" data-user="${escapeHtml(p.username)}">✅ Terminer l'entraînement en cours</button>
+    </div>
+
+    <h4>Ressources</h4>
+    <div class="inputs" style="display:flex; gap:14px; margin-bottom:8px;">
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminRes_${r}" min="0" value="${p.resources?Math.round(p.resources[r]||0):0}"></div>`).join("")}
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button id="btnSetResources" data-user="${escapeHtml(p.username)}" class="primary">Définir (valeur exacte)</button>
+      <button id="btnGiveResources" data-user="${escapeHtml(p.username)}">➕ Donner (ajoute ces montants au stock actuel)</button>
+    </div>
+
+    <h4>Bâtiments</h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">${buildingRows}</div>
+    <button id="btnSetBuildings" data-user="${escapeHtml(p.username)}" class="primary" style="margin-bottom:14px;">Enregistrer les bâtiments</button>
+
+    <h4>Troupes</h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">${troopRows}</div>
+    <button id="btnSetTroops" data-user="${escapeHtml(p.username)}" class="primary">Enregistrer les troupes</button>
+  `;
+}
+
+function attachAdminHandlers(){
+  document.querySelectorAll("[data-admin-select]").forEach(tr=>tr.onclick=()=>{
+    adminSelected = tr.dataset.adminSelect;
+    renderActiveTabContent();
+  });
+  const speedBtn=document.getElementById("btnSetSpeed");
+  if(speedBtn) speedBtn.onclick=()=>{
+    const v=Number(document.getElementById("adminSpeedInput").value);
+    if(!v || v<=0){ toast("⚠️ Valeur invalide."); return; }
+    adminAction(()=>apiCall("/api/admin/speed","POST",{multiplier:v}), "Vitesse du monde réglée sur "+v+"×.");
+  };
+  const toggleBtn=document.getElementById("btnToggleAdmin");
+  if(toggleBtn) toggleBtn.onclick=()=>{
+    const u=toggleBtn.dataset.user, flag=toggleBtn.dataset.flag==="1";
+    adminAction(()=>apiCall("/api/admin/setadmin","POST",{username:u, isAdmin:flag}), flag?("Droits admin accordés à "+u+"."):("Droits admin retirés à "+u+"."));
+  };
+  const finishBuildBtn=document.getElementById("btnFinishBuild");
+  if(finishBuildBtn) finishBuildBtn.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/finish-build","POST",{username:finishBuildBtn.dataset.user}), "Construction(s) terminée(s) instantanément.");
+  };
+  const finishTrainBtn=document.getElementById("btnFinishTrain");
+  if(finishTrainBtn) finishTrainBtn.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/finish-train","POST",{username:finishTrainBtn.dataset.user}), "Entraînement(s) terminé(s) instantanément.");
+  };
+  const setResBtn=document.getElementById("btnSetResources");
+  if(setResBtn) setResBtn.onclick=()=>{
+    const u=setResBtn.dataset.user;
+    const resources={
+      wood:Number(document.getElementById("adminRes_wood").value)||0,
+      clay:Number(document.getElementById("adminRes_clay").value)||0,
+      iron:Number(document.getElementById("adminRes_iron").value)||0
+    };
+    adminAction(()=>apiCall("/api/admin/village","POST",{username:u, resources}), "Ressources mises à jour pour "+u+".");
+  };
+  const giveResBtn=document.getElementById("btnGiveResources");
+  if(giveResBtn) giveResBtn.onclick=()=>{
+    const u=giveResBtn.dataset.user;
+    const wood=Number(document.getElementById("adminRes_wood").value)||0;
+    const clay=Number(document.getElementById("adminRes_clay").value)||0;
+    const iron=Number(document.getElementById("adminRes_iron").value)||0;
+    adminAction(()=>apiCall("/api/admin/give","POST",{username:u, wood, clay, iron}), "Ressources données à "+u+".");
+  };
+  const setBuildBtn=document.getElementById("btnSetBuildings");
+  if(setBuildBtn) setBuildBtn.onclick=()=>{
+    const u=setBuildBtn.dataset.user;
+    const buildings={};
+    BUILD_ORDER.forEach(k=>{ const el=document.getElementById("adminBuild_"+k); if(el) buildings[k]=Number(el.value)||0; });
+    adminAction(()=>apiCall("/api/admin/village","POST",{username:u, buildings}), "Bâtiments mis à jour pour "+u+".");
+  };
+  const setTroopBtn=document.getElementById("btnSetTroops");
+  if(setTroopBtn) setTroopBtn.onclick=()=>{
+    const u=setTroopBtn.dataset.user;
+    const troops={};
+    TROOP_ORDER.forEach(k=>{ const el=document.getElementById("adminTroop_"+k); if(el) troops[k]=Number(el.value)||0; });
+    adminAction(()=>apiCall("/api/admin/village","POST",{username:u, troops}), "Troupes mises à jour pour "+u+".");
+  };
+}
+
 function renderHelp(){
   return `<h2>Aide &amp; règles du jeu</h2>
   <div class="flex-between" style="margin-bottom:10px;">
@@ -1803,7 +2070,16 @@ function renderHelp(){
   <h3>Objectifs et Classement</h3>
   <p>L'onglet <b>Objectifs</b> propose des jalons de progression (améliorer vos bâtiments, entraîner une armée, remporter une bataille, conquérir un village...) qui rapportent chacun une récompense unique en ressources ou en troupes. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
   <h3>Compte et progression</h3>
-  <p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>`;
+  <p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>
+  ${state.isAdmin ? "" : `
+  <div class="box" style="margin-top:16px;">
+    <h3>🔑 Devenir administrateur</h3>
+    <p class="small muted">Si vous disposez du code d'accès administrateur, saisissez-le ici pour débloquer le panneau d'administration sur votre compte.</p>
+    <form id="adminClaimForm" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="password" id="adminClaimCode" placeholder="Code administrateur" style="flex:1 1 200px;">
+      <button type="submit" class="primary">Valider</button>
+    </form>
+  </div>`}`;
 }
 
 function attachTabHandlers(){
@@ -1820,6 +2096,13 @@ function attachTabHandlers(){
   document.querySelectorAll("[data-claim-quest]").forEach(b=>b.onclick=()=>claimQuest(b.dataset.claimQuest));
   const replayBtn=document.getElementById("btnReplayTutorial");
   if(replayBtn) replayBtn.onclick=showTutorial;
+  const claimForm=document.getElementById("adminClaimForm");
+  if(claimForm) claimForm.onsubmit=(e)=>{
+    e.preventDefault();
+    const code=document.getElementById("adminClaimCode").value;
+    if(!code) return;
+    doAction(()=>apiCall("/api/admin/claim","POST",{code}), "🛠️ Accès administrateur accordé !", null);
+  };
   document.querySelectorAll("[data-village-pin]").forEach(el=>el.onclick=()=>{
     if(mapJustDragged){ mapJustDragged=false; return; }
     const raw=el.dataset.villagePin;
