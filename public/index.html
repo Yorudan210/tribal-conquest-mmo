@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conquête Tribale — jeu de stratégie navigateur</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#1c1712; --bg2:#2a2119; --panel:#332821; --panel2:#3d3025;
+    --border:#5a4632; --text:#eee0cc; --text-dim:#b3a188; --gold:#d9a441;
+    --green:#6fae4f; --red:#c0503f; --blue:#4f8fae;
+    --shadow-sm:0 2px 6px rgba(0,0,0,.3);
+    --shadow-md:0 4px 16px rgba(0,0,0,.35);
+    --shadow-lg:0 8px 28px rgba(0,0,0,.45);
+    --ring:0 0 0 3px rgba(217,164,65,.22);
+    --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:Georgia,'Times New Roman',serif; background:var(--bg);
+    color:var(--text); background-image:radial-gradient(ellipse at top, #2b2119 0%, #171310 100%);
+    min-height:100vh;
+  }
+  #app{max-width:1200px;margin:0 auto;padding:10px 14px 40px;}
+  h1,h2,h3{font-family:Georgia,serif;color:var(--gold);margin:0 0 8px;}
+  a{color:var(--blue);}
+  ::-webkit-scrollbar{width:11px; height:11px;}
+  ::-webkit-scrollbar-track{background:var(--bg2);}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px; border:2px solid var(--bg2);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
+  button{
+    font-family:inherit; background:linear-gradient(180deg,#4a3a28,#382c1e); color:var(--text);
+    border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px; cursor:pointer;
+    font-size:13px; font-weight:600; letter-spacing:.2px;
+    box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.05);
+    transition:transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  }
+  button:hover:not(:disabled){
+    background:linear-gradient(180deg,#5c4832,#42341f); border-color:var(--gold);
+    transform:translateY(-1px); box-shadow:var(--shadow-md);
+  }
+  button:active:not(:disabled){transform:translateY(0); box-shadow:var(--shadow-sm);}
+  button:focus-visible{outline:none; box-shadow:var(--shadow-sm), var(--ring);}
+  button:disabled{opacity:.4; cursor:not-allowed; transform:none;}
+  button.primary{background:linear-gradient(180deg,#8a5a24,#6b4419); border-color:var(--gold); font-weight:bold;}
+  button.danger{background:linear-gradient(180deg,#7a2e24,#5c2018); border-color:#a55;}
+  input[type=number]{
+    width:70px; background:#211a13; color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=number]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  input[type=text]{
+    background:#211a13; color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  input[type=password]{
+    background:#211a13; color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit; width:100%; box-sizing:border-box;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=password]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  #authScreen input[type=text]{width:100%; box-sizing:border-box;}
+  #authScreen label.small{display:flex; flex-direction:column; gap:4px; color:var(--text-dim);}
+  #authTabs button.ghost{background:transparent; box-shadow:none;}
+  select{
+    background:#211a13;color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  select:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+
+  header#topbar{
+    display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between;
+    background:linear-gradient(180deg, rgba(61,48,37,.94), rgba(51,40,33,.94));
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 18px; margin:14px 0;
+    position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md);
+  }
+  .res-group{display:flex; gap:16px; flex-wrap:wrap;}
+  .res{display:flex; flex-direction:column; align-items:center; min-width:64px; padding:4px 8px; border-radius:8px; transition:background .15s ease;}
+  .res:hover{background:rgba(0,0,0,.15);}
+  .res .val{font-weight:bold; font-size:14px;}
+  .res .rate{font-size:10px; color:var(--text-dim);}
+  .res.warn .val{color:var(--red);}
+  .topbar-right{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .village-title{display:flex; flex-direction:column;}
+  .village-title .name{font-weight:bold; color:var(--gold);}
+  .village-title .coord{font-size:11px; color:var(--text-dim);}
+  .village-title .name-row{display:flex; align-items:center; gap:6px;}
+  .btn-rename{background:transparent; border:none; box-shadow:none; padding:2px 4px; font-size:12px; opacity:.6; cursor:pointer;}
+  .btn-rename:hover{opacity:1; transform:none; background:transparent; box-shadow:none;}
+  .village-title input[type=text]{font-weight:bold; color:var(--gold); padding:2px 6px; width:160px; font-size:14px;}
+
+  nav#tabs{
+    display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px;
+    background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:5px; box-shadow:inset 0 1px 4px rgba(0,0,0,.3);
+  }
+  nav#tabs button{
+    border-radius:var(--radius-sm); border-color:transparent; background:transparent; box-shadow:none;
+    color:var(--text-dim);
+  }
+  nav#tabs button:hover:not(.active){background:rgba(217,164,65,.1); border-color:transparent; color:var(--text); transform:none; box-shadow:none;}
+  nav#tabs button.active{background:var(--panel2); border-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
+
+  .layout{display:flex; gap:14px; align-items:flex-start;}
+  main#tabContent{flex:1 1 640px; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; box-shadow:var(--shadow-md);}
+  aside#sidebar{flex:0 0 280px; display:flex; flex-direction:column; gap:12px;}
+  .box{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm);}
+  .box h3{font-size:14px; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+
+  .grid-buildings{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;}
+
+  .village-scene{
+    position:relative; width:100%; aspect-ratio:16/10;
+    border:2px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:14px;
+    box-shadow:inset 0 0 50px rgba(0,0,0,.55), var(--shadow-md); background:#212c14;
+  }
+  .village-svg{width:100%; height:100%; display:block;}
+  .plot{cursor:pointer;}
+  .plot .groundmark{ fill:rgba(0,0,0,.3); transition:fill .15s, filter .15s; }
+  .plot:hover .groundmark{ fill:rgba(217,164,65,.22); }
+  .plot.selected .groundmark{ fill:rgba(217,164,65,.4); filter:drop-shadow(0 0 8px rgba(217,164,65,.8)); }
+  .plot .art{ transition:filter .15s; }
+  .plot:hover .art{ filter:brightness(1.14); }
+  .plot .empty-art{ filter:grayscale(85%) brightness(.8); opacity:.6; }
+  .plot .badge-bg{ fill:var(--gold); stroke:#2a1c10; stroke-width:1.5; }
+  .plot .badge-text{ fill:#2a1c10; font-size:15px; font-weight:bold; font-family:Georgia,serif; }
+  .plot .label-bg{ fill:rgba(18,14,9,.82); }
+  .plot .label-text{ fill:#f0e4cc; font-size:14px; font-weight:bold; font-family:Georgia,serif; }
+  .plot .hammer{ font-size:24px; animation:bounce 1s infinite; }
+  .dirt-path{ stroke:#8a6a3f; stroke-width:13; stroke-linecap:round; opacity:.45; }
+  .wall-ring{ cursor:pointer; transition:filter .15s; }
+  .wall-ring:hover{ filter:brightness(1.08); }
+  .wall-ring.selected{ filter:drop-shadow(0 0 12px rgba(217,164,65,.7)); }
+  @keyframes bounce{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
+  .building-detail{ display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
+  .building-detail .icon-big{ width:78px; height:78px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--gold); border-radius:var(--radius-md); flex:0 0 auto; padding:6px; box-shadow:var(--shadow-sm);}
+  .building-detail .icon-big svg{ width:100%; height:100%; overflow:visible; }
+  .building-detail .info{flex:1 1 240px;}
+
+  .card{background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; box-shadow:var(--shadow-sm); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;}
+  .card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--gold);}
+  .card .card-head{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .card .icon-mini{width:42px; height:42px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--border); border-radius:9px; padding:4px;}
+  .card .icon-mini svg{width:100%; height:100%; overflow:visible;}
+  .card .icon-mini.shop-icon{font-size:22px;}
+  .free-tag{color:var(--green); font-weight:bold;}
+  .card.quest-done{border-color:var(--green); opacity:.75;}
+  .card h4{margin:0; color:var(--gold); font-size:15px; display:flex; flex-direction:column; gap:2px;}
+  .card .desc{font-size:11px; color:var(--text-dim); margin-bottom:6px; min-height:28px;}
+  .card .cost{font-size:11px; margin-bottom:6px;}
+  .cost span{margin-right:8px;}
+  .cost span.short{color:var(--red);}
+  .queue-item, .mission-item{
+    border-bottom:1px dashed var(--border); padding:8px 2px; font-size:12px; border-radius:6px; transition:background .15s ease;
+  }
+  .queue-item:hover, .mission-item:hover{background:rgba(0,0,0,.14);}
+  .queue-item:last-child, .mission-item:last-child{border-bottom:none;}
+  .bar-bg{background:#211a13; border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .bar-fill{background:linear-gradient(90deg, var(--green), #8fd06a); height:100%; transition:width .2s ease;}
+  .troop-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
+  .troop-row:hover{background:rgba(0,0,0,.14);}
+  .troop-row:last-child{border-bottom:none;}
+  .troop-row .tname{font-weight:bold; color:var(--gold); width:110px;}
+  .stats-mini{font-size:10px; color:var(--text-dim);}
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
+  tr{transition:background .15s ease;}
+  tbody tr:hover{background:rgba(0,0,0,.14);}
+  .tag{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:bold; letter-spacing:.3px;}
+  .tag.weak{background:#2c4a22;color:#a8d98a;}
+  .tag.medium{background:#4a3f22;color:#e0c98a;}
+  .tag.strong{background:#4a2222;color:#e0a0a0;}
+  .send-form{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none;}
+  .send-form.open{display:block; animation:fadeSlideIn .2s ease;}
+  @keyframes fadeSlideIn{ 0%{opacity:0; transform:translateY(-4px);} 100%{opacity:1; transform:translateY(0);} }
+  .send-form .inputs{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+  .send-form .inp{display:flex; flex-direction:column; align-items:center; font-size:10px;}
+
+  .map-toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;
+    background:rgba(0,0,0,.16); border:1px solid var(--border); border-radius:var(--radius-md); padding:8px 10px;
+  }
+  .map-toolbar .group{display:flex; gap:6px; align-items:center;}
+  .map-toolbar input[type=number]{width:58px;}
+  #mapCanvas{
+    position:relative; width:100%; height:520px; overflow:hidden; touch-action:none;
+    border:2px solid var(--border); border-radius:var(--radius-lg); cursor:grab;
+    background:#182210 radial-gradient(ellipse at 50% 40%, #223318 0%, #131b0c 80%);
+    box-shadow:inset 0 0 60px rgba(0,0,0,.5), var(--shadow-md);
+  }
+  #mapCanvas.dragging{cursor:grabbing;}
+  #mapWorld{position:absolute;}
+  .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
+  .villagePin .dot{
+    width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:15px; border:2px solid #1a140d; box-shadow:0 2px 5px rgba(0,0,0,.6);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
+  .villagePin.weak .dot{background:#4d7a37;}
+  .villagePin.medium .dot{background:#9a7526;}
+  .villagePin.strong .dot{background:#8a3226;}
+  .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
+  .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
+  .villagePin .plabel{
+    position:absolute; top:32px; font-size:9px; white-space:nowrap; background:rgba(20,16,10,.85);
+    padding:2px 6px; border-radius:6px; color:var(--text); pointer-events:none;
+  }
+  .troop-marker{
+    position:absolute; transform:translate(-50%,-50%); pointer-events:none; z-index:6;
+    transition:left 0.95s linear, top 0.95s linear;
+  }
+  .troop-marker .tdot{
+    width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:11px; border:2px solid #1a140d; box-shadow:0 2px 6px rgba(0,0,0,.65);
+    animation:marchPulse 1s ease-in-out infinite;
+  }
+  .troop-marker.marker-attack .tdot{background:linear-gradient(180deg,#c95c4a,#8a3226);}
+  .troop-marker.marker-scout .tdot{background:linear-gradient(180deg,#5a9ac0,#2f5f7a);}
+  .troop-marker.marker-returning{opacity:.72;}
+  @keyframes marchPulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.14);} }
+  #villageDetail .box{margin-top:10px;}
+  .report{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; background:var(--panel2); box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, border-color .15s ease;}
+  .report:hover{box-shadow:var(--shadow-md);}
+  .report.win{border-left:4px solid var(--green);}
+  .report.lose{border-left:4px solid var(--red);}
+  .report.scout{border-left:4px solid var(--blue);}
+  .report.raid{border-left:4px solid #a5761f;}
+  .report .title{font-weight:bold; display:flex; justify-content:space-between;}
+  .report .details{font-size:11px; color:var(--text-dim); margin-top:4px; display:none;}
+  .report .details.open{display:block; animation:fadeSlideIn .2s ease;}
+  #toasts{position:fixed; bottom:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:100;}
+  .toast{background:var(--panel2); border:1px solid var(--gold); color:var(--text); padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; max-width:280px; box-shadow:var(--shadow-lg);}
+  .muted{color:var(--text-dim); font-size:12px;}
+  .flex-between{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;}
+  .small{font-size:11px;}
+  footer{margin-top:20px; text-align:center; color:var(--text-dim); font-size:11px;}
+  .req-note{font-size:10px; color:var(--red); margin-top:4px;}
+  .unit-note{font-size:10px; color:var(--gold); margin-top:4px;}
+  .loyalty-bar{width:120px;}
+  .report.defense{border-left:4px solid #7a3fae;}
+
+  #battleBanner{
+    position:fixed; top:76px; left:50%; transform:translateX(-50%) translateY(-16px);
+    background:var(--panel2); border:2px solid var(--gold); border-radius:var(--radius-md); padding:12px 26px;
+    font-size:17px; font-weight:bold; color:var(--text); box-shadow:var(--shadow-lg);
+    opacity:0; pointer-events:none; z-index:200; transition:opacity .35s, transform .35s; text-align:center;
+    max-width:90vw;
+  }
+  #battleBanner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #battleBanner.victory{ border-color:var(--green); }
+  #battleBanner.defeat{ border-color:var(--red); }
+  #battleBanner.raid{ border-color:#7a3fae; }
+  #battleBanner.conquest{ border-color:var(--gold); background:linear-gradient(#4a3a1a,#3d2e1e); animation:conquestGlow 2.4s ease; }
+  @keyframes conquestGlow{ 0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.6);} 50%{box-shadow:0 6px 34px rgba(217,164,65,.75);} }
+  .sparkle{ font-size:26px; animation:sparklePop 1.4s ease-out forwards; }
+  @keyframes sparklePop{ 0%{opacity:0; transform:translateY(0) scale(.6);} 30%{opacity:1; transform:translateY(-10px) scale(1.25);} 100%{opacity:0; transform:translateY(-42px) scale(.9);} }
+  #btnMute{font-size:15px;}
+  @media(max-width:820px){
+    .layout{flex-direction:column;}
+    aside#sidebar{flex:1 1 auto; width:100%;}
+    nav#tabs{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;}
+    nav#tabs button{white-space:nowrap; flex:0 0 auto;}
+    main#tabContent{padding:12px;}
+    .troop-row{flex-wrap:wrap; row-gap:6px;}
+    .troop-row .tname{width:auto; flex:1 1 100%;}
+    #mapCanvas{height:400px;}
+  }
+  @media(max-width:480px){
+    #app{padding:8px 8px 30px;}
+    header#topbar{padding:8px 10px; gap:8px; border-radius:var(--radius-md);}
+    .res{min-width:0; padding:2px 5px;}
+    .res .val{font-size:12px;}
+    .topbar-right{gap:6px;}
+    button{padding:9px 12px; font-size:12.5px;}
+    .card .desc{min-height:0;}
+    .grid-buildings{grid-template-columns:1fr;}
+    #mapCanvas{height:320px;}
+    .building-detail{gap:10px;}
+  }
+  /* Cible tactile confortable sur mobile/tablette même si l'écran est large (ex: iPad) */
+  @media(pointer:coarse){
+    button{min-height:38px;}
+    nav#tabs button{min-height:36px;}
+    input[type=number], input[type=text], select{min-height:36px;}
+  }
+
+  .tutorial-backdrop{
+    position:fixed; inset:0; background:rgba(10,8,5,.78); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+    z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;
+    animation:fadeSlideIn .2s ease;
+  }
+  .tutorial-card{
+    background:var(--panel); border:2px solid var(--gold); border-radius:var(--radius-lg);
+    padding:22px 26px; max-width:440px; width:100%; box-shadow:var(--shadow-lg);
+  }
+  .tutorial-card .tstep-icon{font-size:34px; margin-bottom:6px;}
+  .tutorial-card h3{font-size:19px; margin-bottom:10px;}
+  .tutorial-card p{font-size:13px; line-height:1.5; color:var(--text-dim); margin:0 0 16px;}
+  .tutorial-dots{display:flex; gap:6px; margin-bottom:16px;}
+  .tutorial-dots span{width:8px; height:8px; border-radius:50%; background:var(--border); transition:background .15s ease;}
+  .tutorial-dots span.active{background:var(--gold);}
+  .tutorial-actions{display:flex; justify-content:space-between; align-items:center; gap:10px;}
+  .tutorial-skip{background:transparent; border:none; box-shadow:none; color:var(--text-dim); font-weight:normal; text-decoration:underline; padding:8px 4px;}
+  .tutorial-skip:hover{background:transparent; box-shadow:none; color:var(--text); transform:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar"></header>
+  <nav id="tabs"></nav>
+  <div class="layout">
+    <main id="tabContent"></main>
+    <aside id="sidebar"></aside>
+  </div>
+  <footer>Conquête Tribale — monde partagé en temps réel. Votre progression est sauvegardée automatiquement sur le serveur.</footer>
+</div>
+<div id="toasts"></div>
+<div id="battleBanner"></div>
+<div id="tutorialModal"></div>
+<div id="authScreen"></div>
+
+<script src="/shared/gameData.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
+const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS,
+        clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
+
+/* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
+   les 8 autres bâtiments (hors Muraille, qui entoure tout le village) forment un anneau autour. */
+const BUILD_LAYOUT = {
+  hq:{x:50,y:51.2},
+  barracks:{x:50,y:22.4},
+  academy:{x:72.6,y:30.9},
+  iron:{x:82,y:51.2},
+  hide:{x:72.6,y:71.5},
+  warehouse:{x:50,y:80},
+  farm:{x:27.4,y:71.5},
+  clay:{x:18,y:51.2},
+  wood:{x:27.4,y:30.9}
+};
+/* Illustrations SVG de chaque bâtiment, dessinées centrées sur (0,0), sol à y≈0,
+   hauteur vers le haut en y négatif. Voir buildingIconSvg() pour le cadrage. */
+/* Matériau de construction selon le palier de niveau : bois (1-9), pierre (10-19), brique et fer (20+).
+   Chaque bâtiment reçoit cette palette pour ses éléments structurels (murs, toit) ; les accents
+   fonctionnels (fenêtres, ressources, outils) restent constants pour rester lisibles. */
+const MATERIAL = {
+  1: { wall:"#6b4a2b", wallLight:"#8a6238", wallDark:"#4a331d", roof:"#7c3527", roofDark:"#5a2a20" }, // bois
+  2: { wall:"#9c9182", wallLight:"#b3a898", wallDark:"#7d7568", roof:"#6b3226", roofDark:"#5a2a20" }, // pierre
+  3: { wall:"#8a3226", wallLight:"#a5453a", wallDark:"#5a1f18", roof:"#4a2018", roofDark:"#3a1810" }  // brique rouge et fer
+};
+function materialTier(level){ return level>=20 ? 3 : level>=10 ? 2 : 1; }
+
+const BUILDING_ART = {
+  hq: (m) => `
+    <rect x="-42" y="-52" width="84" height="52" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-48,-52 0,-96 48,-52" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
+    <rect x="22" y="-80" width="18" height="30" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="20,-80 31,-100 42,-80" fill="#d9a441" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="31" y1="-100" x2="31" y2="-112" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="31,-112 46,-107 31,-102" fill="#8a2e22"/>
+    <rect x="-11" y="-26" width="22" height="26" rx="2" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="-33" y="-38" width="12" height="12" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
+    <rect x="12" y="-38" width="12" height="12" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
+  `,
+  wood: (m) => `
+    <rect x="-18" y="-40" width="30" height="24" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-24,-40 -3,-64 18,-40" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
+    <g stroke="#2a1c10" stroke-width="1.5">
+      <rect x="-46" y="-20" width="34" height="9" rx="4" fill="#8a6238"/>
+      <circle cx="-46" cy="-15.5" r="4.5" fill="#c9a15a"/>
+      <circle cx="-12" cy="-15.5" r="4.5" fill="#a9764a"/>
+      <rect x="-46" y="-10" width="34" height="9" rx="4" fill="#7a5230"/>
+      <circle cx="-46" cy="-5.5" r="4.5" fill="#c9a15a"/>
+      <circle cx="-12" cy="-5.5" r="4.5" fill="#a9764a"/>
+    </g>
+    <rect x="24" y="-30" width="5" height="30" fill="#4a331d"/>
+    <polygon points="26.5,-30 14,-46 39,-46" fill="#3f6b34" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="26.5,-40 17,-54 36,-54" fill="#4a7a3a" stroke="#2a1c10" stroke-width="1.5"/>
+  `,
+  clay: (m) => `
+    <ellipse cx="0" cy="0" rx="44" ry="16" fill="#6b4a2a" stroke="#2a1c10" stroke-width="2"/>
+    <ellipse cx="0" cy="0" rx="30" ry="10" fill="#43301c"/>
+    <ellipse cx="-30" cy="-4" rx="10" ry="6" fill="#b07a4c" stroke="#2a1c10" stroke-width="1.5"/>
+    <ellipse cx="28" cy="-6" rx="9" ry="5" fill="#a06b3f" stroke="#2a1c10" stroke-width="1.5"/>
+    <ellipse cx="8" cy="8" rx="8" ry="5" fill="#b07a4c" stroke="#2a1c10" stroke-width="1.5"/>
+    <line x1="-38" y1="-14" x2="-30" y2="-32" stroke="${m.wallDark}" stroke-width="4" stroke-linecap="round"/>
+    <rect x="-36" y="-34" width="12" height="4" fill="${m.wall}" stroke="#2a1c10" stroke-width="1.2"/>
+  `,
+  iron: (m) => `
+    <polygon points="-40,4 -30,-38 -6,-56 18,-40 34,4" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-6,-56 18,-40 6,-30 -14,-40" fill="${m.wallDark}"/>
+    <path d="M -14 4 Q -14 -18 4 -18 Q 22 -18 22 4 Z" fill="#1a1712" stroke="#2a1c10" stroke-width="2"/>
+    <circle cx="4" cy="-8" r="4" fill="#e0913f"/>
+    <rect x="-2" y="-2" width="16" height="8" rx="2" fill="#4a331d" stroke="#2a1c10" stroke-width="1.2"/>
+    <circle cx="2" cy="6" r="3" fill="#2a1c10"/>
+    <circle cx="12" cy="6" r="3" fill="#2a1c10"/>
+  `,
+  warehouse: (m) => `
+    <rect x="-38" y="-44" width="76" height="44" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-44,-44 0,-40 0,-66 -20,-66" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="44,-44 0,-40 0,-66 20,-66" fill="${m.roofDark}" stroke="#2a1c10" stroke-width="2"/>
+    <rect x="-15" y="-26" width="13" height="26" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="2" y="-26" width="13" height="26" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
+    <g stroke="#2a1c10" stroke-width="1.5">
+      <circle cx="-52" cy="-8" r="10" fill="#c9a15a"/>
+      <line x1="-52" y1="-15" x2="-52" y2="-1"/>
+      <rect x="34" y="-16" width="16" height="16" fill="#8a6238"/>
+      <line x1="34" y1="-8" x2="50" y2="-8"/>
+      <line x1="42" y1="-16" x2="42" y2="0"/>
+    </g>
+  `,
+  farm: (m) => `
+    <rect x="-18" y="-34" width="36" height="30" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-24,-34 0,-54 24,-34" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
+    <rect x="-6" y="-16" width="12" height="12" fill="#3a2414" stroke="#2a1c10" stroke-width="1.2"/>
+    <g stroke="#8a6a1f" stroke-width="3" stroke-linecap="round">
+      <line x1="24" y1="4" x2="24" y2="-14"/>
+      <line x1="32" y1="4" x2="32" y2="-18"/>
+      <line x1="40" y1="4" x2="40" y2="-13"/>
+      <line x1="16" y1="4" x2="16" y2="-16"/>
+    </g>
+    <g fill="#dfc25a" stroke="#8a6a1f" stroke-width="1">
+      <circle cx="24" cy="-15" r="3"/><circle cx="32" cy="-19" r="3"/><circle cx="40" cy="-14" r="3"/><circle cx="16" cy="-17" r="3"/>
+    </g>
+    <ellipse cx="-32" cy="2" rx="14" ry="9" fill="#e0c060" stroke="#8a6a1f" stroke-width="1.5"/>
+    <path d="M -44 2 Q -32 -10 -20 2" fill="none" stroke="#b89a3d" stroke-width="1.2"/>
+  `,
+  barracks: (m) => `
+    <rect x="-36" y="-42" width="72" height="42" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-42,-42 0,-70 42,-42" fill="${m.roofDark}" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="0" y1="-70" x2="0" y2="-88" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="0,-88 20,-82 0,-76" fill="#8a2e22" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="-11" y="-22" width="22" height="22" fill="#2a1c10"/>
+    <g stroke="#c9c2b4" stroke-width="4" stroke-linecap="round">
+      <line x1="-24" y1="-32" x2="-6" y2="-14"/>
+      <line x1="-6" y1="-32" x2="-24" y2="-14"/>
+      <line x1="6" y1="-32" x2="24" y2="-14"/>
+      <line x1="24" y1="-32" x2="6" y2="-14"/>
+    </g>
+  `,
+  wall: (m) => `
+    <rect x="-48" y="-10" width="96" height="26" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
+    <g fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2">
+      <rect x="-48" y="-22" width="12" height="12"/>
+      <rect x="-30" y="-22" width="12" height="12"/>
+      <rect x="-12" y="-22" width="12" height="12"/>
+      <rect x="6" y="-22" width="12" height="12"/>
+      <rect x="24" y="-22" width="12" height="12"/>
+      <rect x="36" y="-22" width="12" height="12"/>
+    </g>
+    <rect x="-38" y="-46" width="20" height="46" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-40,-46 -28,-58 -16,-46" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <rect x="18" y="-46" width="20" height="46" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="16,-46 28,-58 40,-46" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <path d="M -12 16 Q 0 -6 12 16 Z" fill="#1a1712"/>
+  `,
+  hide: (m) => `
+    <ellipse cx="0" cy="0" rx="40" ry="18" fill="#3f5a2c" stroke="#2a1c10" stroke-width="2"/>
+    <ellipse cx="0" cy="-4" rx="26" ry="12" fill="#4a6b34"/>
+    <rect x="-16" y="-14" width="32" height="14" rx="3" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="0" y1="-14" x2="0" y2="0" stroke="#2a1c10" stroke-width="1.5"/>
+    <circle cx="-6" cy="-7" r="2.5" fill="#d9a441"/>
+    <circle cx="6" cy="-7" r="2.5" fill="#d9a441"/>
+    <ellipse cx="24" cy="6" rx="6" ry="3" fill="#7d7568" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="-26" cy="8" rx="5" ry="2.5" fill="#7d7568" stroke="#2a1c10" stroke-width="1"/>
+  `,
+  academy: (m) => `
+    <rect x="-20" y="-50" width="40" height="50" rx="4" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <path d="M -24 -50 Q 0 -80 24 -50 Z" fill="#4f6b8a" stroke="#2a1c10" stroke-width="2"/>
+    <circle cx="0" cy="-66" r="4" fill="#d9a441" stroke="#2a1c10" stroke-width="1"/>
+    <rect x="-9" y="-36" width="18" height="16" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
+    <rect x="-10" y="-14" width="20" height="14" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="12" y="-12" width="11" height="9" rx="1" fill="#c9b88a" stroke="#2a1c10" stroke-width="1"/>
+    <line x1="14" y1="-7.5" x2="21" y2="-7.5" stroke="#5c3c22" stroke-width="1"/>
+    <line x1="14" y1="-5" x2="19" y2="-5" stroke="#5c3c22" stroke-width="1"/>
+  `
+};
+
+/* Évolution visuelle des bâtiments à mesure qu'ils montent de niveau : chaque bâtiment gagne des
+   éléments supplémentaires (annexes, bannières, décors) au niveau 10, puis encore plus au niveau 20. */
+const TIER2_EXTRAS = {
+  hq: `
+    <rect x="-68" y="-38" width="24" height="38" fill="#8b8070" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-72,-38 -56,-56 -40,-38" fill="#6b3226" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="31" y1="-112" x2="46" y2="-112" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="46,-112 60,-107 46,-102" fill="#c0503f" stroke="#2a1c10" stroke-width="1"/>
+  `,
+  wood: `
+    <rect x="-70" y="-16" width="26" height="7" rx="3" fill="#8a6238" stroke="#2a1c10" stroke-width="1.2"/>
+    <circle cx="-70" cy="-12.5" r="3.5" fill="#c9a15a"/><circle cx="-44" cy="-12.5" r="3.5" fill="#a9764a"/>
+    <rect x="-70" y="-8" width="26" height="7" rx="3" fill="#7a5230" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="30" y1="0" x2="42" y2="-18" stroke="#7a5230" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="40,-18 50,-24 46,-12" fill="#9c9182" stroke="#2a1c10" stroke-width="1"/>
+  `,
+  clay: `
+    <ellipse cx="-4" cy="-20" rx="9" ry="6" fill="#a06b3f" stroke="#2a1c10" stroke-width="1.5"/>
+    <line x1="-38" y1="-14" x2="-46" y2="-34" stroke="#5c3c22" stroke-width="4" stroke-linecap="round"/>
+    <line x1="-46" y1="-34" x2="-30" y2="-30" stroke="#5c3c22" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-30" y1="-30" x2="-30" y2="-16" stroke="#2a1c10" stroke-width="1"/>
+  `,
+  iron: `
+    <rect x="-2" y="-70" width="9" height="18" fill="#615a4f" stroke="#2a1c10" stroke-width="1.5"/>
+    <ellipse cx="2" cy="-76" rx="7" ry="5" fill="#9c9182" opacity=".55"/>
+    <ellipse cx="6" cy="-86" rx="9" ry="6" fill="#b3a898" opacity=".4"/>
+    <rect x="-34" y="0" width="14" height="5" fill="#3a3a3a" stroke="#2a1c10" stroke-width="1"/>
+  `,
+  warehouse: `
+    <g stroke="#2a1c10" stroke-width="1.5">
+      <rect x="52" y="-30" width="14" height="30" fill="#8a6238"/>
+      <polygon points="52,-30 59,-40 66,-30" fill="#6b3226"/>
+    </g>
+  `,
+  farm: `
+    <ellipse cx="-46" cy="4" rx="10" ry="7" fill="#e0c060" stroke="#8a6a1f" stroke-width="1.5"/>
+    <rect x="44" y="-26" width="18" height="26" fill="#c9b88a" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="42,-26 53,-40 64,-26" fill="#7c3527" stroke="#2a1c10" stroke-width="1.5"/>
+  `,
+  barracks: `
+    <g stroke="#2a1c10" stroke-width="1.5">
+      <rect x="46" y="-30" width="5" height="30" fill="#6b4a2b"/>
+      <rect x="56" y="-34" width="5" height="34" fill="#6b4a2b"/>
+      <rect x="66" y="-30" width="5" height="30" fill="#6b4a2b"/>
+    </g>
+  `,
+  hide: `
+    <ellipse cx="-34" cy="10" rx="9" ry="5" fill="#3f5a2c" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="34" cy="10" rx="9" ry="5" fill="#3f5a2c" stroke="#2a1c10" stroke-width="1"/>
+    <path d="M -20 -14 Q 0 -22 20 -14" fill="none" stroke="#2a1c10" stroke-width="1" stroke-dasharray="2 2"/>
+  `
+};
+const TIER3_EXTRAS = {
+  hq: `
+    <rect x="44" y="-34" width="22" height="34" fill="#8b8070" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="40,-34 55,-52 70,-34" fill="#6b3226" stroke="#2a1c10" stroke-width="2"/>
+    <path d="M -80 12 Q 0 30 80 12" fill="none" stroke="#5a4632" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  `,
+  wood: `
+    <rect x="8" y="-58" width="20" height="5" fill="#4a331d" stroke="#2a1c10" stroke-width="1"/>
+    <line x1="10" y1="-58" x2="10" y2="-70" stroke="#2a1c10" stroke-width="1.5"/>
+    <line x1="26" y1="-58" x2="26" y2="-70" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="8,-70 18,-80 28,-70" fill="#3f6b34" stroke="#2a1c10" stroke-width="1.2"/>
+  `,
+  clay: `
+    <rect x="30" y="-24" width="22" height="16" fill="#6b4a2b" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="28,-24 41,-36 54,-24" fill="#52633a" stroke="#2a1c10" stroke-width="1.5"/>
+  `,
+  iron: `
+    <rect x="16" y="-58" width="8" height="14" fill="#615a4f" stroke="#2a1c10" stroke-width="1.5"/>
+    <ellipse cx="20" cy="-64" rx="6" ry="4" fill="#9c9182" opacity=".5"/>
+    <circle cx="4" cy="-8" r="7" fill="#e0913f" opacity=".35"/>
+  `,
+  warehouse: `
+    <g stroke="#2a1c10" stroke-width="1.2">
+      <rect x="-72" y="-14" width="12" height="14" fill="#8a6238"/>
+      <rect x="-58" y="-10" width="12" height="10" fill="#7a5230"/>
+      <circle cx="-66" cy="-2" r="6" fill="#5c3c22"/>
+    </g>
+  `,
+  farm: `
+    <g stroke="#2a1c10" stroke-width="1.5">
+      <rect x="-68" y="-30" width="10" height="30" fill="#c9b88a"/>
+      <polygon points="-68,-30 -63,-40 -58,-30" fill="#7c3527"/>
+      <g stroke-width="2">
+        <line x1="-63" y1="-38" x2="-52" y2="-38"/>
+        <line x1="-63" y1="-38" x2="-74" y2="-38"/>
+        <line x1="-63" y1="-38" x2="-63" y2="-49"/>
+        <line x1="-63" y1="-38" x2="-63" y2="-27"/>
+      </g>
+    </g>
+  `,
+  barracks: `
+    <line x1="20" y1="-88" x2="20" y2="-70" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="20,-88 0,-82 20,-76" fill="#8a2e22" stroke="#2a1c10" stroke-width="1.5"/>
+    <circle cx="-52" cy="-24" r="7" fill="#c9a15a" stroke="#2a1c10" stroke-width="1.5"/>
+    <line x1="-52" y1="-17" x2="-52" y2="0" stroke="#6b4a2b" stroke-width="4"/>
+  `
+};
+function buildingTierExtra(key, level){
+  let extra = "";
+  if(level>=10 && TIER2_EXTRAS[key]) extra += TIER2_EXTRAS[key];
+  if(level>=20 && TIER3_EXTRAS[key]) extra += TIER3_EXTRAS[key];
+  return extra;
+}
+function buildingIconSvg(key, level){
+  return `<svg viewBox="-92 -132 184 150" xmlns="http://www.w3.org/2000/svg">${getBuildingArt(key, level||0)}</svg>`;
+}
+function treeSvg(x,y,scale){
+  return `<g transform="translate(${x},${y}) scale(${scale})">
+    <rect x="-3" y="-4" width="6" height="16" fill="#4a331d"/>
+    <polygon points="0,-46 -18,-14 18,-14" fill="#2c4d25" stroke="#1c2e15" stroke-width="1.5"/>
+    <polygon points="0,-34 -14,-6 14,-6" fill="#3f6b34" stroke="#1c2e15" stroke-width="1.5"/>
+    <polygon points="0,-22 -10,0 10,0" fill="#4a7a3a" stroke="#1c2e15" stroke-width="1.5"/>
+  </g>`;
+}
+function tinyHouseSvg(x,y,scale){
+  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="0.92">
+    <rect x="-10" y="-16" width="20" height="16" fill="#8a6a45" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="-13,-16 0,-28 13,-16" fill="#6b3226" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="-4" y="-9" width="8" height="9" fill="#2a1c10"/>
+  </g>`;
+}
+/* La muraille s'agrandit visuellement avec son niveau (davantage de créneaux, tours plus hautes,
+   tourelles supplémentaires avec bannières à partir du niveau 10). */
+function wallArt(level){
+  const tier = materialTier(level);
+  const m = MATERIAL[tier];
+  if(tier===1) return BUILDING_ART.wall(m);
+  const extraTowers = tier===3 ? `
+    <polygon points="-46,-56 -34,-70 -22,-56" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="-34" y1="-70" x2="-34" y2="-80" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-34,-80 -20,-75 -34,-70" fill="#8a2e22" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="46,-56 34,-70 22,-56" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="34" y1="-70" x2="34" y2="-80" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="34,-80 20,-75 34,-70" fill="#8a2e22" stroke="#2a1c10" stroke-width="1.5"/>
+  ` : "";
+  return `
+    <rect x="-64" y="-10" width="128" height="26" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
+    <g fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2">
+      <rect x="-64" y="-22" width="12" height="12"/><rect x="-46" y="-22" width="12" height="12"/>
+      <rect x="-28" y="-22" width="12" height="12"/><rect x="-10" y="-22" width="12" height="12"/>
+      <rect x="8" y="-22" width="12" height="12"/><rect x="26" y="-22" width="12" height="12"/>
+      <rect x="44" y="-22" width="12" height="12"/><rect x="52" y="-22" width="12" height="12"/>
+    </g>
+    <rect x="-54" y="-46" width="20" height="46" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="-56,-46 -44,-58 -32,-46" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <rect x="34" y="-46" width="20" height="46" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+    <polygon points="32,-46 44,-58 56,-46" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+    <path d="M -12 16 Q 0 -6 12 16 Z" fill="#1a1712"/>
+    ${extraTowers}
+  `;
+}
+function getBuildingArt(key, level){
+  if(key==="wall") return wallArt(level||0);
+  const fn = BUILDING_ART[key];
+  if(!fn) return "";
+  return fn(MATERIAL[materialTier(level||0)]) + buildingTierExtra(key, level||0);
+}
+
+/* Muraille circulaire qui entoure tout le village (au lieu d'une simple hutte) — se renforce avec le niveau
+   et change de matériau : bois (1-9), pierre (10-19), brique et fer (20+). */
+function villageWallRing(level){
+  const cx=500, cy=320, rx=420, ry=250;
+  const tier = materialTier(level);
+  const m = MATERIAL[tier];
+  const towerCount = tier===3 ? 12 : tier===2 ? 8 : 6;
+  const merlonCount = tier>=2 ? 48 : 30;
+  const bannered = tier===3;
+  const towers=[];
+  for(let i=0;i<towerCount;i++){
+    const a=(i/towerCount)*Math.PI*2 - Math.PI/2;
+    const x=(cx+rx*Math.cos(a)).toFixed(1), y=(cy+ry*Math.sin(a)).toFixed(1);
+    towers.push(`<g transform="translate(${x},${y})">
+      <rect x="-15" y="-32" width="30" height="32" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
+      <polygon points="-17,-32 0,-48 17,-32" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="2"/>
+      ${bannered?`<line x1="0" y1="-48" x2="0" y2="-60" stroke="#2a1c10" stroke-width="2"/><polygon points="0,-60 13,-55 0,-50" fill="#8a2e22"/>`:''}
+    </g>`);
+  }
+  const merlons=[];
+  for(let i=0;i<merlonCount;i++){
+    const a=(i/merlonCount)*Math.PI*2 - Math.PI/2;
+    const x=cx+rx*Math.cos(a), y=cy+ry*Math.sin(a);
+    merlons.push(`<rect x="${(x-6).toFixed(1)}" y="${(y-6).toFixed(1)}" width="12" height="12" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="1.5"/>`);
+  }
+  return `
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="#2a1c10" stroke-width="42"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="${m.wallLight}" stroke-width="34"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx-9}" ry="${ry-9}" fill="none" stroke="${m.wall}" stroke-width="7" opacity="0.55"/>
+    ${merlons.join("")}
+    ${towers.join("")}
+  `;
+}
+
+/* Tutoriel de prise en main, affiché au premier lancement (voir state.tutorialSeen). */
+let tutorialStep = 0;
+const TUTORIAL_STEPS = [
+  {icon:"🏰", title:"Bienvenue dans Conquête Tribale !",
+   body:"Gérez votre village médiéval, développez son économie et affrontez d'autres villages pour devenir le seigneur le plus puissant de la région."},
+  {icon:"🌾", title:"Vos ressources",
+   body:"En haut de l'écran : bois, argile et fer sont produits automatiquement chaque heure par vos bâtiments, limités par la capacité de votre Entrepôt. Surveillez aussi votre population (👥), utilisée par vos troupes."},
+  {icon:"🏗️", title:"Bâtiments",
+   body:"Dans l'onglet Bâtiments, cliquez sur une construction pour l'améliorer. Depuis l'Hôtel de ville, vous pouvez aussi lancer n'importe quelle construction sans avoir à cliquer dessus sur la carte."},
+  {icon:"⚔️", title:"Caserne et troupes",
+   body:"Construisez une Caserne pour entraîner des troupes dans l'onglet du même nom : lanciers, cavalerie, béliers... chacune a un rôle différent à l'attaque comme à la défense."},
+  {icon:"🗺️", title:"La carte",
+   body:"Explorez la carte pour repérer des villages barbares : envoyez une reconnaissance pour les espionner, ou une attaque pour piller leurs ressources. Attention : un village attaqué peut riposter !"},
+  {icon:"🎯", title:"Objectifs et classement",
+   body:"L'onglet Objectifs propose des jalons de progression avec des récompenses, et l'onglet Classement affiche les meilleurs joueurs du monde. Bonne conquête !"}
+];
+
+function renderTutorial(){
+  const modal=document.getElementById("tutorialModal");
+  if(!modal) return;
+  if(!state || !username || localStorage.getItem("ct_tutorial_"+username)){ modal.innerHTML=""; return; }
+  const step=TUTORIAL_STEPS[tutorialStep];
+  const isLast = tutorialStep===TUTORIAL_STEPS.length-1;
+  modal.innerHTML = `
+    <div class="tutorial-backdrop">
+      <div class="tutorial-card">
+        <div class="tstep-icon">${step.icon}</div>
+        <h3>${step.title}</h3>
+        <p>${step.body}</p>
+        <div class="tutorial-dots">${TUTORIAL_STEPS.map((_,i)=>`<span class="${i===tutorialStep?'active':''}"></span>`).join("")}</div>
+        <div class="tutorial-actions">
+          <button class="tutorial-skip" id="btnTutorialSkip">Passer</button>
+          <div style="display:flex; gap:8px;">
+            ${tutorialStep>0?`<button id="btnTutorialPrev">◀ Précédent</button>`:""}
+            <button class="primary" id="btnTutorialNext">${isLast?"Terminer":"Suivant ▶"}</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById("btnTutorialSkip").onclick=closeTutorial;
+  const prevBtn=document.getElementById("btnTutorialPrev");
+  if(prevBtn) prevBtn.onclick=()=>{ tutorialStep--; renderTutorial(); };
+  document.getElementById("btnTutorialNext").onclick=()=>{
+    if(isLast) closeTutorial();
+    else { tutorialStep++; renderTutorial(); }
+  };
+}
+function showTutorial(){
+  tutorialStep=0;
+  if(username) localStorage.removeItem("ct_tutorial_"+username);
+  renderTutorial();
+}
+function closeTutorial(){
+  if(username) localStorage.setItem("ct_tutorial_"+username, "1");
+  const modal=document.getElementById("tutorialModal");
+  if(modal) modal.innerHTML="";
+}
+const RES_ICON = {wood:"🪵", clay:"🧱", iron:"⛏️"};
+const RES_NAME = {wood:"Bois", clay:"Argile", iron:"Fer"};
+
+/* ============================= AMBIANCE SONORE (synthétisée, sans fichier externe) ============================= */
+
+const Audio = (() => {
+  let ctx = null, muted = false;
+  function ensureCtx(){
+    if(!ctx){ const AC = window.AudioContext||window.webkitAudioContext; if(!AC) return null; ctx = new AC(); }
+    if(ctx.state==="suspended") ctx.resume();
+    return ctx;
+  }
+  function tone(freq, duration, opts={}){
+    if(muted) return;
+    const c = ensureCtx(); if(!c) return;
+    const osc = c.createOscillator(), gain = c.createGain();
+    osc.type = opts.type || "sine";
+    osc.frequency.value = freq;
+    const vol = opts.vol!=null ? opts.vol : 0.12;
+    gain.gain.setValueAtTime(0.0001, c.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, c.currentTime+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+duration);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(); osc.stop(c.currentTime+duration+0.05);
+  }
+  function sequence(notes, opts={}){
+    let t=0;
+    notes.forEach(([f,d,gap])=>{ if(f>0) setTimeout(()=>tone(f,d,opts), t*1000); t+=(gap!=null?gap:d); });
+  }
+  const SFX = {
+    buildQueued: ()=>tone(440,0.08,{type:"triangle",vol:0.07}),
+    buildDone: ()=>sequence([[523,0.12],[659,0.12],[784,0.22]],{type:"triangle",vol:0.11}),
+    trainQueued: ()=>tone(330,0.07,{type:"square",vol:0.06}),
+    trainDone: ()=>sequence([[392,0.08],[523,0.16]],{type:"square",vol:0.08}),
+    depart: ()=>sequence([[220,0.15],[220,0.18]],{type:"sawtooth",vol:0.09}),
+    victory: ()=>sequence([[523,0.12],[659,0.12],[784,0.12],[988,0.26]],{type:"triangle",vol:0.14}),
+    defeat: ()=>sequence([[300,0.2],[220,0.32]],{type:"sawtooth",vol:0.11}),
+    conquest: ()=>sequence([[523,0.1],[659,0.1],[784,0.1],[659,0.1],[784,0.1],[988,0.4]],{type:"triangle",vol:0.15}),
+    raidAlarm: ()=>sequence([[880,0.1],[0,0.05],[880,0.1],[0,0.05],[880,0.16]],{type:"square",vol:0.09}),
+    error: ()=>tone(180,0.15,{type:"square",vol:0.07})
+  };
+  function setMuted(m){ muted=m; }
+  function toggle(){ setMuted(!muted); return muted; }
+  return {ensureCtx, SFX, setMuted, toggle, isMuted:()=>muted};
+})();
+
+function showBanner(text, type){
+  const el=document.getElementById("battleBanner");
+  if(!el) return;
+  el.textContent=text;
+  el.className="battle-banner show "+type;
+  clearTimeout(showBanner._t);
+  showBanner._t=setTimeout(()=>{ el.classList.remove("show"); }, 2600);
+}
+
+/* ============================= ÉTAT ============================= */
+
+let state = null;            // dernier instantané reçu du serveur : {serverTime, village, missions, reports, villages, quests, leaderboard}
+let username = null;
+let authToken = null;
+let serverTimeOffset = 0;    // estimateNow() = Date.now()/1000 + serverTimeOffset
+let activeTab = "buildings";
+let ui = { openReport:new Set(), selectedBuilding:"hq", selectedVillage:null };
+let mapView = null;          // {cx, cy, ppf} — affichage de la carte : purement client, ne vient pas du serveur
+let pollHandle = null;
+let mapJustDragged = false;
+let sparkleUntil = {};
+let scoutIntel = {};         // villageId -> {resources, troops, wallLevel, loyalty, time, isPlayer} — dernier renseignement connu
+
+function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
+
+/* ============================= FORMULES (au-dessus des données partagées GameData) ============================= */
+/* buildTime/trainTime dépendent du niveau HQ / Caserne du village actif : petits adaptateurs locaux. */
+function vBuildTime(key, level){ return buildTime(key, level, state.village.buildings.hq||0); }
+function vTrainTime(key){ return trainTime(key, state.village.buildings.barracks||0); }
+
+function popUsed(){
+  let used=0;
+  for(const k of TROOP_ORDER) used += (state.village.troops[k]||0)*TROOPS[k].pop;
+  for(const o of state.village.trainQueue) used += o.count*TROOPS[o.troop].pop;
+  for(const m of state.missions){
+    if(m.attackerUsername!==username) continue;
+    for(const k of TROOP_ORDER) used += (m.troops[k]||0)*TROOPS[k].pop;
+  }
+  return Math.round(used);
+}
+function nobleCount(){
+  let n = state.village.troops.noble||0;
+  for(const o of state.village.trainQueue) if(o.troop==="noble") n+=o.count;
+  for(const m of state.missions) if(m.attackerUsername===username) n += m.troops.noble||0;
+  return n;
+}
+function fmt(n){ return Math.floor(n).toLocaleString("fr-FR"); }
+function fmtTime(sec){
+  sec=Math.max(0,Math.round(sec));
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  if(h>0) return h+"h "+String(m).padStart(2,"0")+"m "+String(s).padStart(2,"0")+"s";
+  if(m>0) return m+"m "+String(s).padStart(2,"0")+"s";
+  return s+"s";
+}
+function canAffordAll(cost){
+  return state.village.resources.wood>=cost.wood && state.village.resources.clay>=cost.clay && state.village.resources.iron>=cost.iron;
+}
+
+/* ============================= API SERVEUR ============================= */
+
+async function apiCall(path, method, body){
+  const opts = { method, headers:{} };
+  if(authToken) opts.headers["Authorization"]="Bearer "+authToken;
+  if(body!==undefined){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  let data={};
+  try{ data = await res.json(); }catch(e){}
+  if(!res.ok) throw new Error(data.error || ("Erreur serveur ("+res.status+")"));
+  return data;
+}
+
+/* Fusionne un instantané serveur dans l'état local, met à jour le cache de reconnaissance
+   et déclenche les effets (scintillement de construction terminée, bannière de raid subi). */
+function applySnapshot(snap){
+  const prevState = state;
+  serverTimeOffset = snap.serverTime - Date.now()/1000;
+  state = snap;
+  for(const r of state.reports){
+    if(r.kind==="scout" && r.targetId!=null){
+      const ex = scoutIntel[r.targetId];
+      if(!ex || r.time > ex.time){
+        scoutIntel[r.targetId] = { resources:r.resources, troops:r.troops, wallLevel:r.wallLevel, loyalty:r.loyalty, time:r.time, isPlayer:r.isPlayer };
+      }
+    }
+  }
+  if(!mapView) mapView = { cx:state.village.x, cy:state.village.y, ppf:26 };
+  if(prevState){
+    const prevB = prevState.village.buildings;
+    for(const k in state.village.buildings){
+      if((state.village.buildings[k]||0) > (prevB[k]||0)){
+        sparkleUntil[k]=Date.now()+1500;
+        Audio.SFX.buildDone();
+      }
+    }
+    const newCount = state.reports.length - prevState.reports.length;
+    if(newCount>0 && newCount<=state.reports.length){
+      state.reports.slice(0, newCount).forEach(r=>{
+        if(r.kind==="defense"){
+          const lost = r.winner==="attacker";
+          showBanner(lost?("💀 "+(r.source||"Un ennemi")+" a pillé votre village !"):("🛡️ Attaque de "+(r.source||"un ennemi")+" repoussée !"), "raid");
+          Audio.SFX[lost?"defeat":"victory"]();
+        }
+      });
+    }
+  }
+}
+
+/* Exécute une action serveur, fusionne la réponse et rafraîchit l'affichage ; affiche l'erreur sinon. */
+async function doAction(promiseFn, successMsg, sfx){
+  try{
+    const data = await promiseFn();
+    applySnapshot(data.snapshot);
+    if(sfx) Audio.SFX[sfx]();
+    if(successMsg) toast(successMsg);
+    renderTabs(); renderTopBar(); renderSidebar(); renderActiveTabContent();
+  }catch(err){
+    Audio.SFX.error();
+    toast("⚠️ "+err.message);
+  }
+}
+
+/* ============================= ACTIONS ============================= */
+
+function queueBuild(key){
+  const b=BUILDINGS[key];
+  const nextLevel=(state.village.buildings[key]||0)+1;
+  doAction(()=>apiCall("/api/build","POST",{key}), "Construction ajoutée : "+b.name+" niveau "+nextLevel, "buildQueued");
+}
+
+function queueTrain(key, count){
+  count=Math.floor(count);
+  if(!count || count<=0) return;
+  const t=TROOPS[key];
+  doAction(()=>apiCall("/api/train","POST",{key, count}), count+" "+t.name+"(s) mis en formation.", "trainQueued");
+}
+
+function claimQuest(key){
+  doAction(()=>apiCall("/api/quest/claim","POST",{key}), "🎯 Objectif rempli — récompense reçue !", "victory");
+}
+
+function sendMission(villageId, kind){
+  const troops={};
+  let any=false;
+  for(const k of TROOP_ORDER){
+    const el=document.getElementById("send_"+villageId+"_"+k);
+    if(!el) continue;
+    let n=Math.floor(Number(el.value)||0);
+    n=Math.max(0, Math.min(n, state.village.troops[k]||0));
+    if(n>0){ troops[k]=n; any=true; }
+  }
+  if(!any){ toast("Sélectionnez au moins une troupe à envoyer."); return; }
+  if(kind==="scout" && !troops.scout){ toast("Une reconnaissance nécessite au moins un éclaireur."); return; }
+  const target=state.villages.find(v=>v.id===villageId);
+  doAction(
+    ()=>apiCall("/api/mission","POST",{targetId:villageId, kind, troops}),
+    (kind==="attack"?"⚔️ Attaque":"🔭 Reconnaissance")+" envoyée"+(target?(" vers "+target.name+" ("+target.x+"|"+target.y+")"):"")+".",
+    "depart"
+  );
+}
+
+function commitRename(name){
+  doAction(()=>apiCall("/api/village/rename","POST",{name}), null, null);
+}
+
+/* ============================= SYNCHRONISATION AVEC LE SERVEUR ============================= */
+
+/* Ré-affiche le contenu de l'onglet actif en préservant la valeur et le focus des champs
+   <input> déjà présents, pour ne pas effacer une saisie en cours (troupes à envoyer, quantité
+   à entraîner, saut de coordonnées...) quand un rafraîchissement périodique arrive. */
+function rerenderPreservingInputs(containerEl, renderFn){
+  const focused=document.activeElement;
+  const focusedId = (focused && containerEl.contains(focused)) ? focused.id : null;
+  const focusedSelStart = focused && typeof focused.selectionStart==="number" ? focused.selectionStart : null;
+  const values={};
+  containerEl.querySelectorAll("input").forEach(inp=>{ if(inp.id) values[inp.id]=inp.value; });
+  renderFn();
+  containerEl.querySelectorAll("input").forEach(inp=>{ if(inp.id && values[inp.id]!==undefined) inp.value=values[inp.id]; });
+  if(focusedId){
+    const el=document.getElementById(focusedId);
+    if(el){
+      el.focus();
+      if(focusedSelStart!=null && el.setSelectionRange){ try{ el.setSelectionRange(focusedSelStart, focusedSelStart); }catch(e){} }
+    }
+  }
+}
+
+async function pollState(){
+  if(!authToken) return;
+  try{
+    const data = await apiCall("/api/state","GET");
+    applySnapshot(data.snapshot);
+    renderTabs();
+    updateTopBarStats();
+    renderSidebar();
+    rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
+  }catch(err){
+    // session expirée ou serveur momentanément injoignable : on retentera au prochain sondage
+    if(/session|reconnect/i.test(err.message||"")) logout(true);
+  }
+}
+
+function startPolling(){
+  if(pollHandle) clearInterval(pollHandle);
+  pollHandle=setInterval(pollState, 2500);
+}
+
+function stopPolling(){
+  if(pollHandle){ clearInterval(pollHandle); pollHandle=null; }
+}
+
+/* ============================= AUTHENTIFICATION ============================= */
+
+function renderAuthScreen(mode, errorMsg){
+  mode = mode || "login";
+  const el=document.getElementById("authScreen");
+  el.innerHTML = `
+    <div class="box" style="max-width:380px; margin:80px auto; text-align:center;">
+      <h2>🏰 Conquête Tribale</h2>
+      <p class="muted small">Un monde partagé, en temps réel, avec de vrais joueurs. Connectez-vous ou créez un compte pour rejoindre la partie.</p>
+      <div style="display:flex; gap:8px; justify-content:center; margin:14px 0;">
+        <button id="authTabLogin" class="${mode==='login'?'primary':''}">Connexion</button>
+        <button id="authTabRegister" class="${mode==='register'?'primary':''}">Créer un compte</button>
+      </div>
+      <form id="authForm" style="display:flex; flex-direction:column; gap:10px; text-align:left;">
+        <label class="small">Pseudo
+          <input type="text" id="authUsername" maxlength="20" autocomplete="username" placeholder="3 à 20 caractères">
+        </label>
+        <label class="small">Mot de passe
+          <input type="password" id="authPassword" autocomplete="${mode==='register'?'new-password':'current-password'}" placeholder="4 caractères minimum">
+        </label>
+        <div class="muted small" id="authError" style="color:#e0836a; min-height:16px;">${errorMsg||""}</div>
+        <button type="submit" class="primary" id="authSubmit">${mode==='register'?'Créer mon compte':'Se connecter'}</button>
+      </form>
+    </div>`;
+  document.getElementById("authTabLogin").onclick=()=>renderAuthScreen("login");
+  document.getElementById("authTabRegister").onclick=()=>renderAuthScreen("register");
+  document.getElementById("authForm").onsubmit=(e)=>{
+    e.preventDefault();
+    const u=document.getElementById("authUsername").value.trim();
+    const p=document.getElementById("authPassword").value;
+    if(mode==="register") doRegister(u,p); else doLogin(u,p);
+  };
+}
+
+async function doLogin(u,p){
+  try{
+    const data=await apiCall("/api/login","POST",{username:u, password:p});
+    enterGame(data);
+  }catch(err){ renderAuthScreen("login", err.message); }
+}
+async function doRegister(u,p){
+  try{
+    const data=await apiCall("/api/register","POST",{username:u, password:p});
+    enterGame(data);
+  }catch(err){ renderAuthScreen("register", err.message); }
+}
+
+function enterGame(data){
+  authToken=data.token;
+  username=data.username;
+  localStorage.setItem("ct_token", authToken);
+  localStorage.setItem("ct_username", username);
+  applySnapshot(data.snapshot);
+  document.getElementById("authScreen").innerHTML="";
+  document.getElementById("app").style.display="";
+  renderAll();
+  startPolling();
+  if(!localStorage.getItem("ct_tutorial_"+username)) renderTutorial();
+  document.addEventListener("click", function unlockAudio(){
+    Audio.ensureCtx();
+    document.removeEventListener("click", unlockAudio);
+  }, {once:true});
+}
+
+function logout(silent){
+  stopPolling();
+  authToken=null; username=null; state=null; mapView=null; scoutIntel={};
+  localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
+  document.getElementById("app").style.display="none";
+  document.getElementById("tutorialModal").innerHTML="";
+  renderAuthScreen("login", silent?"Session expirée, reconnectez-vous.":"");
+}
+
+async function tryResumeSession(){
+  const savedToken=localStorage.getItem("ct_token"), savedUser=localStorage.getItem("ct_username");
+  if(!savedToken || !savedUser){ renderAuthScreen("login"); return; }
+  authToken=savedToken; username=savedUser;
+  try{
+    const data=await apiCall("/api/state","GET");
+    enterGame({ token:savedToken, username:savedUser, snapshot:data.snapshot });
+  }catch(err){
+    authToken=null; username=null;
+    localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
+    renderAuthScreen("login");
+  }
+}
+
+/* ============================= RENDU ============================= */
+
+/* ============================= RENDU ============================= */
+
+function toast(msg){
+  const div=document.createElement("div");
+  div.className="toast"; div.textContent=msg;
+  document.getElementById("toasts").appendChild(div);
+  setTimeout(()=>div.remove(), 4500);
+}
+
+function renderTopBar(){
+  const v=state.village;
+  const cap=storageCap(v.buildings.warehouse);
+  const pop=popUsed(), popMax=farmCap(v.buildings.farm);
+  const el=document.getElementById("topbar");
+  el.innerHTML = `
+    <div class="village-title">
+      <div class="name-row">
+        <span class="name" id="villageNameDisplay">🏰 ${v.name}</span>
+        <button class="btn-rename" id="btnRenameVillage" title="Renommer le village">✏️</button>
+      </div>
+      <span class="coord">${v.x}|${v.y} · ${username}</span>
+    </div>
+    <div class="res-group">
+      ${["wood","clay","iron"].map(r=>`
+        <div class="res ${v.resources[r]>=cap-1?'warn':''}" id="resBox_${r}">
+          <div class="val" id="resVal_${r}">${RES_ICON[r]} ${fmt(v.resources[r])}<span style="color:var(--text-dim);font-weight:normal;">/${fmt(cap)}</span></div>
+          <div class="rate" id="resRate_${r}">+${fmt(prodPerHour(r,v.buildings[r]))}/h</div>
+        </div>`).join("")}
+      <div class="res"><div class="val" id="popVal">👥 ${pop}/${popMax}</div><div class="rate">population</div></div>
+    </div>
+    <div class="topbar-right">
+      <span class="small muted">🌐 Monde en temps réel</span>
+      <button id="btnMute" title="${Audio.isMuted()?'Activer le son':'Couper le son'}">${Audio.isMuted()?'🔇':'🔊'}</button>
+      <button id="btnLogout">🚪 Déconnexion</button>
+    </div>
+  `;
+  document.getElementById("btnMute").onclick=()=>{
+    const m=Audio.toggle();
+    const btn=document.getElementById("btnMute");
+    btn.textContent = m?'🔇':'🔊';
+    btn.title = m?'Activer le son':'Couper le son';
+  };
+  document.getElementById("btnLogout").onclick=()=>logout(false);
+  document.getElementById("btnRenameVillage").onclick=startRenameVillage;
+}
+
+function startRenameVillage(){
+  const row=document.querySelector(".village-title .name-row");
+  if(!row || row.querySelector("input")) return;
+  const v=state.village;
+  const current=v.name;
+  row.innerHTML = `<input type="text" id="villageNameInput" maxlength="30" value="${current.replace(/"/g,'&quot;')}">`;
+  const input=document.getElementById("villageNameInput");
+  input.focus();
+  input.select();
+  const commit=()=>{
+    const val=input.value.trim();
+    if(val && val!==current) commitRename(val.slice(0,30));
+    else renderTopBar();
+  };
+  input.addEventListener("keydown", e=>{
+    if(e.key==="Enter"){ commit(); }
+    else if(e.key==="Escape"){ renderTopBar(); }
+  });
+  input.addEventListener("blur", commit);
+}
+
+/* Met à jour uniquement les chiffres de la barre du haut (ressources, population, nom),
+   sans reconstruire les boutons — appelé à chaque sondage périodique pour ne pas interrompre
+   une saisie de renommage en cours. */
+function updateTopBarStats(){
+  if(!state) return;
+  const v=state.village;
+  const cap=storageCap(v.buildings.warehouse);
+  const pop=popUsed(), popMax=farmCap(v.buildings.farm);
+  for(const r of ["wood","clay","iron"]){
+    const box=document.getElementById("resBox_"+r), val=document.getElementById("resVal_"+r), rate=document.getElementById("resRate_"+r);
+    if(!box||!val||!rate) continue;
+    box.classList.toggle("warn", v.resources[r]>=cap-1);
+    val.innerHTML = `${RES_ICON[r]} ${fmt(v.resources[r])}<span style="color:var(--text-dim);font-weight:normal;">/${fmt(cap)}</span>`;
+    rate.textContent = `+${fmt(prodPerHour(r,v.buildings[r]))}/h`;
+  }
+  const popEl=document.getElementById("popVal");
+  if(popEl) popEl.textContent = `👥 ${pop}/${popMax}`;
+  const nameEl=document.getElementById("villageNameDisplay");
+  if(nameEl && !document.getElementById("villageNameInput")) nameEl.textContent = "🏰 "+v.name;
+}
+
+function renderTabs(){
+  const questsDone=state.quests.filter(q=>q.claimed).length;
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
+  const nav=document.getElementById("tabs");
+  nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
+  nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; renderTabs(); renderActiveTabContent(); });
+}
+
+function renderSidebar(){
+  const side=document.getElementById("sidebar");
+  const now=estimateNow();
+  const bq=state.village.buildQueue.map(item=>{
+    const b=BUILDINGS[item.key];
+    const timeLeft=Math.max(0, item.startAt+item.duration-now);
+    const pct=100*(1-timeLeft/item.duration);
+    return `<div class="queue-item"><div class="flex-between"><span>${b.name} → niv. ${item.level}</span><span>${fmtTime(timeLeft)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+  }).join("") || `<div class="muted small">File vide.</div>`;
+
+  const tq=state.village.trainQueue.map(o=>{
+    const timeLeft=Math.max(0, o.unitStartAt+o.unitDuration-now);
+    return `<div class="queue-item"><div class="flex-between"><span>${TROOPS[o.troop].name} ×${o.count}</span><span>${fmtTime(timeLeft)} / unité</span></div></div>`;
+  }).join("") || `<div class="muted small">File vide.</div>`;
+
+  const activeMissions=state.missions.filter(m=>m.kind!=="raid");
+  const incomingRaids=state.missions.filter(m=>m.kind==="raid" && !m.resolveDone);
+
+  const missions=activeMissions.map(m=>{
+    const target=state.villages.find(v=>v.id===m.targetId);
+    const label = m.kind==="attack"?"⚔️ Attaque":"🔭 Reconnaissance";
+    let phase, remain;
+    if(!m.resolveDone){ phase="en route vers"; remain=m.arriveAt-now; }
+    else { phase="retour de"; remain=m.returnAt-now; }
+    return `<div class="mission-item"><div class="flex-between"><span>${label} ${phase} ${target?target.name:'?'}</span><span>${fmtTime(remain)}</span></div></div>`;
+  }).join("") || `<div class="muted small">Aucune troupe en mission.</div>`;
+
+  const enemyBox = incomingRaids.length ? `
+    <div class="box" style="border-color:#8a3226;"><h3>🚨 Attaques entrantes</h3>${incomingRaids.map(m=>{
+      const remain=m.arriveAt-now;
+      return `<div class="mission-item"><div class="flex-between"><span>${m.raidSourceName||'Village barbare'} approche</span><span>${fmtTime(remain)}</span></div></div>`;
+    }).join("")}</div>` : '';
+
+  side.innerHTML = `
+    <div class="box"><h3>🏗️ File de construction</h3>${bq}</div>
+    <div class="box"><h3>⚔️ File d'entraînement</h3>${tq}</div>
+    <div class="box"><h3>🚩 Missions en cours</h3>${missions}</div>
+    ${enemyBox}
+  `;
+}
+
+function renderActiveTabContent(){
+  const main=document.getElementById("tabContent");
+  if(activeTab==="buildings") main.innerHTML=renderBuildings();
+  else if(activeTab==="barracks") main.innerHTML=renderBarracks();
+  else if(activeTab==="quests") main.innerHTML=renderQuests();
+  else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
+  else if(activeTab==="map") main.innerHTML=renderMap();
+  else if(activeTab==="reports") main.innerHTML=renderReports();
+  else main.innerHTML=renderHelp();
+  attachTabHandlers();
+  if(activeTab==="map"){ positionMapWorld(); attachMapHandlers(); }
+}
+
+function svgPos(pos){ return {x: pos.x/100*1000, y: pos.y/100*625}; }
+
+function renderVillageScene(){
+  const v=state.village;
+  const cx=500, cy=320, wallRx=420, wallRy=250;
+
+  const paths = BUILD_ORDER.filter(k=>k!=="hq" && k!=="wall").map(k=>{
+    const p1=svgPos(BUILD_LAYOUT.hq), p2=svgPos(BUILD_LAYOUT[k]);
+    return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="dirt-path"/>`;
+  }).join("");
+
+  const hqLvl = v.buildings.hq||0;
+  const decorList = [
+    treeSvg(45,45,0.9), treeSvg(955,55,1), treeSvg(40,580,0.85), treeSvg(960,585,0.95),
+    treeSvg(150,600,0.8), treeSvg(850,595,0.85), treeSvg(500,608,0.7)
+  ];
+  if(hqLvl>=5){
+    decorList.push(treeSvg(60,270,0.8), treeSvg(940,270,0.85));
+  }
+  if(hqLvl>=10){
+    decorList.push(treeSvg(200,50,0.75), treeSvg(800,590,0.8), treeSvg(40,150,0.7), treeSvg(960,150,0.7));
+  }
+  const decor = decorList.join("");
+
+  const plaza = `
+    <ellipse cx="${cx}" cy="${cy+10}" rx="150" ry="95" fill="#8a6a3f" opacity=".28"/>
+    <g transform="translate(${cx+100},${cy-60})" opacity="0.95">
+      <ellipse cx="0" cy="4" rx="14" ry="5" fill="#6b6255" opacity=".6"/>
+      <circle cx="0" cy="-6" r="11" fill="none" stroke="#8d8172" stroke-width="4"/>
+      <rect x="-2" y="-24" width="4" height="18" fill="#6f6558"/>
+      <polygon points="-8,-24 0,-34 8,-24" fill="#7d7568" stroke="#2a1c10" stroke-width="1.5"/>
+    </g>`;
+
+  const farmLvl = v.buildings.farm||0;
+  const housePositions = [[380,388],[620,388],[380,438],[620,438]];
+  const houseCount = farmLvl>=15?4:farmLvl>=10?3:farmLvl>=6?2:farmLvl>=3?1:0;
+  const extraHouses = housePositions.slice(0,houseCount).map(([hx,hy])=>tinyHouseSvg(hx,hy,0.8)).join("");
+
+  const groups = BUILD_ORDER.filter(k=>k!=="wall").map(key=>{
+    const b=BUILDINGS[key], lvl=v.buildings[key]||0, p=svgPos(BUILD_LAYOUT[key]);
+    const empty = lvl<=0;
+    const underConstruction = state.village.buildQueue.length && state.village.buildQueue[0].key===key;
+    const sel = ui.selectedBuilding===key;
+    const sparkling = sparkleUntil[key] && Date.now()<sparkleUntil[key];
+    return `<g class="plot ${sel?'selected':''}" data-plot="${key}" transform="translate(${p.x},${p.y})">
+      <title>${b.name} — niveau ${lvl}</title>
+      <ellipse class="groundmark" cx="0" cy="8" rx="50" ry="15"></ellipse>
+      <g class="art ${empty?'empty-art':''}">${getBuildingArt(key,lvl)}</g>
+      ${underConstruction?`<text class="hammer" x="0" y="-100" text-anchor="middle">🔨</text>`:''}
+      ${sparkling?`<text class="sparkle" x="0" y="-95" text-anchor="middle">✨</text>`:''}
+      ${!empty?`<circle class="badge-bg" cx="38" cy="-74" r="14"></circle><text class="badge-text" x="38" y="-69" text-anchor="middle">${lvl}</text>`:''}
+      <rect class="label-bg" x="-58" y="20" width="116" height="19" rx="4"></rect>
+      <text class="label-text" x="0" y="34" text-anchor="middle">${b.name}</text>
+    </g>`;
+  }).join("");
+
+  const wallLvl = v.buildings.wall||0;
+  const wallSelected = ui.selectedBuilding==="wall";
+  const wallUnderConstruction = state.village.buildQueue.length && state.village.buildQueue[0].key==="wall";
+  const wallSparkling = sparkleUntil.wall && Date.now()<sparkleUntil.wall;
+  const wallGroup = `<g class="plot wall-ring ${wallSelected?'selected':''}" data-plot="wall">
+    <title>${BUILDINGS.wall.name} — niveau ${wallLvl}</title>
+    <ellipse cx="${cx}" cy="${cy}" rx="${wallRx}" ry="${wallRy}" fill="none" stroke="rgba(0,0,0,0.001)" stroke-width="70"/>
+    ${villageWallRing(wallLvl)}
+    ${wallUnderConstruction?`<text class="hammer" x="${cx}" y="${cy-wallRy-42}" text-anchor="middle">🔨</text>`:''}
+    ${wallSparkling?`<text class="sparkle" x="${cx}" y="${cy-wallRy-36}" text-anchor="middle">✨</text>`:''}
+    <circle class="badge-bg" cx="${cx}" cy="${cy-wallRy-14}" r="15"></circle>
+    <text class="badge-text" x="${cx}" y="${cy-wallRy-9}" text-anchor="middle">${wallLvl}</text>
+    <rect class="label-bg" x="${cx-60}" y="${cy-wallRy+2}" width="120" height="19" rx="4"></rect>
+    <text class="label-text" x="${cx}" y="${cy-wallRy+16}" text-anchor="middle">Muraille</text>
+  </g>`;
+
+  return `<svg class="village-svg" viewBox="0 0 1000 625" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="groundGrad" cx="50%" cy="35%" r="75%">
+        <stop offset="0%" stop-color="#3d4f26"/>
+        <stop offset="55%" stop-color="#2e3d1c"/>
+        <stop offset="100%" stop-color="#212c14"/>
+      </radialGradient>
+    </defs>
+    <rect x="0" y="0" width="1000" height="625" fill="url(#groundGrad)"/>
+    <ellipse cx="140" cy="500" rx="120" ry="40" fill="#354420" opacity=".6"/>
+    <ellipse cx="880" cy="160" rx="140" ry="45" fill="#354420" opacity=".5"/>
+    <ellipse cx="820" cy="520" rx="100" ry="35" fill="#2a3618" opacity=".5"/>
+    ${decor}
+    ${wallGroup}
+    <ellipse cx="${cx}" cy="${cy}" rx="${wallRx-40}" ry="${wallRy-40}" fill="#3a4a24" opacity=".5"/>
+    ${plaza}
+    ${paths}
+    ${extraHouses}
+    ${groups}
+    <rect x="10" y="10" width="980" height="605" fill="none" stroke="#5a4632" stroke-width="4" stroke-dasharray="2 11" rx="14"/>
+  </svg>`;
+}
+
+function renderBuildings(){
+  const v=state.village;
+
+  const sel = (ui.selectedBuilding && BUILDINGS[ui.selectedBuilding]) ? ui.selectedBuilding : "hq";
+  const b=BUILDINGS[sel], lvl=v.buildings[sel]||0, maxed=lvl>=b.max, nextLevel=lvl+1;
+  const cost = maxed?null:buildCost(sel,nextLevel);
+  const time = maxed?null:vBuildTime(sel,nextLevel);
+  const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
+  const affordable = cost && canAffordAll(cost);
+  const isEmpty = lvl<=0;
+  const queueFull = state.village.buildQueue.length>=6;
+
+  const detail = `
+    <div class="building-detail box">
+      <div class="icon-big">${buildingIconSvg(sel, lvl)}</div>
+      <div class="info">
+        <h3 style="margin-bottom:2px;">${b.name} <span style="color:var(--text-dim); font-size:13px; font-weight:normal;">— niveau ${lvl}${maxed?' (max)':''}</span></h3>
+        <div class="desc" style="margin-bottom:8px;">${b.desc}</div>
+        ${maxed ? '<p class="muted small">Niveau maximum atteint.</p>' : `
+          <div class="cost" style="margin-bottom:8px;">
+            <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
+            <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
+            <span class="${v.resources.iron<cost.iron?'short':''}">⛏️ ${fmt(cost.iron)}</span>
+            <span>⏱ ${fmtTime(time)}</span>
+          </div>
+          ${lockedReq?`<div class="req-note">Nécessite : ${Object.entries(b.requires).map(([rk,rv])=>BUILDINGS[rk].name+" niv. "+rv).join(", ")}</div>`:''}
+          ${queueFull?`<div class="req-note">File de construction pleine (max 6).</div>`:''}
+          <button data-build="${sel}" class="primary" ${(!affordable||lockedReq||queueFull)?'disabled':''}>${isEmpty?'Construire':'Améliorer'} → niveau ${nextLevel}</button>
+        `}
+      </div>
+    </div>`;
+
+  const buildMenu = sel==="hq" ? `
+    <div class="box" style="margin-top:14px;">
+      <h3>🏗️ Construire un bâtiment</h3>
+      <p class="muted small">Depuis l'Hôtel de ville, lancez la construction ou l'amélioration de n'importe quel bâtiment sans avoir à cliquer dessus sur la carte.</p>
+      <div class="grid-buildings">
+        ${BUILD_ORDER.filter(k=>k!=="hq").map(k=>renderBuildMenuCard(k)).join("")}
+      </div>
+    </div>` : "";
+
+  return `<h2>Votre village</h2>
+    <p class="muted small">Cliquez sur un bâtiment du village pour voir ses détails et l'améliorer.</p>
+    <div class="village-scene">${renderVillageScene()}</div>
+    ${detail}
+    ${buildMenu}`;
+}
+
+function renderBuildMenuCard(key){
+  const v=state.village;
+  const b=BUILDINGS[key], lvl=v.buildings[key]||0, maxed=lvl>=b.max, nextLevel=lvl+1;
+  const cost = maxed?null:buildCost(key,nextLevel);
+  const time = maxed?null:vBuildTime(key,nextLevel);
+  const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
+  const affordable = cost && canAffordAll(cost);
+  const isEmpty = lvl<=0;
+  const queueFull = state.village.buildQueue.length>=6;
+  const queuedCount = state.village.buildQueue.filter(q=>q.key===key).length;
+  return `<div class="card">
+    <div class="card-head">
+      <div class="icon-mini">${buildingIconSvg(key, lvl)}</div>
+      <h4>${b.name}<span class="small muted" style="font-weight:normal;">niveau ${lvl}${maxed?' (max)':''}</span></h4>
+    </div>
+    <div class="desc">${b.desc}</div>
+    ${maxed ? '<p class="muted small">Niveau maximum atteint.</p>' : `
+      <div class="cost">
+        <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
+        <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
+        <span class="${v.resources.iron<cost.iron?'short':''}">⛏️ ${fmt(cost.iron)}</span>
+        <span>⏱ ${fmtTime(time)}</span>
+      </div>
+      ${lockedReq?`<div class="req-note">Nécessite : ${Object.entries(b.requires).map(([rk,rv])=>BUILDINGS[rk].name+" niv. "+rv).join(", ")}</div>`:''}
+      ${queuedCount?`<div class="unit-note">${queuedCount} déjà en file d'attente</div>`:''}
+      <button data-build="${key}" class="primary" ${(!affordable||lockedReq||queueFull)?'disabled':''}>${isEmpty?'Construire':'Améliorer'} → niveau ${nextLevel}</button>
+    `}
+  </div>`;
+}
+
+function renderQuests(){
+  const done = state.quests.filter(q=>q.claimed).length;
+  const cards = state.quests.map(q=>{
+    const rewardParts=[];
+    if(q.reward.wood) rewardParts.push(`🪵 ${fmt(q.reward.wood)}`);
+    if(q.reward.clay) rewardParts.push(`🧱 ${fmt(q.reward.clay)}`);
+    if(q.reward.iron) rewardParts.push(`⛏️ ${fmt(q.reward.iron)}`);
+    if(q.reward.troops) for(const tk in q.reward.troops) rewardParts.push(`${TROOPS[tk].name} ×${q.reward.troops[tk]}`);
+    let btnLabel, btnDisabled;
+    if(q.claimed){ btnLabel="✅ Récompense reçue"; btnDisabled=true; }
+    else if(q.met){ btnLabel="🎁 Réclamer la récompense"; btnDisabled=false; }
+    else{ btnLabel="Objectif non atteint"; btnDisabled=true; }
+    return `<div class="card ${q.claimed?'quest-done':''}">
+      <div class="card-head">
+        <div class="icon-mini shop-icon">${q.icon}</div>
+        <h4>${q.title}<span class="small muted" style="font-weight:normal;">${q.claimed?'Terminé':(q.met?'Prêt !':'')}</span></h4>
+      </div>
+      <div class="desc">${q.desc}</div>
+      <div class="cost">${rewardParts.map(p=>`<span>${p}</span>`).join("")}</div>
+      <button data-claim-quest="${q.key}" class="primary" ${btnDisabled?'disabled':''}>${btnLabel}</button>
+    </div>`;
+  }).join("");
+
+  return `<h2>🎯 Objectifs</h2>
+    <p class="muted small">${done}/${state.quests.length} objectifs remplis — des jalons de progression avec une récompense en ressources ou en troupes.</p>
+    <div class="grid-buildings">${cards}</div>`;
+}
+
+function renderBarracks(){
+  const v=state.village;
+  if((v.buildings.barracks||0)<1){
+    return `<h2>Caserne</h2><p class="muted">Construisez d'abord une <b>Caserne</b> (onglet Bâtiments) pour pouvoir entraîner des troupes.</p>`;
+  }
+  const rows=TROOP_ORDER.map(k=>{
+    const t=TROOPS[k];
+    const lockedEntries=Object.entries(t.requires).filter(([rk,rv])=>(v.buildings[rk]||0)<rv);
+    const locked=lockedEntries.length>0;
+    const home=v.troops[k]||0;
+    const capNote = k==="noble" ? `<div class="unit-note">Nobles vivants : ${nobleCount()} / ${v.buildings.academy||0} (limite = niveau Académie)</div>` : "";
+    return `<div class="troop-row">
+      <div class="tname">${t.name}</div>
+      <div class="stats-mini">⚔️${t.atk} 🛡️${t.defInf}/${t.defCav}/${t.defArch} 🎒${t.carry} 🐎${t.speed}</div>
+      <div class="small">Stock : ${home}</div>
+      <div class="cost small">🪵${fmt(t.cost.wood)} 🧱${fmt(t.cost.clay)} ⛏️${fmt(t.cost.iron)} 👥${t.pop}</div>
+      ${locked
+        ? `<span class="req-note">Nécessite : ${lockedEntries.map(([rk,rv])=>(BUILDINGS[rk]?BUILDINGS[rk].name:rk)+" niv. "+rv).join(", ")}</span>`
+        : `<input type="number" min="0" value="0" id="trainCount_${k}"><button data-train="${k}">Entraîner</button>${t.note?`<div class="unit-note">${t.note}</div>`:''}${capNote}`}
+    </div>`;
+  }).join("");
+  return `<h2>Caserne (niv. ${v.buildings.barracks})</h2>
+    <p class="muted small">⚔️ attaque · 🛡️ défense infanterie/cavalerie/archers · 🎒 capacité de pillage · 🐎 vitesse (plus bas = plus rapide)</p>
+    ${rows}`;
+}
+
+function renderLeaderboard(){
+  const rows = state.leaderboard.map((p,i)=>`
+    <tr style="${p.username===username?'background:rgba(217,164,65,0.14);':''}">
+      <td>${i+1}</td>
+      <td>${p.username}${p.username===username?' (vous)':''}</td>
+      <td>${p.hq}</td>
+      <td>${p.conquered}</td>
+      <td>${p.points}</td>
+    </tr>`).join("");
+  return `<h2>🏆 Classement</h2>
+    <p class="muted small">Les meilleurs joueurs du monde, classés par points (niveau d'Hôtel de ville ×10 + villages conquis ×50).</p>
+    <div class="box"><table style="width:100%; border-collapse:collapse;">
+      <thead><tr><th>#</th><th>Joueur</th><th>Hôtel de ville</th><th>Conquis</th><th>Points</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="muted">Aucun joueur pour l’instant.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+const TIER_CLASS=["weak","weak","medium","strong","strong"];
+const TIER_LABEL=["Très faible","Faible","Moyen","Fort","Très fort"];
+
+
+function renderMapToolbar(){
+  const mv=mapView;
+  return `<div class="map-toolbar box">
+    <div class="group">
+      <button id="btnZoomOut" title="Dézoomer">➖</button>
+      <span class="small muted">Zoom</span>
+      <button id="btnZoomIn" title="Zoomer">➕</button>
+      <button id="btnRecenter">🎯 Mon village</button>
+    </div>
+    <div class="group">
+      <span class="small muted">Aller aux coordonnées</span>
+      <input type="number" id="jumpX" value="${Math.round(mv.cx)}">
+      <span>|</span>
+      <input type="number" id="jumpY" value="${Math.round(mv.cy)}">
+      <button id="btnJump">Aller</button>
+    </div>
+  </div>`;
+}
+
+function renderVillageDetail(){
+  const v=state.village;
+  if(ui.selectedVillage==null){
+    return `<p class="muted small">Cliquez sur un village de la carte pour voir ses informations et lui envoyer des troupes.</p>`;
+  }
+  if(ui.selectedVillage==="home"){
+    return `<div class="box"><h3>🏰 ${v.name}</h3><p class="muted small">Votre village (${v.x}|${v.y}). Impossible de s'attaquer soi-même.</p></div>`;
+  }
+  const t=state.villages.find(x=>x.id===ui.selectedVillage);
+  if(!t) return `<p class="muted small">Village introuvable.</p>`;
+  const dx=t.x-v.x, dy=t.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
+
+  if(t.owner===username){
+    return `<div class="box">
+      <div class="flex-between">
+        <h3 style="margin-bottom:0;">🚩 ${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
+        <span class="tag weak">Conquis</span>
+      </div>
+      <div class="sub small" style="margin:6px 0;">Ce village vous appartient : il vous rapporte automatiquement des ressources chaque heure et augmente votre production de base.</div>
+    </div>`;
+  }
+
+  const intel = scoutIntel[t.id];
+  const intelLine = intel
+    ? `Vue lors d'une reconnaissance il y a ${fmtTime(Math.max(0,estimateNow()-intel.time))} : lanciers ${intel.troops.spear||0} · épéistes ${intel.troops.sword||0} · archers ${intel.troops.archer||0}${intel.loyalty!=null?(' · Loyauté '+Math.round(intel.loyalty)+'%'):''} — 🪵${fmt(intel.resources.wood)} 🧱${fmt(intel.resources.clay)} ⛏️${fmt(intel.resources.iron)}`
+    : `Troupes et ressources inconnues — envoyez une reconnaissance pour les révéler.`;
+
+  const ownerTag = t.isPlayer
+    ? `<span class="tag medium">Joueur : ${t.owner}</span>`
+    : `<span class="tag ${TIER_CLASS[t.tier]}">${TIER_LABEL[t.tier]}</span>`;
+
+  const troopInputs=TROOP_ORDER.map(k=>{
+    const avail=v.troops[k]||0;
+    return `<div class="inp">
+      <span>${TROOPS[k].name}</span>
+      <input type="number" min="0" max="${avail}" value="0" id="send_${t.id}_${k}">
+      <a href="#" data-max="${t.id}_${k}" style="font-size:10px;">max ${avail}</a>
+    </div>`;
+  }).join("");
+  return `<div class="box">
+    <div class="flex-between">
+      <h3 style="margin-bottom:0;">${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
+      ${ownerTag}
+    </div>
+    <div class="sub small" style="margin:6px 0;">${intelLine}${t.wallLevel>0?(' · Muraille niv.'+t.wallLevel):''}</div>
+    <div class="send-form open">
+      <div class="inputs">${troopInputs}</div>
+      <button data-send="${t.id}_attack" class="primary">⚔️ Attaquer</button>
+      <button data-send="${t.id}_scout">🔭 Reconnaître</button>
+    </div>
+  </div>`;
+}
+
+function missionMarkerPos(m){
+  if(m.kind!=="attack" && m.kind!=="scout" && m.kind!=="raid") return null;
+  const v=state.village;
+  const now=estimateNow();
+  let t, fromX,fromY,toX,toY,frac,returning;
+  if(m.kind==="raid"){
+    t=state.villages.find(x=>x.id===m.sourceVillageId);
+    if(!t) return null;
+    if(m.resolveDone) return null; // le retour des pillards ne concerne pas la carte du joueur visé
+    frac=clamp((now-m.departAt)/Math.max(1,m.travel),0,1);
+    fromX=t.x; fromY=t.y; toX=v.x; toY=v.y; returning=false;
+  } else {
+    t=state.villages.find(x=>x.id===m.targetId);
+    if(!t) return null;
+    if(!m.resolveDone){
+      frac=clamp((now-m.departAt)/Math.max(1,m.travel),0,1);
+      fromX=v.x; fromY=v.y; toX=t.x; toY=t.y; returning=false;
+    } else {
+      const dur=Math.max(1, m.returnAt-m.arriveAt);
+      frac=clamp((now-m.arriveAt)/dur,0,1);
+      fromX=t.x; fromY=t.y; toX=v.x; toY=v.y; returning=true;
+    }
+  }
+  return { wx: fromX+(toX-fromX)*frac, wy: fromY+(toY-fromY)*frac, returning };
+}
+
+function mapMarkerHTML(m, pos, minX, minY, ppf){
+  const left=(pos.wx-minX)*ppf, top=(pos.wy-minY)*ppf;
+  const kindCls = m.kind==="scout" ? "marker-scout" : "marker-attack";
+  const icon = m.kind==="scout" ? "🔭" : (m.kind==="raid" ? "⚠️" : "⚔️");
+  const label = m.kind==="scout" ? "Reconnaissance" : (m.kind==="raid" ? "Raid barbare" : "Attaque");
+  return `<div class="troop-marker ${kindCls} ${pos.returning?'marker-returning':''}" id="marker_${m.id}" style="left:${left}px; top:${top}px;" title="${label} ${pos.returning?'(retour)':'(aller)'}">
+    <div class="tdot">${icon}</div>
+  </div>`;
+}
+
+function updateMapMarkers(){
+  const world=document.getElementById("mapWorld");
+  if(!world) return;
+  const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+  const ppf=mapView.ppf;
+  const activeIds=new Set();
+  for(const m of state.missions){
+    const pos=missionMarkerPos(m);
+    if(!pos) continue;
+    activeIds.add(m.id);
+    const left=(pos.wx-minX)*ppf, top=(pos.wy-minY)*ppf;
+    let el=document.getElementById("marker_"+m.id);
+    if(!el){
+      world.insertAdjacentHTML("beforeend", mapMarkerHTML(m, pos, minX, minY, ppf));
+      continue;
+    }
+    el.style.left=left+"px";
+    el.style.top=top+"px";
+    el.classList.toggle("marker-returning", pos.returning);
+  }
+  world.querySelectorAll(".troop-marker").forEach(el=>{
+    const id=el.id.slice("marker_".length);
+    if(!activeIds.has(id)) el.remove();
+  });
+}
+
+function renderMap(){
+  if(!mapView) mapView={cx:state.village.x, cy:state.village.y, ppf:26};
+  const v=state.village, mv=mapView, ppf=mv.ppf;
+  const others=state.villages.filter(t=>t.id!==v.id);
+  const xs=others.map(t=>t.x).concat(v.x), ys=others.map(t=>t.y).concat(v.y);
+  const minX=Math.min(...xs)-3, maxX=Math.max(...xs)+3;
+  const minY=Math.min(...ys)-3, maxY=Math.max(...ys)+3;
+  const worldW=(maxX-minX)*ppf, worldH=(maxY-minY)*ppf;
+
+  const pins = others.map(t=>{
+    const left=(t.x-minX)*ppf, top=(t.y-minY)*ppf;
+    const sel = ui.selectedVillage===t.id;
+    const mine = t.owner===username;
+    const cls = mine ? "player" : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]);
+    const icon = mine ? "🚩" : (t.isPlayer ? "👤" : (t.wallLevel>0?'🏯':'🏚️'));
+    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''));
+    return `<div class="villagePin ${cls} ${sel?'selected':''}" data-village-pin="${t.id}" style="left:${left}px; top:${top}px;" title="${title}">
+      <div class="dot">${icon}</div>
+      ${ppf>=20?`<div class="plabel">${t.x}|${t.y}</div>`:''}
+    </div>`;
+  }).join("");
+  const playerLeft=(v.x-minX)*ppf, playerTop=(v.y-minY)*ppf;
+  const playerSel = ui.selectedVillage==="home";
+  const playerPin = `<div class="villagePin player ${playerSel?'selected':''}" data-village-pin="home" style="left:${playerLeft}px; top:${playerTop}px;" title="${v.name} (${v.x}|${v.y})">
+    <div class="dot">🏰</div>
+    ${ppf>=20?`<div class="plabel">${v.name}</div>`:''}
+  </div>`;
+
+  const markers = state.missions.map(m=>{
+    const pos=missionMarkerPos(m);
+    return pos ? mapMarkerHTML(m, pos, minX, minY, ppf) : "";
+  }).join("");
+
+  const gridBg = `
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255,255,255,.16) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size:${ppf}px ${ppf}px, ${ppf}px ${ppf}px, ${ppf*10}px ${ppf*10}px, ${ppf*10}px ${ppf*10}px;`;
+
+  return `<h2>Carte du monde</h2>
+    <p class="muted small">Glissez la carte pour explorer, cliquez sur un village pour l'attaquer ou le reconnaître. 👤 = village d'un autre joueur.</p>
+    ${renderMapToolbar()}
+    <div id="mapCanvas">
+      <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
+        ${pins}${playerPin}${markers}
+      </div>
+    </div>
+    <div id="villageDetail">${renderVillageDetail()}</div>`;
+}
+
+function positionMapWorld(){
+  const canvas=document.getElementById("mapCanvas");
+  const world=document.getElementById("mapWorld");
+  if(!canvas||!world||!mapView) return;
+  const mv=mapView;
+  const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+  world.style.left = (canvas.clientWidth/2 - (mv.cx-minX)*mv.ppf) + "px";
+  world.style.top = (canvas.clientHeight/2 - (mv.cy-minY)*mv.ppf) + "px";
+}
+
+function attachMapHandlers(){
+  const canvas=document.getElementById("mapCanvas");
+  const world=document.getElementById("mapWorld");
+  if(!canvas||!world) return;
+  positionMapWorld();
+
+  let dragging=false, moved=false, startX=0, startY=0, baseLeft=0, baseTop=0;
+  canvas.onpointerdown=(e)=>{
+    dragging=true; moved=false; startX=e.clientX; startY=e.clientY;
+    baseLeft=parseFloat(world.style.left)||0; baseTop=parseFloat(world.style.top)||0;
+    canvas.classList.add("dragging");
+    canvas.setPointerCapture(e.pointerId);
+  };
+  canvas.onpointermove=(e)=>{
+    if(!dragging) return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(Math.abs(dx)+Math.abs(dy)>4) moved=true;
+    world.style.left=(baseLeft+dx)+"px";
+    world.style.top=(baseTop+dy)+"px";
+  };
+  const endDrag=(e)=>{
+    if(!dragging) return;
+    dragging=false;
+    canvas.classList.remove("dragging");
+    if(e && e.pointerId!=null){ try{ canvas.releasePointerCapture(e.pointerId); }catch(err){} }
+    if(moved){
+      const left=parseFloat(world.style.left)||0, top=parseFloat(world.style.top)||0;
+      const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+      mapView.cx = minX + (canvas.clientWidth/2-left)/mapView.ppf;
+      mapView.cy = minY + (canvas.clientHeight/2-top)/mapView.ppf;
+      mapJustDragged=true;
+    } else if(e){
+      // simple tap (no drag): select whichever village pin is under the pointer.
+      // pointer capture retargets the native click to the canvas itself, so we
+      // resolve the actual element manually instead of relying on that click event.
+      const el=document.elementFromPoint(e.clientX, e.clientY);
+      const pinEl = el && el.closest ? el.closest("[data-village-pin]") : null;
+      if(pinEl){
+        const raw=pinEl.dataset.villagePin;
+        ui.selectedVillage = raw==="home" ? "home" : raw;
+        renderActiveTabContent();
+      }
+    }
+  };
+  canvas.onpointerup=endDrag;
+  canvas.onpointercancel=endDrag;
+
+  document.getElementById("btnZoomIn").onclick=()=>{ mapView.ppf=Math.min(48, mapView.ppf+6); renderActiveTabContent(); };
+  document.getElementById("btnZoomOut").onclick=()=>{ mapView.ppf=Math.max(12, mapView.ppf-6); renderActiveTabContent(); };
+  document.getElementById("btnRecenter").onclick=()=>{ mapView.cx=state.village.x; mapView.cy=state.village.y; renderActiveTabContent(); };
+  document.getElementById("btnJump").onclick=()=>{
+    const x=Number(document.getElementById("jumpX").value), y=Number(document.getElementById("jumpY").value);
+    if(Number.isFinite(x) && Number.isFinite(y)){ mapView.cx=x; mapView.cy=y; renderActiveTabContent(); }
+  };
+}
+
+function renderReports(){
+  if(!state.reports.length) return `<h2>Rapports</h2><p class="muted">Aucun rapport pour l'instant.</p>`;
+  const items=state.reports.map((r,i)=>{
+    const open=ui.openReport.has(i);
+    if(r.kind==="attack"){
+      const win=r.winner==="attacker";
+      const titleLabel = r.conquered ? "👑 Village conquis" : (win?'🏆 Victoire':'💀 Défaite');
+      return `<div class="report ${win?'win':'lose'}">
+        <div class="title" data-toggle="${i}"><span>${titleLabel} contre ${r.target} (${r.coord})${r.targetIsPlayer?(' — joueur '+r.targetOwner):''}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="details ${open?'open':''}">
+          Puissance d'attaque : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
+          Puissance de défense : ${r.defensePower}<br>
+          Pertes attaquant : ${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          Pertes défenseur : ${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          ${win?`Butin : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}<br>`:""}
+          ${r.wallDamage?`Muraille adverse endommagée : -${r.wallDamage} niveau(x)<br>`:""}
+          ${r.storageDamageFrac?`Entrepôt adverse endommagé : -${Math.round(r.storageDamageFrac*100)}% de capacité<br>`:""}
+          ${r.loyaltyReduced?`Loyauté réduite de ${r.loyaltyReduced}% (reste ${Math.round(r.targetLoyalty)}%)${r.conquered?" — village conquis !":""}<br>`:""}
+        </div>
+      </div>`;
+    } else if(r.kind==="defense"){
+      const win=r.winner==="attacker";
+      return `<div class="report defense">
+        <div class="title" data-toggle="${i}"><span>${win?'💀 Raid subi de ':'🛡️ Attaque repoussée de '}${r.source}</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="details ${open?'open':''}">
+          Puissance ennemie : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
+          Votre puissance défensive : ${r.defensePower}<br>
+          Vos pertes : ${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          ${win?`Ressources pillées : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}`:"Aucune perte de ressources."}
+        </div>
+      </div>`;
+    } else if(r.kind==="scout"){
+      return `<div class="report scout">
+        <div class="title" data-toggle="${i}"><span>🔭 Reconnaissance de ${r.target} (${r.coord})</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="details ${open?'open':''}">
+          Ressources : 🪵${fmt(r.resources.wood)} 🧱${fmt(r.resources.clay)} ⛏️${fmt(r.resources.iron)}<br>
+          Troupes : ${TROOP_ORDER.map(k=>TROOPS[k].name+" "+(r.troops[k]||0)).join(", ")}<br>
+          Muraille niveau ${r.wallLevel}${r.loyalty!=null?(' · Loyauté '+Math.round(r.loyalty)+'%'):''}
+        </div>
+      </div>`;
+    } else if(r.kind==="raid"){
+      return `<div class="report raid">
+        <div class="title" data-toggle="${i}"><span>⚠️ Raid de pillards</span><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span></div>
+        <div class="details ${open?'open':''}">Ressources perdues : 🪵${(r.lost&&r.lost.wood)||0} 🧱${(r.lost&&r.lost.clay)||0} ⛏️${(r.lost&&r.lost.iron)||0}</div>
+      </div>`;
+    }
+    return `<div class="report"><div class="title">${r.text||''}</div></div>`;
+  }).join("");
+  return `<h2>Rapports</h2>${items}`;
+}
+
+function renderHelp(){
+  return `<h2>Aide &amp; règles du jeu</h2>
+  <div class="flex-between" style="margin-bottom:10px;">
+    <p style="margin:0;">Conquête Tribale est un jeu de gestion de village médiéval type <i>Tribal Wars</i>, qui tourne désormais dans un <b>monde partagé en temps réel</b> : les autres joueurs sont de vraies personnes, connectées avec leur propre compte, et vous pouvez les attaquer comme ils peuvent vous attaquer. Les « villages barbares » de la carte restent contrôlés par le jeu et servent de cibles faciles pour démarrer.</p>
+    <button id="btnReplayTutorial">🔰 Revoir le tutoriel</button>
+  </div>
+  <h3>Principes</h3>
+  <p>Améliorez vos bâtiments dans l'onglet <b>Bâtiments</b> pour augmenter la production de ressources, la capacité de stockage et la population disponible. Construisez une <b>Caserne</b> pour entraîner des troupes dans l'onglet du même nom. Utilisez la <b>Carte</b> pour envoyer vos troupes reconnaître ou attaquer des villages — qu'ils soient barbares ou détenus par un autre joueur — afin de piller leurs ressources ; les rapports de bataille apparaissent dans l'onglet <b>Rapports</b>.</p>
+  <h3>Reconnaissance et renseignement</h3>
+  <p>Contrairement à un jeu solo, le serveur ne révèle jamais les troupes ni les ressources d'un village qui n'est pas le vôtre : vous devez d'abord y envoyer une <b>reconnaissance</b> (au moins un Éclaireur) pour en apprendre le contenu. Ce renseignement reste affiché tant que vous n'avez pas refait de reconnaissance plus récente — il peut donc devenir obsolète si le village a changé entre-temps. Le niveau de muraille, lui, est toujours visible.</p>
+  <h3>Sièges et conquête</h3>
+  <p>Le <b>Bélier</b> et la <b>Catapulte</b> sont des unités de siège : envoyées dans une attaque victorieuse contre un village barbare, elles endommagent respectivement sa muraille et sa capacité de stockage (l'entrepôt d'un vrai joueur ne peut pas être endommagé ainsi). Construisez une <b>Académie</b> (dès Hôtel de ville niveau 20 — coûteuse et longue, elle ne peut être bâtie qu'une seule fois) pour former des <b>Nobles</b> : chaque noble survivant à une attaque victorieuse contre un village barbare réduit sa loyauté d'environ 20 à 35% et est alors consommé ; à 0% le village est conquis et devient vôtre. La conquête d'un village appartenant à un autre joueur n'est pas possible dans cette version.</p>
+  <h3>Un monde vivant, avec de vrais joueurs</h3>
+  <p>Les villages barbares se développent tout seuls avec le temps (nouvelles troupes, muraille renforcée, réserves agrandies), surtout les plus éloignés du centre, et peuvent riposter par un raid si vous les attaquez trop souvent. Les autres joueurs, eux, agissent quand ils le souhaitent : soyez prêt à défendre votre village (troupes en garnison, muraille) à tout moment, même hors ligne — l'économie et les combats continuent en votre absence, le monde tourne en temps réel 24h/24.</p>
+  <h3>Objectifs et Classement</h3>
+  <p>L'onglet <b>Objectifs</b> propose des jalons de progression (améliorer vos bâtiments, entraîner une armée, remporter une bataille, conquérir un village...) qui rapportent chacun une récompense unique en ressources ou en troupes. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
+  <h3>Compte et progression</h3>
+  <p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>`;
+}
+
+function attachTabHandlers(){
+  document.querySelectorAll("[data-plot]").forEach(el=>el.onclick=()=>{
+    ui.selectedBuilding = el.dataset.plot;
+    renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-build]").forEach(b=>b.onclick=()=>queueBuild(b.dataset.build));
+  document.querySelectorAll("[data-train]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.train;
+    const inp=document.getElementById("trainCount_"+k);
+    queueTrain(k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-claim-quest]").forEach(b=>b.onclick=()=>claimQuest(b.dataset.claimQuest));
+  const replayBtn=document.getElementById("btnReplayTutorial");
+  if(replayBtn) replayBtn.onclick=showTutorial;
+  document.querySelectorAll("[data-village-pin]").forEach(el=>el.onclick=()=>{
+    if(mapJustDragged){ mapJustDragged=false; return; }
+    const raw=el.dataset.villagePin;
+    ui.selectedVillage = raw==="home" ? "home" : raw;
+    renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-max]").forEach(a=>a.onclick=(e)=>{
+    e.preventDefault();
+    const id="send_"+a.dataset.max;
+    const inp=document.getElementById(id);
+    inp.value=inp.max;
+  });
+  document.querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>{
+    const idx=b.dataset.send.lastIndexOf("_");
+    const id=b.dataset.send.slice(0,idx), kind=b.dataset.send.slice(idx+1);
+    sendMission(id, kind);
+  });
+  document.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{
+    const i=Number(el.dataset.toggle);
+    if(ui.openReport.has(i)) ui.openReport.delete(i); else ui.openReport.add(i);
+    renderActiveTabContent();
+  });
+}
+
+/* ============================= INIT ============================= */
+
+function renderAll(){
+  renderTopBar(); renderTabs(); renderActiveTabContent(); renderSidebar();
+}
+
+function start(){
+  document.getElementById("app").style.display="none";
+  window.addEventListener("resize", ()=>{ if(activeTab==="map") positionMapWorld(); });
+  tryResumeSession();
+}
+
+start();
+})();
+</script>
+</body>
+</html>
