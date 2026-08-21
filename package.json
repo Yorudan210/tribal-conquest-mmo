@@ -1,0 +1,11 @@
+{
+    "name": "conquete-tribale-mmo",
+    "version": "1.0.0",
+    "description": "Conquete Tribale - serveur multijoueur (monde partage, comptes joueurs, sans dependance externe)",
+    "main": "server/server.js",
+    "scripts": {
+          "start": "node server/server.js"
+    },
+    "engines": { "node": ">=18" },
+    "dependencies": {}
+}
