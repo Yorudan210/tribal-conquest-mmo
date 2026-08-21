@@ -439,6 +439,18 @@ function resolveAttack(db, m){
         target.aggro={};
         conquered=true;
         if(attackerVillage) attackerVillage.conqueredCount=(attackerVillage.conqueredCount||0)+1;
+        // Un village barbare n'a pas la même structure qu'un village de joueur (pas de
+        // "buildings", de files de construction/entraînement ni de soutien) : sans cette
+        // conversion, runTick() plantait dès le tick suivant sur ce village fraîchement conquis.
+        target.buildings = target.buildings || {
+          hq:1, wood:1, clay:1, iron:1, warehouse:1, farm:1, barracks:0,
+          wall: Math.max(0, target.wallLevel||0), hide: Math.max(0, target.hideLevel||0), academy:0
+        };
+        target.buildQueue = target.buildQueue || [];
+        target.trainQueue = target.trainQueue || [];
+        target.support = target.support || [];
+        target.conqueredCount = target.conqueredCount || 0;
+        delete target.wallLevel; delete target.hideLevel; delete target.resCap; delete target.tier;
       }
     } else if(nobleSurvivors>0){
       m.troops.noble = 0; // consommé même contre un joueur (pas de conquête de joueur en MVP)

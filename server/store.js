@@ -50,6 +50,18 @@ function migrateDb(){
   for(const id in db.villages){
     const v = db.villages[id];
     if(v.owner!=="barbarian" && !v.support) v.support = [];
+    // Répare les villages conquis par un Noble avant le correctif qui convertit correctement
+    // un village barbare en village de joueur : sans "buildings", runTick() plante à chaque tick.
+    if(v.owner!=="barbarian" && !v.buildings){
+      v.buildings = {
+        hq:1, wood:1, clay:1, iron:1, warehouse:1, farm:1, barracks:0,
+        wall: Math.max(0, v.wallLevel||0), hide: Math.max(0, v.hideLevel||0), academy:0
+      };
+      v.buildQueue = v.buildQueue || [];
+      v.trainQueue = v.trainQueue || [];
+      v.conqueredCount = v.conqueredCount || 0;
+      delete v.wallLevel; delete v.hideLevel; delete v.resCap; delete v.tier;
+    }
   }
   // Anciens rapports créés avant l'ajout de la suppression : leur donner un id stable une fois.
   let seq = 0;
