@@ -329,6 +329,8 @@
   .player-link:hover{color:var(--gold);}
   #playerProfileModal:empty{display:none;}
   .player-card-actions button{width:100%;}
+  .profile-village-row{width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;}
+  .profile-village-row:hover{border-color:var(--gold); background:rgba(255,255,255,.06);}
 
   /* ---- Boutique de guilde ---- */
   .shop-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:8px;}
@@ -1333,6 +1335,15 @@ function renderPlayerProfile(p){
           🏆 Points : ${p.points} (Hôtel de ville niv. ${p.hq}, ${p.conquered} village${p.conquered>1?'s':''} conquis)<br>
           🏰 ${p.villageCount} village${p.villageCount>1?'s':''}${p.homeCoord?(' · capitale à '+p.homeCoord):''}
         </div>
+        ${(p.villages&&p.villages.length) ? `
+        <div class="small muted" style="margin:4px 0 6px;">Villages (clic pour voir sur la carte) :</div>
+        <div class="profile-village-list" style="display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto; margin-bottom:10px;">
+          ${p.villages.map(v=>`
+            <button class="profile-village-row" data-village-id="${v.id}" style="text-align:left; display:flex; justify-content:space-between; gap:8px; padding:6px 8px;">
+              <span>${v.isHome?'👑 ':'🏰 '}${escapeHtml(v.name)}</span>
+              <span class="muted small">${v.x}|${v.y}</span>
+            </button>`).join("")}
+        </div>` : ""}
         <div class="player-card-actions" style="display:flex; flex-direction:column; gap:8px;">
           ${isSelf ? `<p class="muted small">C'est vous !</p>` : !canAct ? `<p class="muted small">Aucune action disponible (village introuvable).</p>` : `
             <div class="send-form open">
@@ -1351,6 +1362,9 @@ function renderPlayerProfile(p){
   document.getElementById("btnClosePlayerProfile").onclick=closePlayerProfile;
   const backdrop=document.getElementById("playerProfileBackdrop");
   if(backdrop) backdrop.onclick=(e)=>{ if(e.target.id==="playerProfileBackdrop") closePlayerProfile(); };
+  modal.querySelectorAll(".profile-village-row").forEach(btn=>{
+    btn.onclick=()=>{ const vid=btn.dataset.villageId; closePlayerProfile(); goToVillageOnMap(vid); };
+  });
   if(!canAct || isSelf) return;
   const giftBtn=document.getElementById("btnProfileGift");
   if(giftBtn) giftBtn.onclick=()=>{
