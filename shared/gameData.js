@@ -69,6 +69,35 @@
       desc:"Multiplie les points affichés au classement pendant la durée choisie." }
   ];
 
+  /* Succès (mêmes catégories, noms et paliers que le jeu officiel "Die Stämme / Tribal Wars",
+     dans la limite des mécaniques réellement présentes dans ce clone — voir README pour le détail
+     des catégories officielles volontairement omises, faute d'équivalent : pièces d'or/premium,
+     score par continent, système d'amis/parrainage, quête des objets de Paladin, succès du jour).
+     4 paliers par succès (Bois/Bronze/Argent/Or, comme le jeu officiel), valant respectivement
+     1/2/3/4 points de succès ; "stat" désigne la valeur (voir computeAchievements côté serveur)
+     comparée aux seuils de "tiers" pour déterminer le palier atteint. */
+  const ACHIEVEMENT_TIER_LABELS = ["Bois","Bronze","Argent","Or"];
+  const ACHIEVEMENTS = [
+    { key:"scoreChampion", name:"Roi des points", icon:"👑", stat:"points",
+      desc:"Cumulez un maximum de points de village.", tiers:[100,5000,100000,10000000] },
+    { key:"conquest", name:"Conquête", icon:"🏰", stat:"conquered",
+      desc:"Conquérez des villages (barbares ou ennemis).", tiers:[5,50,500,1000] },
+    { key:"raider", name:"Pilleur", icon:"💰", stat:"totalLoot",
+      desc:"Pillez un maximum de ressources au total (bois + argile + fer confondus).", tiers:[500,10000,1000000,100000000] },
+    { key:"leader", name:"Chef de guerre", icon:"⚔️", stat:"unitsKilled",
+      desc:"Détruisez des troupes ennemies, en attaque comme en défense.", tiers:[10000,100000,1000000,20000000] },
+    { key:"plunderer", name:"Pillages réussis", icon:"🏴", stat:"attacksWon",
+      desc:"Remportez un maximum d'attaques.", tiers:[10,100,1000,10000] },
+    { key:"commander", name:"Bras secourable", icon:"🤝", stat:"supportsSent",
+      desc:"Envoyez des renforts à d'autres joueurs.", tiers:[50,100,500,3000] },
+    { key:"merchant", name:"Négociant", icon:"🏪", stat:"marketTrades",
+      desc:"Concluez des échanges sur le Marché.", tiers:[10,100,500,1000] },
+    { key:"demolisher", name:"Fléau des murailles", icon:"🧨", stat:"wallLevelsDestroyed",
+      desc:"Détruisez des niveaux de muraille ennemis avec vos béliers.", tiers:[25,250,2500,10000] },
+    { key:"warlord", name:"Guerrier tous azimuts", icon:"🎯", stat:"distinctOpponents",
+      desc:"Attaquez un maximum de joueurs différents.", tiers:[10,25,100,250] }
+  ];
+
   const TROOPS = {
     spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
     sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:20, requires:{barracks:1}},
@@ -114,6 +143,7 @@
 
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
+    ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR
   };
 });
