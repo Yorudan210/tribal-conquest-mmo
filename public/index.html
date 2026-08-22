@@ -324,6 +324,20 @@
   .tutorial-skip{background:transparent; border:none; box-shadow:none; color:var(--text-dim); font-weight:normal; text-decoration:underline; padding:8px 4px;}
   .tutorial-skip:hover{background:transparent; box-shadow:none; color:var(--text); transform:none;}
 
+  /* ---- Descriptif joueur (modale, ouverte depuis la guilde ou le classement) ---- */
+  .player-link{cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;}
+  .player-link:hover{color:var(--gold);}
+  #playerProfileModal:empty{display:none;}
+  .player-card-actions button{width:100%;}
+
+  /* ---- Boutique de guilde ---- */
+  .shop-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:8px;}
+  .shop-card{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:rgba(255,255,255,.03);}
+  .shop-card.active{border-color:var(--gold);}
+  .shop-card h4{margin:0 0 4px; font-size:14px;}
+  .donation-row{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--border);}
+  .donation-row:last-child{border-bottom:none;}
+
   /* ---- Chat mondial (widget flottant) ---- */
   #chatWidget{position:fixed; bottom:14px; left:14px; z-index:150; font-size:13px;}
   .chat-bubble{
@@ -368,6 +382,7 @@
 <div id="toasts"></div>
 <div id="battleBanner"></div>
 <div id="tutorialModal"></div>
+<div id="playerProfileModal"></div>
 <div id="authScreen"></div>
 <div id="chatWidget"></div>
 
@@ -377,7 +392,7 @@
 "use strict";
 
 /* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
-const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS,
+const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS,
         clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 /* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
@@ -1285,6 +1300,90 @@ function switchVillage(villageId, goToBuildings){
   doAction(()=>apiCall("/api/village/switch","POST",{villageId}), "🏰 Village actif changé.", null);
 }
 
+/* ============================= DESCRIPTIF JOUEUR (guilde, classement) ============================= */
+
+/* Ouvre la fiche détaillée d'un joueur (guilde, points, actions possibles) : depuis la liste des
+   membres de la guilde ou depuis une ligne du Classement. */
+async function openPlayerProfile(targetUsername){
+  try{
+    const data = await apiCall("/api/player?username="+encodeURIComponent(targetUsername), "GET");
+    renderPlayerProfile(data.player);
+  }catch(err){ toast("⚠️ "+err.message); }
+}
+
+function closePlayerProfile(){
+  const modal=document.getElementById("playerProfileModal");
+  if(modal) modal.innerHTML="";
+}
+
+function renderPlayerProfile(p){
+  const modal=document.getElementById("playerProfileModal");
+  if(!modal) return;
+  const isSelf = p.username===username;
+  const canAct = !isSelf && p.homeVillageId!=null;
+  modal.innerHTML = `
+    <div class="tutorial-backdrop" id="playerProfileBackdrop">
+      <div class="tutorial-card" style="max-width:360px;">
+        <div class="flex-between" style="align-items:flex-start;">
+          <h3 style="margin:0;">👤 ${escapeHtml(p.username)}${isSelf?' (vous)':''}</h3>
+          <button id="btnClosePlayerProfile" title="Fermer" style="padding:4px 8px;">✖</button>
+        </div>
+        <div class="small muted" style="margin:10px 0; line-height:1.6;">
+          👥 ${p.guild ? `Guilde : [${escapeHtml(p.guild.tag)}] ${escapeHtml(p.guild.name)}${p.guild.isLeader?' (chef)':''}` : "Aucune guilde"}<br>
+          🏆 Points : ${p.points} (Hôtel de ville niv. ${p.hq}, ${p.conquered} village${p.conquered>1?'s':''} conquis)<br>
+          🏰 ${p.villageCount} village${p.villageCount>1?'s':''}${p.homeCoord?(' · capitale à '+p.homeCoord):''}
+        </div>
+        <div class="player-card-actions" style="display:flex; flex-direction:column; gap:8px;">
+          ${isSelf ? `<p class="muted small">C'est vous !</p>` : !canAct ? `<p class="muted small">Aucune action disponible (village introuvable).</p>` : `
+            <div class="send-form open">
+              <div class="small muted" style="margin-bottom:6px;">🎁 Envoyer des ressources (livré à sa capitale)</div>
+              <div class="inputs" style="display:flex; gap:8px; flex-wrap:wrap;">
+                ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" max="${Math.floor(state.village.resources[r]||0)}" value="0" id="profileGift_${r}"></div>`).join("")}
+              </div>
+              <button id="btnProfileGift">🎁 Envoyer</button>
+            </div>
+            <button id="btnProfileAttack" class="primary">⚔️ Attaquer</button>
+            <button id="btnProfileScout">🔭 Espionner</button>
+          `}
+        </div>
+      </div>
+    </div>`;
+  document.getElementById("btnClosePlayerProfile").onclick=closePlayerProfile;
+  const backdrop=document.getElementById("playerProfileBackdrop");
+  if(backdrop) backdrop.onclick=(e)=>{ if(e.target.id==="playerProfileBackdrop") closePlayerProfile(); };
+  if(!canAct || isSelf) return;
+  const giftBtn=document.getElementById("btnProfileGift");
+  if(giftBtn) giftBtn.onclick=()=>{
+    const amt={}; let any=false;
+    for(const r of ["wood","clay","iron"]){
+      const el=document.getElementById("profileGift_"+r);
+      if(!el) continue;
+      let n=Math.floor(Number(el.value)||0);
+      n=Math.max(0, Math.min(n, Math.floor(state.village.resources[r]||0)));
+      if(n>0){ amt[r]=n; any=true; }
+    }
+    if(!any){ toast("Indiquez au moins une ressource à donner."); return; }
+    doAction(()=>apiCall("/api/gift","POST",{username:p.username, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}), "🎁 Don envoyé à "+p.username+".", null);
+    closePlayerProfile();
+  };
+  const attackBtn=document.getElementById("btnProfileAttack");
+  if(attackBtn) attackBtn.onclick=()=>{ closePlayerProfile(); goToVillageOnMap(p.homeVillageId); };
+  const scoutBtn=document.getElementById("btnProfileScout");
+  if(scoutBtn) scoutBtn.onclick=()=>{ closePlayerProfile(); goToVillageOnMap(p.homeVillageId); };
+}
+
+/* Bascule sur l'onglet Carte, centre la vue sur un village donné et le sélectionne (utilisé par les
+   boutons Attaquer/Espionner de la fiche joueur) : l'attaque/reconnaissance elle-même se fait ensuite
+   normalement depuis la fiche du village sur la carte (choix des troupes à envoyer). */
+function goToVillageOnMap(villageId){
+  const t=state.villages.find(v=>v.id===villageId);
+  if(!t){ toast("Village introuvable."); return; }
+  activeTab="map";
+  ui.selectedVillage=villageId;
+  mapView = { cx:t.x, cy:t.y, ppf:(mapView&&mapView.ppf)||26 };
+  renderTabs(); renderActiveTabContent();
+}
+
 function startRenameVillage(){
   const row=document.querySelector(".village-title .name-row");
   if(!row || row.querySelector("input")) return;
@@ -1712,7 +1811,7 @@ function renderLeaderboard(){
   const rows = state.leaderboard.map((p,i)=>`
     <tr style="${p.username===username?'background:rgba(217,164,65,0.14);':''}">
       <td>${i+1}</td>
-      <td>${p.username}${p.username===username?' (vous)':''}</td>
+      <td class="player-link" data-open-profile="${escapeHtml(p.username)}">${escapeHtml(p.username)}${p.username===username?' (vous)':''}</td>
       <td>${p.hq}</td>
       <td>${p.conquered}</td>
       <td>${p.points}</td>
@@ -2046,15 +2145,21 @@ function renderReports(){
     if(r.kind==="attack"){
       const win=r.winner==="attacker";
       const titleLabel = r.conquered ? "👑 Village conquis" : (win?'🏆 Victoire':'💀 Défaite');
+      const fmtTroopBreakdown = (sent, lost, survivors) => TROOP_ORDER
+        .filter(k=>(sent&&sent[k]>0) || (survivors&&survivors[k]>0))
+        .map(k=>`${TROOPS[k].name} : envoyés ${sent&&sent[k]||0}, survivants ${survivors&&survivors[k]||0}${(lost&&lost[k])?(', perdus '+lost[k]):''}`)
+        .join("<br>") || "aucune";
       return `<div class="report ${win?'win':'lose'}">
         <div class="title" data-toggle="${r.id}"><span>${titleLabel} contre ${r.target} (${r.coord})${r.targetIsPlayer?(' — joueur '+r.targetOwner):''}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
-          Puissance d'attaque : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
+          Puissance d'attaque : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)${r.attackShare?` — répartition infanterie ${r.attackShare.inf}% / cavalerie ${r.attackShare.cav}% / archers ${r.attackShare.arch}%`:""}<br>
           Puissance de défense : ${r.defensePower}<br>
-          Pertes attaquant : ${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
-          Pertes défenseur : ${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          Pertes attaquant : ${r.attackerLossPct!=null?r.attackerLossPct+"% — ":""}${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          Pertes défenseur : ${r.defenderLossPct!=null?r.defenderLossPct+"% — ":""}${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          ${r.troopsSent?`<div class="small muted" style="margin:6px 0;">${fmtTroopBreakdown(r.troopsSent, r.attackerLosses, r.attackerSurvivors)}</div>`:""}
+          ${r.nobleSent?`Noble(s) envoyé(s) : ${r.nobleSent}, ayant survécu au combat : ${r.nobleSurvived}${r.nobleSurvivalChancePct!=null?(' (chance de survie '+r.nobleSurvivalChancePct+'%)'):''}${r.conquered?' — a pris possession du village !':(r.nobleSurvived>0?' — consommé (pas de retour).':'')}<br>`:""}
           ${win?`Butin : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}<br>`:""}
-          ${r.wallDamage?`Muraille adverse endommagée : -${r.wallDamage} niveau(x)<br>`:""}
+          ${r.wallDamage?`Muraille adverse endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}<br>`:""}
           ${r.storageDamageFrac?`Entrepôt adverse endommagé : -${Math.round(r.storageDamageFrac*100)}% de capacité<br>`:""}
           ${r.loyaltyReduced?`Loyauté réduite de ${r.loyaltyReduced}% (reste ${Math.round(r.targetLoyalty)}%)${r.conquered?" — village conquis !":""}<br>`:""}
         </div>
@@ -2064,9 +2169,12 @@ function renderReports(){
       return `<div class="report defense">
         <div class="title" data-toggle="${r.id}"><span>${win?'💀 Raid subi de ':'🛡️ Attaque repoussée de '}${r.source}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
-          Puissance ennemie : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)<br>
+          Puissance ennemie : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)${r.attackShare?` — répartition infanterie ${r.attackShare.inf}% / cavalerie ${r.attackShare.cav}% / archers ${r.attackShare.arch}%`:""}<br>
           Votre puissance défensive : ${r.defensePower}<br>
-          Vos pertes : ${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          ${r.troopsSent?`Troupes ennemies engagées : ${TROOP_ORDER.filter(k=>(r.troopsSent[k]||0)>0).map(k=>TROOPS[k].name+" "+r.troopsSent[k]).join(", ")||"inconnues"}<br>`:""}
+          ${r.attackerLosses?`Pertes infligées à l'ennemi : ${r.attackerLossPct!=null?r.attackerLossPct+"% — ":""}${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>`:""}
+          Vos pertes : ${r.defenderLossPct!=null?r.defenderLossPct+"% — ":""}${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
+          ${r.wallDamage?`Votre muraille a été endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}<br>`:""}
           ${win?`Ressources pillées : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}`:"Aucune perte de ressources."}
         </div>
       </div>`;
@@ -2176,9 +2284,65 @@ function renderGuild(){
     </div>` : `<p class="muted small">Construisez le Hall de guilde ci-dessus pour pouvoir faire des dons.</p>`;
 
   const membersRows = g.members.map(m=>`<tr>
-    <td>${escapeHtml(m)}${m===g.leader?' <span class="tag strong">CHEF</span>':''}${m===username?' (vous)':''}</td>
+    <td class="player-link" data-open-profile="${escapeHtml(m)}">${escapeHtml(m)}${m===g.leader?' <span class="tag strong">CHEF</span>':''}${m===username?' (vous)':''}</td>
     <td>${g.isLeader && m!==username ? `<button data-guild-kick="${escapeHtml(m)}">Exclure</button>` : ''}</td>
   </tr>`).join("");
+
+  const donationRows = (g.donations||[]).slice(0,15).map(d=>`
+    <div class="donation-row">
+      <span>${escapeHtml(d.username)}</span>
+      <span class="muted">🪵${fmt(d.wood)} 🧱${fmt(d.clay)} ⛏️${fmt(d.iron)}</span>
+      <span class="muted">${fmtTime(Math.max(0,estimateNow()-d.time))}</span>
+    </div>`).join("") || `<p class="muted small">Aucun don pour l'instant.</p>`;
+
+  const donorTotalsSorted = Object.entries(g.donorTotals||{}).sort((a,b)=>b[1]-a[1]);
+  const donorTotalsRows = donorTotalsSorted.map(([u,total])=>`<tr><td>${escapeHtml(u)}</td><td>${fmt(total)}</td></tr>`).join("")
+    || `<tr><td colspan="2" class="muted">Aucun don pour l'instant.</td></tr>`;
+
+  const donationHistoryBox = `
+    <div class="box">
+      <h3>🎁 Historique des dons</h3>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="flex:1 1 260px; min-width:220px;">
+          <div class="small muted" style="margin-bottom:4px;">Dons récents</div>
+          ${donationRows}
+        </div>
+        <div style="flex:1 1 200px; min-width:180px;">
+          <div class="small muted" style="margin-bottom:4px;">Total cumulé par membre</div>
+          <table style="width:100%;"><thead><tr><th>Membre</th><th>Total</th></tr></thead><tbody>${donorTotalsRows}</tbody></table>
+        </div>
+      </div>
+    </div>`;
+
+  const activeBoosts = g.activeBoosts||[];
+  const activeBoostsBox = activeBoosts.length ? `
+    <div class="small muted" style="margin:8px 0;">Bonus actifs : ${activeBoosts.map(b=>`${b.icon} ${escapeHtml(b.name)} (encore ${fmtTime(b.secondsLeft)})`).join(" · ")}</div>
+  ` : `<div class="small muted" style="margin:8px 0;">Aucun bonus actif pour l'instant.</div>`;
+
+  const shopCards = GUILD_BOOSTS.map(b=>{
+    const active = activeBoosts.find(x=>x.key===b.key);
+    const affordable = g.bank.wood>=b.cost.wood && g.bank.clay>=b.cost.clay && g.bank.iron>=b.cost.iron;
+    return `<div class="shop-card ${active?'active':''}">
+      <h4>${b.icon} ${b.name}</h4>
+      <div class="small muted" style="margin-bottom:6px;">${b.desc}</div>
+      <div class="cost small" style="margin-bottom:8px;">
+        <span class="${g.bank.wood<b.cost.wood?'short':''}">🪵 ${fmt(b.cost.wood)}</span>
+        <span class="${g.bank.clay<b.cost.clay?'short':''}">🧱 ${fmt(b.cost.clay)}</span>
+        <span class="${g.bank.iron<b.cost.iron?'short':''}">⛏️ ${fmt(b.cost.iron)}</span>
+      </div>
+      ${g.isLeader
+        ? `<button data-guild-buy-boost="${b.key}" class="primary" ${affordable?'':'disabled'}>${active?'Racheter (prolonger)':'Acheter'}</button>`
+        : `<p class="muted small">Seul le chef de guilde peut acheter dans la boutique.</p>`}
+    </div>`;
+  }).join("");
+
+  const shopBox = `
+    <div class="box">
+      <h3>🛒 Boutique de guilde</h3>
+      <p class="small muted">Dépensez les ressources de la <b>banque de guilde</b> (alimentée par les dons ci-dessus) pour offrir un bonus temporaire à TOUS les membres. Banque actuelle : 🪵${fmt(g.bank.wood)} 🧱${fmt(g.bank.clay)} ⛏️${fmt(g.bank.iron)}.</p>
+      ${activeBoostsBox}
+      <div class="shop-grid">${shopCards}</div>
+    </div>`;
 
   const inviteBox = g.isLeader ? `
     <div class="box">
@@ -2199,6 +2363,8 @@ function renderGuild(){
     ${inviteBox}
     ${hallCard}
     ${donateBox}
+    ${donationHistoryBox}
+    ${shopBox}
     <div class="box">
       <button id="btnGuildLeave">🚪 Quitter la guilde</button>
       ${g.isLeader?`<button id="btnGuildDisband" style="margin-left:8px;">💥 Dissoudre la guilde</button>`:''}
@@ -2237,6 +2403,11 @@ function attachGuildHandlers(){
   };
   document.querySelectorAll("[data-guild-kick]").forEach(b=>b.onclick=()=>{
     doAction(()=>apiCall("/api/guild/kick","POST",{username:b.dataset.guildKick}), b.dataset.guildKick+" exclu de la guilde.", null);
+  });
+  document.querySelectorAll("[data-guild-buy-boost]").forEach(b=>b.onclick=()=>{
+    const key=b.dataset.guildBuyBoost;
+    const boost=GUILD_BOOSTS.find(x=>x.key===key);
+    doAction(()=>apiCall("/api/guild/buy-boost","POST",{key}), boost?("🛒 "+boost.icon+" "+boost.name+" activé pour toute la guilde !"):"🛒 Bonus activé.", null);
   });
   const leaveBtn=document.getElementById("btnGuildLeave");
   if(leaveBtn) leaveBtn.onclick=()=>{
@@ -2526,6 +2697,10 @@ function attachTabHandlers(){
   });
   document.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ sendGift(b.dataset.gift); });
   document.querySelectorAll("[data-manage-village]").forEach(b=>b.onclick=()=>{ switchVillage(b.dataset.manageVillage, true); });
+  document.querySelectorAll("[data-open-profile]").forEach(el=>el.onclick=(e)=>{
+    e.stopPropagation();
+    openPlayerProfile(el.dataset.openProfile);
+  });
   document.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{
     const i=el.dataset.toggle;
     if(ui.openReport.has(i)) ui.openReport.delete(i); else ui.openReport.add(i);
