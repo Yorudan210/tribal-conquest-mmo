@@ -1009,20 +1009,27 @@ function doGuildDisband(db, username){
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Chat mondial (un seul salon, tous les joueurs)                         */
+/*  Chat (deux salons : mondial pour tous, et guilde pour ses membres)     */
 /* ---------------------------------------------------------------------- */
 
-function doChatSend(db, username, text){
+function doChatSend(db, username, text, channel){
   text = String(text||"").trim();
   if(!text) return { error:"Message vide." };
   if(text.length>300) text = text.slice(0,300);
+  channel = (channel==="guild") ? "guild" : "global";
+  let guildId = null;
+  if(channel==="guild"){
+    const guild = guildOf(db, username);
+    if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+    guildId = guild.id;
+  }
   const u = db.users[username];
   const t = Date.now();
   if(u && u.lastChatAt && (t-u.lastChatAt) < 1200) return { error:"Vous envoyez des messages trop vite, patientez un instant." };
   if(u) u.lastChatAt = t;
   db.chat = db.chat||[];
-  db.chat.push({ id:"c"+t+Math.floor(Math.random()*100000), username, text, time: now() });
-  if(db.chat.length>200) db.chat.splice(0, db.chat.length-200);
+  db.chat.push({ id:"c"+t+Math.floor(Math.random()*100000), username, text, time: now(), channel, guildId, kind:"chat" });
+  if(db.chat.length>300) db.chat.splice(0, db.chat.length-300);
   return { ok:true };
 }
 
@@ -1164,6 +1171,9 @@ function adminAnnounce(db, authorUsername, text){
   for(const uname in db.users){
     pushReport(db, uname, { kind:"announcement", time: entry.time, author: authorUsername, text });
   }
+  db.chat = db.chat||[];
+  db.chat.push({ id:"ann"+entry.id, username:authorUsername, text, time: entry.time, channel:"global", guildId:null, kind:"announce" });
+  if(db.chat.length>300) db.chat.splice(0, db.chat.length-300);
   return { ok:true };
 }
 
@@ -1239,6 +1249,7 @@ function publicPlayerView(db, targetUsername){
     .sort((a,b)=> b.isHome-a.isHome || a.name.localeCompare(b.name));
   return {
     username: targetUsername,
+    isAdmin: isAdminUser(db, targetUsername),
     guild: guild ? { id:guild.id, name:guild.name, tag:guild.tag, isLeader: guild.leader===targetUsername } : null,
     points: hq*10 + conquered*50,
     hq, conquered,
@@ -1294,6 +1305,16 @@ function buildSnapshot(db, username){
     isActive: mv.id===v.id, isHome: mv.id===homeId
   })).sort((a,b)=>(b.isHome-a.isHome) || a.name.localeCompare(b.name));
 
+  // Deux salons de discussion : le chat mondial (visible de tous) et le chat de guilde (réservé aux
+  // membres de la guilde du joueur, absent si aucune guilde). Les anciens messages sans champ
+  // "channel" (avant l'introduction du chat de guilde) sont traités comme mondiaux, par rétrocompatibilité.
+  // isAdmin est recalculé à l'envoi de l'instantané (et non figé au moment du message) pour refléter
+  // immédiatement une promotion/rétrogradation admin.
+  const chatAll = db.chat||[];
+  const withChatMeta = m => ({ id:m.id, username:m.username, text:m.text, time:m.time, kind:m.kind||"chat", isAdmin: isAdminUser(db, m.username) });
+  const chatGlobal = chatAll.filter(m=>m.channel!=="guild").slice(-60).map(withChatMeta);
+  const chatGuild = guild ? chatAll.filter(m=>m.channel==="guild" && m.guildId===guild.id).slice(-60).map(withChatMeta) : [];
+
   return {
     serverTime: now(),
     village: v,
@@ -1304,7 +1325,8 @@ function buildSnapshot(db, username){
     quests: questStatus,
     leaderboard,
     isAdmin: isAdminUser(db, username),
-    chat: (db.chat||[]).slice(-50),
+    chat: chatGlobal,
+    guildChat: chatGuild,
     speedMultiplier: getSpeedMultiplier(db),
     mySupport,
     guild: guild ? publicGuildView(db, guild, username) : null,

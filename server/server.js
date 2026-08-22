@@ -188,7 +188,7 @@ async function handleApi(req, res, pathname, url){
   }
   if(pathname==="/api/chat/send" && req.method==="POST"){
     const body = await readBody(req);
-    const result = game.doChatSend(db, username, body.text);
+    const result = game.doChatSend(db, username, body.text, body.channel);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
