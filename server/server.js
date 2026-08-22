@@ -300,6 +300,39 @@ async function handleApi(req, res, pathname, url){
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
 
+  // ---- Diplomatie de guilde ----
+  if(pathname==="/api/guilds" && req.method==="GET"){
+    return sendJson(res, 200, { guilds: game.listGuildsPublic(db, username) });
+  }
+  if(pathname==="/api/guild/diplomacy/propose" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doDiplomacyPropose(db, username, body.targetGuildId, body.type);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/diplomacy/respond" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doDiplomacyRespond(db, username, body.relationId, !!body.accept);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/diplomacy/cancel" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doDiplomacyCancel(db, username, body.relationId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/guild/diplomacy/declare-war" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doDiplomacyDeclareWar(db, username, body.targetGuildId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+
   // ---- Administration : débloqué avec le code ADMIN_SECRET, puis réservé aux comptes isAdmin ----
   if(pathname==="/api/admin/claim" && req.method==="POST"){
     const body = await readBody(req);

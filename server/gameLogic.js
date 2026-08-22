@@ -868,7 +868,8 @@ function publicGuildView(db, guild, username){
     isLeader: guild.leader===username,
     donations: (guild.donations||[]).slice(0,30),
     donorTotals: {...(guild.donorTotals||{})},
-    activeBoosts
+    activeBoosts,
+    diplomacy: publicDiplomacyView(db, guild)
   };
 }
 
@@ -1005,7 +1006,132 @@ function doGuildDisband(db, username){
   if(guild.leader!==username) return { error:"Seul le chef de guilde peut dissoudre la guilde." };
   for(const m of guild.members) if(db.users[m]) db.users[m].guildId = null;
   delete db.guilds[guild.id];
+  db.diplomacy = (db.diplomacy||[]).filter(r=>r.guildA!==guild.id && r.guildB!==guild.id);
   return { ok:true };
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Diplomatie de guilde (pactes de non-agression, alliances, guerres)     */
+/* ---------------------------------------------------------------------- */
+/* Une seule relation à la fois entre deux guildes : neutre par défaut (aucun enregistrement), ou
+   pacte/alliance en attente (proposée, pas encore acceptée par l'autre guilde) ou active, ou guerre
+   (toujours active immédiatement — se déclare, ne se négocie pas). Rompre un pacte/une alliance ou
+   faire la paix est une décision unilatérale du chef de guilde (comme quitter une guilde), pour
+   rester simple. Choix délibéré : aucune conséquence mécanique n'est appliquée sur les combats
+   (doMission n'est pas modifié) — la diplomatie reste informative, l'avertissement affiché avant
+   d'attaquer un allié est géré côté client à partir de ces données. */
+
+function findDiplomacy(db, guildIdA, guildIdB){
+  db.diplomacy = db.diplomacy||[];
+  return db.diplomacy.find(r=>
+    (r.guildA===guildIdA && r.guildB===guildIdB) || (r.guildA===guildIdB && r.guildB===guildIdA)
+  ) || null;
+}
+
+function otherGuildId(rel, guildId){ return rel.guildA===guildId ? rel.guildB : rel.guildA; }
+
+const DIPLOMACY_TYPE_LABEL = { pact:"un pacte de non-agression", alliance:"une alliance", war:"un état de guerre" };
+
+/* Vue des relations de SA PROPRE guilde, décorée avec le nom/tag de l'autre guilde et le sens de la
+   proposition (pour distinguer "j'attends une réponse" de "on attend la mienne"). */
+function publicDiplomacyView(db, guild){
+  db.diplomacy = db.diplomacy||[];
+  return db.diplomacy.filter(r=>r.guildA===guild.id || r.guildB===guild.id).map(r=>{
+    const oid = otherGuildId(r, guild.id);
+    const other = db.guilds[oid];
+    return {
+      id:r.id, type:r.type, status:r.status,
+      direction: r.proposedBy===guild.id ? "outgoing" : "incoming",
+      otherGuild: other ? { id:other.id, name:other.name, tag:other.tag } : { id:oid, name:"Guilde dissoute", tag:"?" }
+    };
+  });
+}
+
+function doDiplomacyPropose(db, username, targetGuildId, type){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut proposer une relation diplomatique." };
+  if(type!=="pact" && type!=="alliance") return { error:"Type de relation invalide." };
+  targetGuildId = String(targetGuildId||"");
+  const target = db.guilds[targetGuildId];
+  if(!target) return { error:"Guilde introuvable." };
+  if(target.id===guild.id) return { error:"Impossible de proposer une relation à votre propre guilde." };
+  const existing = findDiplomacy(db, guild.id, target.id);
+  if(existing) return { error:"Une relation ("+DIPLOMACY_TYPE_LABEL[existing.type]+(existing.status==="pending"?", en attente de réponse":"")+") existe déjà avec cette guilde : rompez-la d'abord pour en proposer une autre." };
+  db.diplomacy = db.diplomacy||[];
+  const rel = { id:"dip"+Date.now()+Math.floor(Math.random()*100000), guildA:guild.id, guildB:target.id, type, status:"pending", proposedBy:guild.id, createdAt: now() };
+  db.diplomacy.push(rel);
+  for(const m of target.members){
+    pushReport(db, m, { kind:"diplomacyProposal", time:now(), fromGuildId:guild.id, fromGuildName:guild.name, fromGuildTag:guild.tag, relType:type });
+  }
+  return { ok:true };
+}
+
+function doDiplomacyRespond(db, username, relationId, accept){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut répondre à une proposition diplomatique." };
+  db.diplomacy = db.diplomacy||[];
+  const rel = db.diplomacy.find(r=>r.id===String(relationId));
+  if(!rel) return { error:"Proposition introuvable." };
+  if(rel.status!=="pending") return { error:"Cette proposition n'est plus en attente." };
+  if(rel.proposedBy===guild.id) return { error:"Vous ne pouvez pas répondre à votre propre proposition." };
+  if(rel.guildA!==guild.id && rel.guildB!==guild.id) return { error:"Cette proposition ne concerne pas votre guilde." };
+  const otherId = otherGuildId(rel, guild.id);
+  const other = db.guilds[otherId];
+  if(accept){
+    rel.status = "active";
+    if(other) for(const m of other.members) pushReport(db, m, { kind:"diplomacyAccepted", time:now(), fromGuildId:guild.id, fromGuildName:guild.name, fromGuildTag:guild.tag, relType:rel.type });
+  } else {
+    db.diplomacy = db.diplomacy.filter(r=>r.id!==rel.id);
+    if(other) for(const m of other.members) pushReport(db, m, { kind:"diplomacyDeclined", time:now(), fromGuildId:guild.id, fromGuildName:guild.name, fromGuildTag:guild.tag, relType:rel.type });
+  }
+  return { ok:true };
+}
+
+function doDiplomacyCancel(db, username, relationId){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut modifier les relations diplomatiques." };
+  db.diplomacy = db.diplomacy||[];
+  const rel = db.diplomacy.find(r=>r.id===String(relationId));
+  if(!rel) return { error:"Relation introuvable." };
+  if(rel.guildA!==guild.id && rel.guildB!==guild.id) return { error:"Cette relation ne concerne pas votre guilde." };
+  const otherId = otherGuildId(rel, guild.id);
+  const other = db.guilds[otherId];
+  db.diplomacy = db.diplomacy.filter(r=>r.id!==rel.id);
+  if(other) for(const m of other.members) pushReport(db, m, { kind:"diplomacyEnded", time:now(), fromGuildId:guild.id, fromGuildName:guild.name, fromGuildTag:guild.tag, relType:rel.type, wasPending: rel.status==="pending" });
+  return { ok:true };
+}
+
+function doDiplomacyDeclareWar(db, username, targetGuildId){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut déclarer la guerre." };
+  targetGuildId = String(targetGuildId||"");
+  const target = db.guilds[targetGuildId];
+  if(!target) return { error:"Guilde introuvable." };
+  if(target.id===guild.id) return { error:"Impossible de déclarer la guerre à votre propre guilde." };
+  db.diplomacy = db.diplomacy||[];
+  const existing = findDiplomacy(db, guild.id, target.id);
+  if(existing && existing.type==="war" && existing.status==="active") return { error:"Vous êtes déjà en guerre contre cette guilde." };
+  if(existing) db.diplomacy = db.diplomacy.filter(r=>r.id!==existing.id);
+  const rel = { id:"dip"+Date.now()+Math.floor(Math.random()*100000), guildA:guild.id, guildB:target.id, type:"war", status:"active", proposedBy:guild.id, createdAt: now() };
+  db.diplomacy.push(rel);
+  for(const m of target.members){
+    pushReport(db, m, { kind:"diplomacyWar", time:now(), fromGuildId:guild.id, fromGuildName:guild.name, fromGuildTag:guild.tag });
+  }
+  return { ok:true };
+}
+
+/* Annuaire léger de toutes les guildes (hors la sienne), pour permettre à un chef de guilde de
+   trouver une guilde par nom/tag et lui proposer une relation — aucune route ne l'exposait jusqu'ici. */
+function listGuildsPublic(db, username){
+  const guild = guildOf(db, username);
+  return Object.values(db.guilds)
+    .filter(g=>!guild || g.id!==guild.id)
+    .map(g=>({ id:g.id, name:g.name, tag:g.tag, memberCount:g.members.length }))
+    .sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1223,11 +1349,13 @@ function adminGiveResourcesToAll(db, wood, clay, iron){
 /*  Instantané d'état envoyé au client                                     */
 /* ---------------------------------------------------------------------- */
 
-function publicVillageView(v){
+function publicVillageView(v, db){
+  const ownerUser = v.owner!=="barbarian" ? db.users[v.owner] : null;
   return {
     id: v.id, x: v.x, y: v.y, name: v.name,
     owner: v.owner, isPlayer: v.owner!=="barbarian",
-    tier: v.tier, wallLevel: villageWall(v)
+    tier: v.tier, wallLevel: villageWall(v),
+    guildId: ownerUser ? (ownerUser.guildId||null) : null
   };
 }
 
@@ -1264,7 +1392,7 @@ function buildSnapshot(db, username){
   const v = villageByUser(db, username);
   if(!v) return null;
   const myMissions = db.missions.filter(m=>m.attackerUsername===username || (m.kind==="raid" && db.villages[m.targetId] && db.villages[m.targetId].owner===username));
-  const villages = Object.values(db.villages).map(publicVillageView);
+  const villages = Object.values(db.villages).map(v=>publicVillageView(v, db));
   const questStatus = QUESTS.map(q=>({
     key:q.key, title:q.title, desc:q.desc, icon:q.icon, reward:q.reward,
     claimed: (v.claimedQuests||[]).includes(q.key),
@@ -1344,5 +1472,6 @@ module.exports = {
   adminListMissions, adminFinishMission,
   doSendSupport, doRecallSupport, doGiveResources,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
-  doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView
+  doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
+  doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic
 };

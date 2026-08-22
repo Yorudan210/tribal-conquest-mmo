@@ -24,6 +24,7 @@ function emptyDb(){
     announcements: [],   // [{id, author, text, time}, ...] annonces admin (plus récentes en premier)
     guilds: {},           // id -> {id, name, tag, leader, members:[username,...], invites:[username,...], bank:{wood,clay,iron}, totalDonated, createdAt}
     nextGuildId: 1,
+    diplomacy: [],        // [{id, guildA, guildB, type:"pact"|"alliance"|"war", status:"pending"|"active", proposedBy, createdAt}, ...]
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
@@ -41,6 +42,7 @@ function migrateDb(){
   if(!db.announcements) db.announcements = [];
   if(!db.guilds) db.guilds = {};
   if(!db.nextGuildId) db.nextGuildId = 1;
+  if(!db.diplomacy) db.diplomacy = [];
   if(!db.settings) db.settings = {};
   if(!db.settings.speedMultiplier) db.settings.speedMultiplier = 1;
   for(const uname in db.users){
