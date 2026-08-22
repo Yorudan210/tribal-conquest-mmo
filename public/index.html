@@ -372,6 +372,9 @@
   .player-link{cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;}
   .player-link:hover{color:var(--gold);}
   #playerProfileModal:empty{display:none;}
+  #villageActionModal:empty{display:none;}
+  .village-action-card{max-width:460px;}
+  .village-action-card .send-form{border-top:none; padding-top:0; margin-top:0;}
   .player-card-actions button{width:100%;}
   .profile-village-row{width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;}
   .profile-village-row:hover{border-color:var(--gold); background:rgba(255,255,255,.06);}
@@ -471,6 +474,7 @@
 <div id="battleBanner"></div>
 <div id="tutorialModal"></div>
 <div id="playerProfileModal"></div>
+<div id="villageActionModal"></div>
 <div id="authScreen"></div>
 <div id="chatWidget"></div>
 
@@ -1237,8 +1241,8 @@ function sendMission(villageId, kind){
     if(k==="noble") n=Math.min(n,1); // un seul noble par attaque (le serveur l'impose aussi)
     if(n>0){ troops[k]=n; any=true; }
   }
-  if(!any){ toast("Sélectionnez au moins une troupe à envoyer."); return; }
-  if(kind==="scout" && !troops.scout){ toast("Une reconnaissance nécessite au moins un éclaireur."); return; }
+  if(!any){ toast("Sélectionnez au moins une troupe à envoyer."); return false; }
+  if(kind==="scout" && !troops.scout){ toast("Une reconnaissance nécessite au moins un éclaireur."); return false; }
   const target=state.villages.find(v=>v.id===villageId);
   if(kind==="support"){
     doAction(
@@ -1246,18 +1250,19 @@ function sendMission(villageId, kind){
       "🤝 Renfort envoyé"+(target?(" vers "+target.name+" ("+target.x+"|"+target.y+")"):"")+".",
       "depart"
     );
-    return;
+    return true;
   }
   doAction(
     ()=>apiCall("/api/mission","POST",{targetId:villageId, kind, troops}),
     (kind==="attack"?"⚔️ Attaque":"🔭 Reconnaissance")+" envoyée"+(target?(" vers "+target.name+" ("+target.x+"|"+target.y+")"):"")+".",
     "depart"
   );
+  return true;
 }
 
 function sendGift(villageId){
   const target=state.villages.find(v=>v.id===villageId);
-  if(!target || !target.isPlayer){ toast("Cible invalide."); return; }
+  if(!target || !target.isPlayer){ toast("Cible invalide."); return false; }
   const amt={};
   let any=false;
   for(const r of ["wood","clay","iron"]){
@@ -1267,12 +1272,13 @@ function sendGift(villageId){
     n=Math.max(0, Math.min(n, Math.floor(state.village.resources[r]||0)));
     if(n>0){ amt[r]=n; any=true; }
   }
-  if(!any){ toast("Indiquez au moins une ressource à donner."); return; }
+  if(!any){ toast("Indiquez au moins une ressource à donner."); return false; }
   doAction(
     ()=>apiCall("/api/gift","POST",{username:target.owner, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
     "🎁 Don envoyé à "+target.owner+".",
     null
   );
+  return true;
 }
 
 function commitRename(name){
@@ -1567,9 +1573,9 @@ function goToVillageOnMap(villageId){
   const t=state.villages.find(v=>v.id===villageId);
   if(!t){ toast("Village introuvable."); return; }
   activeTab="map";
-  ui.selectedVillage=villageId;
   mapView = { cx:t.x, cy:t.y, ppf:(mapView&&mapView.ppf)||26 };
-  renderTabs(); renderActiveTabContent();
+  renderTabs();
+  openVillageAction(villageId);
 }
 
 function startRenameVillage(){
@@ -1620,7 +1626,12 @@ function renderTabs(){
   if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
-  nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; renderTabs(); renderActiveTabContent(); });
+  nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    // Ferme la fenêtre de mission en changeant d'onglet : elle vit hors de #tabContent
+    // (comme la fiche joueur) et resterait sinon affichée par-dessus le nouvel onglet.
+    if(b.dataset.tab!==activeTab) closeVillageAction();
+    activeTab=b.dataset.tab; renderTabs(); renderActiveTabContent();
+  });
 }
 
 function fmtTroops(troops){
@@ -2098,30 +2109,67 @@ function renderMapToolbar(){
   </div>`;
 }
 
-function renderVillageDetail(){
+/* Fenêtre de mission (ouverte en cliquant sur un village de la carte) : regroupe attaque, reconnaissance,
+   soutien et don dans une fenêtre modale unique, sur le même principe que la fiche joueur — plutôt qu'un
+   panneau fixe sous la carte, qui obligeait à faire défiler la page et se refermait mal sur mobile. */
+function closeVillageAction(){
+  const modal=document.getElementById("villageActionModal");
+  if(modal) modal.innerHTML="";
+  if(ui.selectedVillage!=null){
+    ui.selectedVillage=null;
+    if(activeTab==="map") renderActiveTabContent();
+  }
+}
+
+function openVillageAction(villageId){
+  ui.selectedVillage=villageId;
+  if(activeTab==="map") renderActiveTabContent();
+  renderVillageActionModal();
+}
+
+function renderVillageActionModal(){
+  const modal=document.getElementById("villageActionModal");
+  if(!modal) return;
+  if(ui.selectedVillage==null){ modal.innerHTML=""; return; }
   const v=state.village;
-  if(ui.selectedVillage==null){
-    return `<p class="muted small">Cliquez sur un village de la carte pour voir ses informations et lui envoyer des troupes.</p>`;
-  }
+
   if(ui.selectedVillage==="home"){
-    return `<div class="box"><h3>🏰 ${v.name}</h3><p class="muted small">Votre village (${v.x}|${v.y}). Impossible de s'attaquer soi-même.</p></div>`;
+    modal.innerHTML = `
+      <div class="tutorial-backdrop" id="villageActionBackdrop">
+        <div class="tutorial-card village-action-card">
+          <div class="flex-between" style="align-items:flex-start;">
+            <h3 style="margin:0;">🏰 ${escapeHtml(v.name)}</h3>
+            <button id="btnCloseVillageAction" title="Fermer" style="padding:4px 8px;">✖</button>
+          </div>
+          <p class="muted small">Votre village (${v.x}|${v.y}). Impossible de s'attaquer soi-même.</p>
+        </div>
+      </div>`;
+    wireVillageActionModal();
+    return;
   }
+
   const t=state.villages.find(x=>x.id===ui.selectedVillage);
-  if(!t) return `<p class="muted small">Village introuvable.</p>`;
+  if(!t){ modal.innerHTML=""; return; }
   const dx=t.x-v.x, dy=t.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
 
   if(t.owner===username){
     const isActive = t.id===v.id;
-    return `<div class="box">
-      <div class="flex-between">
-        <h3 style="margin-bottom:0;">🚩 ${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
-        <span class="tag weak">Conquis</span>
-      </div>
-      <div class="sub small" style="margin:6px 0;">Ce village vous appartient : vous pouvez l'améliorer et y entraîner des troupes comme votre premier village (ressources et troupes qui lui sont propres).</div>
-      ${isActive
-        ? `<div class="sub small" style="margin-top:6px;"><span class="tag strong">Village actif</span> — c'est celui que vous gérez actuellement (onglets Bâtiments/Caserne).</div>`
-        : `<button data-manage-village="${t.id}">🏗️ Gérer ce village</button>`}
-    </div>`;
+    modal.innerHTML = `
+      <div class="tutorial-backdrop" id="villageActionBackdrop">
+        <div class="tutorial-card village-action-card">
+          <div class="flex-between" style="align-items:flex-start;">
+            <h3 style="margin:0;">🚩 ${escapeHtml(t.name)}</h3>
+            <button id="btnCloseVillageAction" title="Fermer" style="padding:4px 8px;">✖</button>
+          </div>
+          <div class="small muted" style="margin:2px 0 10px;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs <span class="tag weak">Conquis</span></div>
+          <p class="muted small">Ce village vous appartient : vous pouvez l'améliorer et y entraîner des troupes comme votre premier village (ressources et troupes qui lui sont propres).</p>
+          ${isActive
+            ? `<p class="sub small"><span class="tag strong">Village actif</span> — c'est celui que vous gérez actuellement (onglets Bâtiments/Caserne).</p>`
+            : `<button data-manage-village="${t.id}" class="primary">🏗️ Gérer ce village</button>`}
+        </div>
+      </div>`;
+    wireVillageActionModal();
+    return;
   }
 
   const intel = scoutIntel[t.id];
@@ -2130,7 +2178,7 @@ function renderVillageDetail(){
     : `Troupes et ressources inconnues — envoyez une reconnaissance pour les révéler.`;
 
   const ownerTag = t.isPlayer
-    ? `<span class="tag medium">Joueur : ${t.owner}</span>`
+    ? `<span class="tag medium">Joueur : ${escapeHtml(t.owner)}</span>`
     : `<span class="tag ${TIER_CLASS[t.tier]}">${TIER_LABEL[t.tier]}</span>`;
 
   const troopInputs=TROOP_ORDER.map(k=>{
@@ -2145,7 +2193,7 @@ function renderVillageDetail(){
   }).join("");
 
   const giftBox = t.isPlayer ? `
-    <div class="send-form open" style="margin-top:10px;">
+    <div class="send-form open" style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--border);">
       <div class="small muted" style="margin-bottom:6px;">🎁 Donner des ressources (immédiat, sans marchand)</div>
       <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap;">
         ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" max="${Math.floor(v.resources[r])}" value="0" id="gift_${t.id}_${r}"></div>`).join("")}
@@ -2153,20 +2201,51 @@ function renderVillageDetail(){
       <button data-gift="${t.id}">🎁 Envoyer le don</button>
     </div>` : "";
 
-  return `<div class="box">
-    <div class="flex-between">
-      <h3 style="margin-bottom:0;">${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
-      ${ownerTag}
-    </div>
-    <div class="sub small" style="margin:6px 0;">${intelLine}${t.wallLevel>0?(' · Muraille niv.'+t.wallLevel):''}</div>
-    <div class="send-form open">
-      <div class="inputs">${troopInputs}</div>
-      <button data-send="${t.id}_attack" class="primary">⚔️ Attaquer</button>
-      <button data-send="${t.id}_scout">🔭 Reconnaître</button>
-      ${t.isPlayer?`<button data-send="${t.id}_support">🤝 Envoyer en soutien</button>`:''}
-    </div>
-    ${giftBox}
-  </div>`;
+  modal.innerHTML = `
+    <div class="tutorial-backdrop" id="villageActionBackdrop">
+      <div class="tutorial-card village-action-card">
+        <div class="flex-between" style="align-items:flex-start;">
+          <h3 style="margin:0;">${escapeHtml(t.name)}</h3>
+          <button id="btnCloseVillageAction" title="Fermer" style="padding:4px 8px;">✖</button>
+        </div>
+        <div class="flex-between" style="margin:2px 0 8px;">
+          <span class="muted small">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span>
+          ${ownerTag}
+        </div>
+        <div class="sub small" style="margin-bottom:8px;">${intelLine}${t.wallLevel>0?(' · Muraille niv.'+t.wallLevel):''}</div>
+        <div class="send-form open">
+          <div class="inputs">${troopInputs}</div>
+          <button data-send="${t.id}_attack" class="primary">⚔️ Attaquer</button>
+          <button data-send="${t.id}_scout">🔭 Reconnaître</button>
+          ${t.isPlayer?`<button data-send="${t.id}_support">🤝 Envoyer en soutien</button>`:''}
+        </div>
+        ${giftBox}
+      </div>
+    </div>`;
+  wireVillageActionModal();
+}
+
+/* Câble les contrôles de la fenêtre de mission : fermeture, liens "max", envoi de troupes/don,
+   gestion du village conquis. Les mêmes gestionnaires que sendMission/sendGift/switchVillage. */
+function wireVillageActionModal(){
+  const modal=document.getElementById("villageActionModal");
+  const closeBtn=document.getElementById("btnCloseVillageAction");
+  if(closeBtn) closeBtn.onclick=closeVillageAction;
+  const backdrop=document.getElementById("villageActionBackdrop");
+  if(backdrop) backdrop.onclick=(e)=>{ if(e.target.id==="villageActionBackdrop") closeVillageAction(); };
+  modal.querySelectorAll("[data-max]").forEach(a=>a.onclick=(e)=>{
+    e.preventDefault();
+    const id="send_"+a.dataset.max;
+    const inp=document.getElementById(id);
+    inp.value=inp.max;
+  });
+  modal.querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>{
+    const idx=b.dataset.send.lastIndexOf("_");
+    const id=b.dataset.send.slice(0,idx), kind=b.dataset.send.slice(idx+1);
+    if(sendMission(id, kind)!==false) closeVillageAction();
+  });
+  modal.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ if(sendGift(b.dataset.gift)!==false) closeVillageAction(); });
+  modal.querySelectorAll("[data-manage-village]").forEach(b=>b.onclick=()=>{ closeVillageAction(); switchVillage(b.dataset.manageVillage, true); });
 }
 
 function missionMarkerPos(m){
@@ -2273,14 +2352,13 @@ function renderMap(){
     background-size:${ppf}px ${ppf}px, ${ppf}px ${ppf}px, ${ppf*10}px ${ppf*10}px, ${ppf*10}px ${ppf*10}px;`;
 
   return `<h2>Carte du monde</h2>
-    <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour l'attaquer ou le reconnaître. 👤 = village d'un autre joueur.</p>
+    <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur.</p>
     ${renderMapToolbar()}
     <div id="mapCanvas">
       <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
         ${pins}${playerPin}${markers}
       </div>
-    </div>
-    <div id="villageDetail">${renderVillageDetail()}</div>`;
+    </div>`;
 }
 
 function positionMapWorld(){
@@ -2334,9 +2412,10 @@ function attachMapHandlers(){
       const pinEl = el && el.closest ? el.closest("[data-village-pin]") : null;
       if(pinEl){
         const raw=pinEl.dataset.villagePin;
-        ui.selectedVillage = raw==="home" ? "home" : raw;
+        openVillageAction(raw==="home" ? "home" : raw);
+      } else {
+        renderActiveTabContent();
       }
-      renderActiveTabContent();
     }
   };
   canvas.onpointerup=endDrag;
@@ -2932,22 +3011,8 @@ function attachTabHandlers(){
   document.querySelectorAll("[data-village-pin]").forEach(el=>el.onclick=()=>{
     if(mapJustDragged){ mapJustDragged=false; return; }
     const raw=el.dataset.villagePin;
-    ui.selectedVillage = raw==="home" ? "home" : raw;
-    renderActiveTabContent();
+    openVillageAction(raw==="home" ? "home" : raw);
   });
-  document.querySelectorAll("[data-max]").forEach(a=>a.onclick=(e)=>{
-    e.preventDefault();
-    const id="send_"+a.dataset.max;
-    const inp=document.getElementById(id);
-    inp.value=inp.max;
-  });
-  document.querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>{
-    const idx=b.dataset.send.lastIndexOf("_");
-    const id=b.dataset.send.slice(0,idx), kind=b.dataset.send.slice(idx+1);
-    sendMission(id, kind);
-  });
-  document.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ sendGift(b.dataset.gift); });
-  document.querySelectorAll("[data-manage-village]").forEach(b=>b.onclick=()=>{ switchVillage(b.dataset.manageVillage, true); });
   document.querySelectorAll("[data-open-profile]").forEach(el=>el.onclick=(e)=>{
     e.stopPropagation();
     openPlayerProfile(el.dataset.openProfile);
