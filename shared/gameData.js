@@ -12,16 +12,16 @@
   "use strict";
 
   const BUILDINGS = {
-    hq:        {name:"Hôtel de ville", desc:"Accélère toutes les constructions du village.", baseCost:{wood:45,clay:40,iron:35}, factor:{wood:1.26,clay:1.275,iron:1.26}, baseTime:300, max:30},
-    wood:      {name:"Camp de bûcherons", desc:"Produit du bois chaque heure.", baseCost:{wood:25,clay:30,iron:20}, factor:{wood:1.25,clay:1.275,iron:1.245}, baseTime:300, max:30},
-    clay:      {name:"Carrière d'argile", desc:"Produit de l'argile chaque heure.", baseCost:{wood:33,clay:25,iron:20}, factor:{wood:1.27,clay:1.265,iron:1.24}, baseTime:300, max:30},
-    iron:      {name:"Fonderie de fer", desc:"Produit du fer chaque heure.", baseCost:{wood:38,clay:33,iron:35}, factor:{wood:1.252,clay:1.275,iron:1.24}, baseTime:360, max:30},
-    warehouse: {name:"Entrepôt", desc:"Augmente la capacité de stockage des ressources.", baseCost:{wood:30,clay:25,iron:20}, factor:{wood:1.265,clay:1.27,iron:1.245}, baseTime:340, max:30},
-    farm:      {name:"Ferme", desc:"Augmente la population maximale (troupes).", baseCost:{wood:23,clay:20,iron:15}, factor:{wood:1.3,clay:1.32,iron:1.29}, baseTime:400, max:30},
-    barracks:  {name:"Caserne", desc:"Permet d'entraîner des troupes.", baseCost:{wood:100,clay:85,iron:45}, factor:{wood:1.26,clay:1.28,iron:1.26}, baseTime:600, max:25, requires:{hq:1}},
-    wall:      {name:"Muraille", desc:"Renforce la défense du village (+5%/niveau).", baseCost:{wood:25,clay:50,iron:10}, factor:{wood:1.26,clay:1.275,iron:1.26}, baseTime:1200, max:20},
-    hide:      {name:"Cachette", desc:"Protège une partie des ressources en cas de pillage (5%/niveau).", baseCost:{wood:25,clay:30,iron:25}, factor:{wood:1.25,clay:1.25,iron:1.25}, baseTime:600, max:10},
-    academy:   {name:"Académie", desc:"Permet de former des Nobles pour conquérir des villages.", baseCost:{wood:7500,clay:12500,iron:5000}, factor:{wood:2,clay:2,iron:2}, baseTime:195600, max:1, requires:{hq:20}},
+    hq:        {name:"Hôtel de ville", desc:"Accélère toutes les constructions du village.", baseCost:{wood:90,clay:80,iron:70}, factor:{wood:1.26,clay:1.275,iron:1.26}, baseTime:900, max:30},
+    wood:      {name:"Camp de bûcherons", desc:"Produit du bois chaque heure.", baseCost:{wood:50,clay:60,iron:40}, factor:{wood:1.25,clay:1.275,iron:1.245}, baseTime:900, max:30},
+    clay:      {name:"Carrière d'argile", desc:"Produit de l'argile chaque heure.", baseCost:{wood:65,clay:50,iron:40}, factor:{wood:1.27,clay:1.265,iron:1.24}, baseTime:900, max:30},
+    iron:      {name:"Fonderie de fer", desc:"Produit du fer chaque heure.", baseCost:{wood:75,clay:65,iron:70}, factor:{wood:1.252,clay:1.275,iron:1.24}, baseTime:1080, max:30},
+    warehouse: {name:"Entrepôt", desc:"Augmente la capacité de stockage des ressources.", baseCost:{wood:60,clay:50,iron:40}, factor:{wood:1.265,clay:1.27,iron:1.245}, baseTime:1020, max:30},
+    farm:      {name:"Ferme", desc:"Augmente la population maximale (troupes).", baseCost:{wood:45,clay:40,iron:30}, factor:{wood:1.3,clay:1.32,iron:1.29}, baseTime:1200, max:30},
+    barracks:  {name:"Caserne", desc:"Permet d'entraîner des troupes.", baseCost:{wood:200,clay:170,iron:90}, factor:{wood:1.26,clay:1.28,iron:1.26}, baseTime:1800, max:25, requires:{hq:1}},
+    wall:      {name:"Muraille", desc:"Renforce la défense du village (+5%/niveau).", baseCost:{wood:50,clay:100,iron:20}, factor:{wood:1.26,clay:1.275,iron:1.26}, baseTime:3600, max:20},
+    hide:      {name:"Cachette", desc:"Protège une partie des ressources en cas de pillage (5%/niveau).", baseCost:{wood:50,clay:60,iron:50}, factor:{wood:1.25,clay:1.25,iron:1.25}, baseTime:1800, max:10},
+    academy:   {name:"Académie", desc:"Permet de former des Nobles pour conquérir des villages.", baseCost:{wood:15000,clay:25000,iron:10000}, factor:{wood:2,clay:2,iron:2}, baseTime:586800, max:1, requires:{hq:20}},
     guildHall: {name:"Hall de guilde", desc:"Permet de faire don de ressources à la guilde pour obtenir un bonus de production pour tous ses membres. Plus son niveau est élevé, plus vous pouvez donner en une fois.", baseCost:{wood:2000,clay:2000,iron:2000}, factor:{wood:1.5,clay:1.5,iron:1.5}, baseTime:3600, max:5, requires:{hq:5}}
   };
   const BUILD_ORDER = ["hq","wood","clay","iron","warehouse","farm","barracks","wall","hide","academy"];
@@ -79,7 +79,7 @@
   }
   function prodPerHour(key, level){
     if(level<=0) return 0;
-    const base={wood:90,clay:90,iron:78}[key];
+    const base={wood:30,clay:30,iron:26}[key];
     return Math.round(base*Math.pow(1.163, level-1));
   }
   function storageCap(level){ return Math.round(1000*Math.pow(1.2, Math.max(level,0)-1)); }
