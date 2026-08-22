@@ -46,6 +46,29 @@
       cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"speed", multiplier:1.50 }
   ];
 
+  /* Évènements de serveur : déclenchés depuis le panneau Admin, ils s'appliquent à TOUS les joueurs
+     (contrairement aux boosts de guilde ci-dessus, achetés par une seule guilde pour ses membres).
+     Deux familles : "instant" (effet immédiat, sans durée ni multiplicateur — ex. un cadeau de
+     ressources) et "duration" (un multiplicateur appliqué pendant X minutes, identifié par "affects"
+     pour savoir quelle formule serveur il modifie). Un seul évènement actif à la fois par valeur
+     d'"affects" : en lancer un nouveau remplace l'ancien plutôt que de cumuler les deux. */
+  const SERVER_EVENTS = [
+    { key:"resourceGift", name:"Cadeau de ressources", icon:"🎁", kind:"instant",
+      desc:"Offre immédiatement du bois, de l'argile et du fer à tous les villages actifs (dans la limite de leur entrepôt)." },
+    { key:"prodBoost", name:"Boost de production", icon:"📈", kind:"duration", affects:"production",
+      desc:"Multiplie la production de bois/argile/fer de tous les joueurs pendant la durée choisie." },
+    { key:"buildBoost", name:"Boost de construction", icon:"🏗️", kind:"duration", affects:"build",
+      desc:"Accélère la construction des bâtiments de tous les joueurs pendant la durée choisie." },
+    { key:"trainBoost", name:"Boost d'entraînement", icon:"⚔️", kind:"duration", affects:"train",
+      desc:"Accélère l'entraînement des troupes de tous les joueurs pendant la durée choisie." },
+    { key:"moveBoost", name:"Boost de déplacement", icon:"🐎", kind:"duration", affects:"move",
+      desc:"Accélère le déplacement des troupes (attaques, soutiens, retours) pendant la durée choisie." },
+    { key:"lootBoost", name:"Boost de pillage", icon:"💰", kind:"duration", affects:"loot",
+      desc:"Multiplie le butin rapporté par les attaques victorieuses pendant la durée choisie." },
+    { key:"pointsBoost", name:"Points doublés", icon:"🏆", kind:"duration", affects:"points",
+      desc:"Multiplie les points affichés au classement pendant la durée choisie." }
+  ];
+
   const TROOPS = {
     spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
     sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:20, requires:{barracks:1}},
@@ -90,7 +113,7 @@
   }
 
   return {
-    BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS,
+    BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR
   };
 });
