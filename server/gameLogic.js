@@ -86,6 +86,42 @@ function myVillages(db, username){
   return Object.values(db.villages).filter(v=>v.owner===username);
 }
 
+/* Accumule dans "acc" les niveaux de construction et les conquêtes d'UN village. Factorisé pour
+   que le score d'un seul joueur (fiche joueur) et celui de tout le monde (classement) utilisent
+   exactement le même calcul et ne puissent jamais afficher deux totaux différents. */
+function accumulateVillageScore(acc, v){
+  if(v.buildings){ for(const k in v.buildings) acc.buildingLevels += (v.buildings[k]||0); }
+  acc.conquered += (v.conqueredCount||0);
+}
+function scoreToPoints(acc){ return acc.buildingLevels*10 + acc.conquered*50; }
+
+/* Score d'UN joueur : somme des niveaux de TOUTES ses constructions (tous types confondus) sur
+   TOUS ses villages (village d'origine + conquis), plus un bonus pour les conquêtes réalisées —
+   elles aussi cumulées sur tous ses villages, et non plus seulement celles lancées depuis le
+   village d'origine comme c'était le cas avant. */
+function computePlayerScore(db, targetUsername){
+  const villages = myVillages(db, targetUsername);
+  const acc = { buildingLevels:0, conquered:0 };
+  for(const v of villages) accumulateVillageScore(acc, v);
+  return { points: scoreToPoints(acc), buildingLevels: acc.buildingLevels, conquered: acc.conquered, villageCount: villages.length };
+}
+
+/* Score de TOUS les joueurs en un seul passage sur db.villages, au lieu d'appeler
+   computePlayerScore() (qui reparcourt tout le monde) une fois par joueur — utilisé par le
+   classement, recalculé à chaque instantané envoyé à un joueur connecté (sondage toutes les 2,5s). */
+function computeAllPlayerScores(db){
+  const scores = {};
+  for(const uname in db.users) scores[uname] = { buildingLevels:0, conquered:0, villageCount:0 };
+  for(const id in db.villages){
+    const v = db.villages[id];
+    if(v.owner==="barbarian" || !scores[v.owner]) continue;
+    scores[v.owner].villageCount++;
+    accumulateVillageScore(scores[v.owner], v);
+  }
+  for(const uname in scores) scores[uname].points = scoreToPoints(scores[uname]);
+  return scores;
+}
+
 /* Change le village actuellement géré par le joueur (doit lui appartenir). */
 function doSwitchVillage(db, username, villageId){
   const u = db.users[username];
@@ -1371,7 +1407,7 @@ function publicPlayerView(db, targetUsername){
   const home = db.villages[u.villageId] || null;
   const guild = guildOf(db, targetUsername);
   const hq = home && home.buildings ? (home.buildings.hq||0) : 0;
-  const conquered = home ? (home.conqueredCount||0) : 0;
+  const score = computePlayerScore(db, targetUsername);
   const villages = myVillages(db, targetUsername)
     .map(v=>({ id:v.id, name:v.name, x:v.x, y:v.y, isHome: home ? v.id===home.id : false }))
     .sort((a,b)=> b.isHome-a.isHome || a.name.localeCompare(b.name));
@@ -1379,8 +1415,10 @@ function publicPlayerView(db, targetUsername){
     username: targetUsername,
     isAdmin: isAdminUser(db, targetUsername),
     guild: guild ? { id:guild.id, name:guild.name, tag:guild.tag, isLeader: guild.leader===targetUsername } : null,
-    points: hq*10 + conquered*50,
-    hq, conquered,
+    points: score.points,
+    buildingLevels: score.buildingLevels,
+    conquered: score.conquered,
+    hq,
     villageCount: villages.length,
     homeVillageId: home ? home.id : null,
     homeCoord: home ? (home.x+"|"+home.y) : null,
@@ -1398,12 +1436,11 @@ function buildSnapshot(db, username){
     claimed: (v.claimedQuests||[]).includes(q.key),
     met: q.check(v, db, username)
   }));
-  const leaderboard = Object.entries(db.users).map(([uname,u])=>{
-    const pv = db.villages[u.villageId];
-    if(!pv) return null;
-    const hq = pv.buildings ? pv.buildings.hq : 0;
-    const points = (hq||0)*10 + (pv.conqueredCount||0)*50;
-    return { username: uname, hq: hq||0, conquered: pv.conqueredCount||0, points };
+  const allScores = computeAllPlayerScores(db);
+  const leaderboard = Object.keys(db.users).map(uname=>{
+    const s = allScores[uname];
+    if(!s || !s.villageCount) return null; // joueur sans village (ne devrait pas arriver)
+    return { username: uname, villageCount: s.villageCount, buildingLevels: s.buildingLevels, conquered: s.conquered, points: s.points };
   }).filter(Boolean).sort((a,b)=>b.points-a.points).slice(0,20);
 
   // Renforts envoyés par ce joueur, où qu'ils soient stationnés (pour l'écran "mes soutiens" avec rappel).
