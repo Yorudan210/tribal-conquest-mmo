@@ -50,11 +50,11 @@
     spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
     sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:20, requires:{barracks:1}},
     archer:{name:"Archer", cost:{wood:100,clay:30,iron:60}, pop:1, atk:15, defInf:50, defCav:40, defArch:5,  speed:18, carry:10, baseTime:18, requires:{barracks:2}},
-    scout: {name:"Éclaireur", cost:{wood:50,clay:50,iron:20}, pop:2, atk:0,  defInf:0,  defCav:0,  defArch:0, speed:9,  carry:0,  baseTime:16, requires:{barracks:1}},
+    scout: {name:"Éclaireur", cost:{wood:50,clay:50,iron:20}, pop:2, atk:0,  defInf:2,  defCav:1,  defArch:2, speed:9,  carry:0,  baseTime:16, requires:{barracks:1}},
     light: {name:"Cavalerie légère", cost:{wood:125,clay:100,iron:250}, pop:4, atk:130, defInf:30, defCav:40, defArch:30, speed:10, carry:80, baseTime:45, requires:{barracks:3}},
-    ram:   {name:"Bélier", cost:{wood:300,clay:200,iron:200}, pop:5, atk:2, defInf:20, defCav:20, defArch:20, speed:30, carry:0, baseTime:50, requires:{barracks:6}},
-    catapult:{name:"Catapulte", cost:{wood:350,clay:300,iron:350}, pop:8, atk:35, defInf:20, defCav:15, defArch:20, speed:32, carry:0, baseTime:70, requires:{barracks:10}},
-    noble: {name:"Noble", cost:{wood:5500,clay:5500,iron:6500}, pop:10, atk:30, defInf:30, defCav:30, defArch:30, speed:35, carry:0, baseTime:180, requires:{barracks:8, academy:1}}
+    ram:   {name:"Bélier", cost:{wood:300,clay:200,iron:200}, pop:5, atk:2, defInf:20, defCav:50, defArch:20, speed:30, carry:0, baseTime:50, requires:{barracks:6}},
+    catapult:{name:"Catapulte", cost:{wood:350,clay:300,iron:350}, pop:8, atk:100, defInf:100, defCav:50, defArch:100, speed:30, carry:0, baseTime:70, requires:{barracks:10}},
+    noble: {name:"Noble", cost:{wood:5500,clay:5500,iron:6500}, pop:10, atk:30, defInf:100, defCav:50, defArch:100, speed:35, carry:0, baseTime:180, requires:{barracks:8, academy:1}}
   };
   const TROOP_ORDER = ["spear","sword","archer","scout","light","ram","catapult","noble"];
   const INFANTRY = ["spear","sword","ram","catapult","noble"];
