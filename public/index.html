@@ -491,7 +491,7 @@
 "use strict";
 
 /* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
-const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS,
+const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
         clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 /* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
@@ -1724,7 +1724,15 @@ function renderSidebar(){
       </div>
     `).join("")}</div>` : '';
 
+  const activeEvents = state.serverEvents||[];
+  const eventsBox = activeEvents.length ? `
+    <div class="box" style="border-color:var(--gold);">
+      <h3>🎉 Évènements en cours</h3>
+      ${activeEvents.map(e=>`<div class="flex-between"><span>${e.icon} ${escapeHtml(e.name)} ×${e.multiplier}</span><span>${fmtTime(e.remainingSec)}</span></div>`).join("")}
+    </div>` : '';
+
   side.innerHTML = `
+    ${eventsBox}
     ${resBox}
     <div class="box"><h3>🏗️ File de construction</h3>${bq}</div>
     <div class="box"><h3>⚔️ File d'entraînement</h3>${tq}</div>
@@ -2968,6 +2976,15 @@ function renderAdmin(){
 
   const selP = (adminPlayers||[]).find(p=>p.username===adminSelected);
 
+  const activeEvents = state.serverEvents||[];
+  const activeEventsBox = activeEvents.length ? `
+    <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+      ${activeEvents.map(e=>`<div class="flex-between" style="background:rgba(0,0,0,0.15); padding:6px 10px; border-radius:6px;">
+        <span>${e.icon} <b>${escapeHtml(e.name)}</b> ×${e.multiplier} — encore ${fmtTime(e.remainingSec)}</span>
+        <button data-stop-event="${e.id}">⏹️ Arrêter</button>
+      </div>`).join("")}
+    </div>` : `<p class="small muted">Aucun évènement actif actuellement.</p>`;
+
   return `<h2>🛠️ Panneau d'administration</h2>
   <p class="muted small">Réservé aux comptes administrateurs. Ces actions modifient directement le monde — utilisez-les avec prudence.</p>
 
@@ -2998,6 +3015,32 @@ function renderAdmin(){
       ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminGiveAll_${r}" min="0" value="0"></div>`).join("")}
       <button id="btnGiveAll" class="primary">➕ Donner à tous</button>
     </div>
+  </div>
+
+  <div class="box" style="margin-bottom:14px;">
+    <h3>🎉 Évènements du serveur</h3>
+    <p class="small muted">Lance un évènement temporaire visible par tous les joueurs (bannière + annonce automatique dans leurs rapports). Un seul évènement actif à la fois par type d'effet : en relancer un remplace celui en cours.</p>
+    ${activeEventsBox}
+    <form id="adminEventForm" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <div>
+        <label class="small muted" for="adminEventKey">Type d'évènement</label><br>
+        <select id="adminEventKey">${SERVER_EVENTS.map(e=>`<option value="${e.key}" data-kind="${e.kind}">${e.icon} ${e.name}</option>`).join("")}</select>
+      </div>
+      <div id="adminEventAmountWrap">
+        <label class="small muted">Montant (bois + argile + fer, chacun)</label><br>
+        <input type="number" id="adminEventAmount" min="1" max="1000000" value="1000">
+      </div>
+      <div id="adminEventMultWrap">
+        <label class="small muted">Multiplicateur (×)</label><br>
+        <input type="number" id="adminEventMultiplier" min="1.1" max="20" step="0.1" value="2">
+      </div>
+      <div id="adminEventMinutesWrap">
+        <label class="small muted">Durée (minutes)</label><br>
+        <input type="number" id="adminEventMinutes" min="1" max="10080" value="60">
+      </div>
+      <button type="submit" class="primary">🚀 Lancer</button>
+    </form>
+    <p class="small muted" id="adminEventDesc" style="margin-top:8px;"></p>
   </div>
 
   <div class="box" style="margin-bottom:14px;">
@@ -3094,6 +3137,44 @@ function attachAdminHandlers(){
     doAction(()=>apiCall("/api/admin/announce","POST",{text}), "📢 Annonce publiée à tous les joueurs.", null);
     inp.value="";
   };
+  const eventForm=document.getElementById("adminEventForm");
+  if(eventForm){
+    const keySel=document.getElementById("adminEventKey");
+    const amountWrap=document.getElementById("adminEventAmountWrap");
+    const multWrap=document.getElementById("adminEventMultWrap");
+    const minutesWrap=document.getElementById("adminEventMinutesWrap");
+    const descEl=document.getElementById("adminEventDesc");
+    const syncEventFormVisibility=()=>{
+      const def = SERVER_EVENTS.find(x=>x.key===keySel.value) || SERVER_EVENTS[0];
+      const isInstant = def.kind==="instant";
+      amountWrap.style.display = isInstant?"":"none";
+      multWrap.style.display = isInstant?"none":"";
+      minutesWrap.style.display = isInstant?"none":"";
+      if(descEl) descEl.textContent = def.desc;
+    };
+    keySel.onchange = syncEventFormVisibility;
+    syncEventFormVisibility();
+    eventForm.onsubmit=(e)=>{
+      e.preventDefault();
+      const key=keySel.value;
+      const def=SERVER_EVENTS.find(x=>x.key===key);
+      if(!def) return;
+      if(def.kind==="instant"){
+        const amount=Number(document.getElementById("adminEventAmount").value);
+        if(!amount || amount<=0){ toast("⚠️ Montant invalide."); return; }
+        adminAction(()=>apiCall("/api/admin/event/start","POST",{key, amount}), def.icon+" "+def.name+" envoyé à tous les joueurs.");
+      } else {
+        const multiplier=Number(document.getElementById("adminEventMultiplier").value);
+        const minutes=Number(document.getElementById("adminEventMinutes").value);
+        if(!multiplier || multiplier<=1){ toast("⚠️ Le multiplicateur doit être supérieur à 1."); return; }
+        if(!minutes || minutes<=0){ toast("⚠️ Durée invalide."); return; }
+        adminAction(()=>apiCall("/api/admin/event/start","POST",{key, multiplier, minutes}), def.icon+" "+def.name+" lancé pour "+minutes+" min.");
+      }
+    };
+  }
+  document.querySelectorAll("[data-stop-event]").forEach(b=>b.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/event/stop","POST",{id:b.dataset.stopEvent}), "Évènement arrêté.");
+  });
   const giveAllBtn=document.getElementById("btnGiveAll");
   if(giveAllBtn) giveAllBtn.onclick=()=>{
     const wood=Number(document.getElementById("adminGiveAll_wood").value)||0;
