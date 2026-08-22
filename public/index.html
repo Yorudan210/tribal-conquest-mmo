@@ -7,22 +7,23 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
 <style>
   :root{
-    --bg:#1c1712; --bg2:#2a2119; --panel:#332821; --panel2:#3d3025;
-    --border:#5a4632; --text:#eee0cc; --text-dim:#b3a188; --gold:#d9a441;
-    --green:#6fae4f; --red:#c0503f; --blue:#4f8fae;
+    --bg:#1b1d20; --bg2:#24272b; --panel:#2c3034; --panel2:#383d42;
+    --border:#565c63; --text:#ece7dd; --text-dim:#a3a8ad; --gold:#c1793e;
+    --green:#6bab5e; --red:#c15b46; --blue:#5b93b0;
     --shadow-sm:0 2px 6px rgba(0,0,0,.3);
     --shadow-md:0 4px 16px rgba(0,0,0,.35);
     --shadow-lg:0 8px 28px rgba(0,0,0,.45);
-    --ring:0 0 0 3px rgba(217,164,65,.22);
+    --ring:0 0 0 3px rgba(193,121,62,.24);
     --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
   }
   *{box-sizing:border-box;}
   body{
     margin:0; font-family:Georgia,'Times New Roman',serif; background:var(--bg);
-    color:var(--text); background-image:radial-gradient(ellipse at top, #2b2119 0%, #171310 100%);
+    color:var(--text); background-image:radial-gradient(ellipse at top, #24272b 0%, #121315 100%);
     min-height:100vh;
   }
-  #app{max-width:1200px;margin:0 auto;padding:10px 14px 40px;}
+  .app-shell{display:flex; align-items:flex-start; min-height:100vh;}
+  #app{flex:1 1 0; min-width:0; max-width:1200px; margin:0 auto; padding:10px 14px 40px;}
   h1,h2,h3{font-family:Georgia,serif;color:var(--gold);margin:0 0 8px;}
   a{color:var(--blue);}
   ::-webkit-scrollbar{width:11px; height:11px;}
@@ -30,37 +31,37 @@
   ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px; border:2px solid var(--bg2);}
   ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
   button{
-    font-family:inherit; background:linear-gradient(180deg,#4a3a28,#382c1e); color:var(--text);
+    font-family:inherit; background:linear-gradient(180deg,#41454a,#2f3337); color:var(--text);
     border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px; cursor:pointer;
     font-size:13px; font-weight:600; letter-spacing:.2px;
     box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.05);
     transition:transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
   }
   button:hover:not(:disabled){
-    background:linear-gradient(180deg,#5c4832,#42341f); border-color:var(--gold);
+    background:linear-gradient(180deg,#4d5257,#393e43); border-color:var(--gold);
     transform:translateY(-1px); box-shadow:var(--shadow-md);
   }
   button:active:not(:disabled){transform:translateY(0); box-shadow:var(--shadow-sm);}
   button:focus-visible{outline:none; box-shadow:var(--shadow-sm), var(--ring);}
   button:disabled{opacity:.4; cursor:not-allowed; transform:none;}
-  button.primary{background:linear-gradient(180deg,#8a5a24,#6b4419); border-color:var(--gold); font-weight:bold;}
+  button.primary{background:linear-gradient(180deg,#a3703c,#7d5228); border-color:var(--gold); font-weight:bold;}
   button.danger{background:linear-gradient(180deg,#7a2e24,#5c2018); border-color:#a55;}
   input[type=number]{
-    width:70px; background:#211a13; color:var(--text); border:1px solid var(--border);
+    width:70px; background:#1b1d20; color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   input[type=number]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
   input[type=text]{
-    background:#211a13; color:var(--text); border:1px solid var(--border);
+    background:#1b1d20; color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   input[type=text]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
   input[type=password]{
-    background:#211a13; color:var(--text); border:1px solid var(--border);
+    background:#1b1d20; color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit; width:100%; box-sizing:border-box;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
@@ -70,7 +71,7 @@
   #authScreen label.small{display:flex; flex-direction:column; gap:4px; color:var(--text-dim);}
   #authTabs button.ghost{background:transparent; box-shadow:none;}
   select{
-    background:#211a13;color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
+    background:#1b1d20;color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
@@ -78,7 +79,7 @@
 
   header#topbar{
     display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between;
-    background:linear-gradient(180deg, rgba(61,48,37,.94), rgba(51,40,33,.94));
+    background:linear-gradient(180deg, rgba(44,48,52,.94), rgba(36,39,43,.94));
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 18px; margin:14px 0;
     position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md);
@@ -98,17 +99,29 @@
   .btn-rename:hover{opacity:1; transform:none; background:transparent; box-shadow:none;}
   .village-title input[type=text]{font-weight:bold; color:var(--gold); padding:2px 6px; width:160px; font-size:14px;}
 
+  /* ---- Barre latérale de navigation (architecture "dashboard moderne") ---- */
+  .side-nav{
+    flex:0 0 224px; position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+    display:flex; flex-direction:column; gap:10px; padding:18px 12px 24px;
+    background:linear-gradient(180deg, rgba(44,48,52,.97), rgba(28,30,33,.97));
+    border-right:1px solid var(--border); box-shadow:var(--shadow-md); z-index:25;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px; padding:2px 6px 16px;
+    border-bottom:1px solid var(--border); margin-bottom:6px;
+  }
+  .brand svg{width:38px; height:44px; flex:0 0 auto; overflow:visible;}
+  .brand-name{font-family:Georgia,serif; color:var(--gold); font-weight:bold; font-size:14px; line-height:1.2; letter-spacing:.5px; text-transform:uppercase;}
   nav#tabs{
-    display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px;
-    background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:var(--radius-md);
-    padding:5px; box-shadow:inset 0 1px 4px rgba(0,0,0,.3);
+    display:flex; flex-direction:column; gap:3px;
   }
   nav#tabs button{
-    border-radius:var(--radius-sm); border-color:transparent; background:transparent; box-shadow:none;
-    color:var(--text-dim);
+    border-radius:var(--radius-sm); border-color:transparent; border-left:3px solid transparent; background:transparent; box-shadow:none;
+    color:var(--text-dim); text-align:left; justify-content:flex-start; display:flex; align-items:center; gap:8px;
+    padding:10px 11px; font-size:13px; width:100%;
   }
-  nav#tabs button:hover:not(.active){background:rgba(217,164,65,.1); border-color:transparent; color:var(--text); transform:none; box-shadow:none;}
-  nav#tabs button.active{background:var(--panel2); border-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
+  nav#tabs button:hover:not(.active){background:rgba(193,121,62,.12); border-color:transparent; border-left-color:transparent; color:var(--text); transform:none; box-shadow:none;}
+  nav#tabs button.active{background:var(--panel2); border-color:var(--border); border-left-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
 
   .layout{display:flex; gap:14px; align-items:flex-start;}
   main#tabContent{flex:1 1 640px; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; box-shadow:var(--shadow-md);}
@@ -126,8 +139,8 @@
   .village-svg{width:100%; height:100%; display:block;}
   .plot{cursor:pointer;}
   .plot .groundmark{ fill:rgba(0,0,0,.3); transition:fill .15s, filter .15s; }
-  .plot:hover .groundmark{ fill:rgba(217,164,65,.22); }
-  .plot.selected .groundmark{ fill:rgba(217,164,65,.4); filter:drop-shadow(0 0 8px rgba(217,164,65,.8)); }
+  .plot:hover .groundmark{ fill:rgba(193,121,62,.22); }
+  .plot.selected .groundmark{ fill:rgba(193,121,62,.4); filter:drop-shadow(0 0 8px rgba(193,121,62,.8)); }
   .plot .art{ transition:filter .15s; }
   .plot:hover .art{ filter:brightness(1.14); }
   .plot .empty-art{ filter:grayscale(85%) brightness(.8); opacity:.6; }
@@ -139,7 +152,7 @@
   .dirt-path{ stroke:#8a6a3f; stroke-width:13; stroke-linecap:round; opacity:.45; }
   .wall-ring{ cursor:pointer; transition:filter .15s; }
   .wall-ring:hover{ filter:brightness(1.08); }
-  .wall-ring.selected{ filter:drop-shadow(0 0 12px rgba(217,164,65,.7)); }
+  .wall-ring.selected{ filter:drop-shadow(0 0 12px rgba(193,121,62,.7)); }
   @keyframes bounce{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
   .building-detail{ display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
   .building-detail .icon-big{ width:78px; height:78px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--gold); border-radius:var(--radius-md); flex:0 0 auto; padding:6px; box-shadow:var(--shadow-sm);}
@@ -164,7 +177,7 @@
   }
   .queue-item:hover, .mission-item:hover{background:rgba(0,0,0,.14);}
   .queue-item:last-child, .mission-item:last-child{border-bottom:none;}
-  .bar-bg{background:#211a13; border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .bar-bg{background:#1b1d20; border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
   .bar-fill{background:linear-gradient(90deg, var(--green), #8fd06a); height:100%; transition:width .2s ease;}
   .troop-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
   .troop-row:hover{background:rgba(0,0,0,.14);}
@@ -272,15 +285,25 @@
   #battleBanner.defeat{ border-color:var(--red); }
   #battleBanner.raid{ border-color:#7a3fae; }
   #battleBanner.conquest{ border-color:var(--gold); background:linear-gradient(#4a3a1a,#3d2e1e); animation:conquestGlow 2.4s ease; }
-  @keyframes conquestGlow{ 0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.6);} 50%{box-shadow:0 6px 34px rgba(217,164,65,.75);} }
+  @keyframes conquestGlow{ 0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.6);} 50%{box-shadow:0 6px 34px rgba(193,121,62,.75);} }
   .sparkle{ font-size:26px; animation:sparklePop 1.4s ease-out forwards; }
   @keyframes sparklePop{ 0%{opacity:0; transform:translateY(0) scale(.6);} 30%{opacity:1; transform:translateY(-10px) scale(1.25);} 100%{opacity:0; transform:translateY(-42px) scale(.9);} }
   #btnMute{font-size:15px;}
   @media(max-width:820px){
+    .app-shell{flex-direction:column;}
+    .side-nav{
+      position:relative; top:auto; height:auto; width:100%; flex-direction:row; align-items:center;
+      border-right:none; border-bottom:1px solid var(--border); overflow-x:hidden; overflow-y:visible;
+      padding:10px 12px; gap:12px;
+    }
+    .brand{border-bottom:none; padding:2px 0; margin:0; flex:0 0 auto;}
+    .brand-name{display:none;}
+    nav#tabs{flex:1 1 0; min-width:0; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;}
+    nav#tabs button{white-space:nowrap; flex:0 0 auto; width:auto; border-left:none; border-bottom:3px solid transparent;}
+    nav#tabs button.active{border-left-color:transparent; border-bottom-color:var(--gold);}
+    #app{max-width:100%;}
     .layout{flex-direction:column;}
     aside#sidebar{flex:1 1 auto; width:100%;}
-    nav#tabs{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;}
-    nav#tabs button{white-space:nowrap; flex:0 0 auto;}
     main#tabContent{padding:12px;}
     .troop-row{flex-wrap:wrap; row-gap:6px;}
     .troop-row .tname{width:auto; flex:1 1 100%;}
@@ -356,30 +379,45 @@
     background:var(--panel2); border-bottom:1px solid var(--border); font-weight:bold; color:var(--gold);
   }
   .chat-head .chat-toggle{background:transparent; border:none; box-shadow:none; padding:2px 6px; font-size:12px;}
-  .chat-head .chat-toggle:hover{background:rgba(217,164,65,.15); transform:none; box-shadow:none;}
+  .chat-head .chat-toggle:hover{background:rgba(193,121,62,.15); transform:none; box-shadow:none;}
   .chat-messages{max-height:240px; min-height:120px; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:6px;}
   .chat-msg{font-size:12px; line-height:1.4; word-break:break-word;}
   .chat-msg .chat-user{font-weight:bold; color:var(--gold); margin-right:6px;}
   .chat-msg.me .chat-user{color:var(--green);}
   .chat-form{display:flex; border-top:1px solid var(--border);}
-  .chat-form input{flex:1; border:none; border-radius:0; background:#211a13; padding:8px 10px; box-shadow:none;}
+  .chat-form input{flex:1; border:none; border-radius:0; background:#1b1d20; padding:8px 10px; box-shadow:none;}
   .chat-form button{border:none; border-radius:0; box-shadow:none; background:var(--panel2); padding:8px 12px;}
   @media(max-width:480px){ #chatWidget{left:8px; bottom:8px;} .chat-panel{width:calc(100vw - 16px);} }
 
   /* ---- Panneau Admin ---- */
-  #tabContent tr.admin-selected{background:rgba(217,164,65,.16);}
+  #tabContent tr.admin-selected{background:rgba(193,121,62,.16);}
   #tabContent tr[data-admin-select]{cursor:pointer;}
 </style>
 </head>
 <body>
-<div id="app">
-  <header id="topbar"></header>
-  <nav id="tabs"></nav>
-  <div class="layout">
-    <main id="tabContent"></main>
-    <aside id="sidebar"></aside>
+<div class="app-shell">
+  <aside class="side-nav">
+    <div class="brand">
+      <svg viewBox="0 0 64 76" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 3 L59 13 L59 37 C59 59 46 69 32 75 C18 69 5 59 5 37 L5 13 Z" fill="var(--panel2)" stroke="var(--gold)" stroke-width="3"/>
+        <line x1="30" y1="28" x2="30" y2="11" stroke="var(--gold)" stroke-width="2"/>
+        <polygon points="30,11 45,16.5 30,22" fill="var(--red)"/>
+        <polygon points="19,40 19,32 23,32 23,28 27,28 27,32 33,32 33,28 37,28 37,32 41,32 41,40" fill="var(--gold)"/>
+        <rect x="19" y="40" width="22" height="22" fill="var(--gold)"/>
+        <rect x="26" y="52" width="8" height="10" fill="var(--panel2)"/>
+      </svg>
+      <span class="brand-name">Conquête<br>Tribale</span>
+    </div>
+    <nav id="tabs"></nav>
+  </aside>
+  <div id="app">
+    <header id="topbar"></header>
+    <div class="layout">
+      <main id="tabContent"></main>
+      <aside id="sidebar"></aside>
+    </div>
+    <footer>Conquête Tribale — monde partagé en temps réel. Votre progression est sauvegardée automatiquement sur le serveur.</footer>
   </div>
-  <footer>Conquête Tribale — monde partagé en temps réel. Votre progression est sauvegardée automatiquement sur le serveur.</footer>
 </div>
 <div id="toasts"></div>
 <div id="battleBanner"></div>
@@ -1158,7 +1196,17 @@ function renderAuthScreen(mode, errorMsg){
   const el=document.getElementById("authScreen");
   el.innerHTML = `
     <div class="box" style="max-width:380px; margin:80px auto; text-align:center;">
-      <h2>🏰 Conquête Tribale</h2>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:6px;">
+        <svg viewBox="0 0 64 76" width="64" height="76" xmlns="http://www.w3.org/2000/svg">
+          <path d="M32 3 L59 13 L59 37 C59 59 46 69 32 75 C18 69 5 59 5 37 L5 13 Z" fill="var(--panel2)" stroke="var(--gold)" stroke-width="3"/>
+          <line x1="30" y1="28" x2="30" y2="11" stroke="var(--gold)" stroke-width="2"/>
+          <polygon points="30,11 45,16.5 30,22" fill="var(--red)"/>
+          <polygon points="19,40 19,32 23,32 23,28 27,28 27,32 33,32 33,28 37,28 37,32 41,32 41,40" fill="var(--gold)"/>
+          <rect x="19" y="40" width="22" height="22" fill="var(--gold)"/>
+          <rect x="26" y="52" width="8" height="10" fill="var(--panel2)"/>
+        </svg>
+        <h2 style="text-transform:uppercase; letter-spacing:1px; margin:0;">Conquête Tribale</h2>
+      </div>
       <p class="muted small">Un monde partagé, en temps réel, avec de vrais joueurs. Connectez-vous ou créez un compte pour rejoindre la partie.</p>
       <div style="display:flex; gap:8px; justify-content:center; margin:14px 0;">
         <button id="authTabLogin" class="${mode==='login'?'primary':''}">Connexion</button>
@@ -1205,7 +1253,7 @@ function enterGame(data){
   localStorage.setItem("ct_username", username);
   applySnapshot(data.snapshot);
   document.getElementById("authScreen").innerHTML="";
-  document.getElementById("app").style.display="";
+  document.querySelector(".app-shell").style.display="";
   renderAll();
   startPolling();
   if(!localStorage.getItem("ct_tutorial_"+username)) renderTutorial();
@@ -1220,7 +1268,7 @@ function logout(silent){
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
-  document.getElementById("app").style.display="none";
+  document.querySelector(".app-shell").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
   document.getElementById("chatWidget").innerHTML="";
   renderAuthScreen("login", silent?"Session expirée, reconnectez-vous.":"");
@@ -1823,7 +1871,7 @@ function renderBarracks(){
 
 function renderLeaderboard(){
   const rows = state.leaderboard.map((p,i)=>`
-    <tr style="${p.username===username?'background:rgba(217,164,65,0.14);':''}">
+    <tr style="${p.username===username?'background:rgba(193,121,62,0.14);':''}">
       <td>${i+1}</td>
       <td class="player-link" data-open-profile="${escapeHtml(p.username)}">${escapeHtml(p.username)}${p.username===username?' (vous)':''}</td>
       <td>${p.hq}</td>
@@ -2753,7 +2801,7 @@ function renderAll(){
 }
 
 function start(){
-  document.getElementById("app").style.display="none";
+  document.querySelector(".app-shell").style.display="none";
   window.addEventListener("resize", ()=>{ if(activeTab==="map") positionMapWorld(); });
   tryResumeSession();
 }
