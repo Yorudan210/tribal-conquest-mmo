@@ -28,6 +28,24 @@
   // Le Hall de guilde n'est volontairement PAS dans BUILD_ORDER : il n'a pas d'emplacement dans la
   // scène du village (octogone de bâtiments déjà plein) et se construit depuis l'onglet Guilde.
 
+  /* Boutique de guilde : bonus temporaires achetés avec les ressources de la BANQUE de guilde
+     (alimentée par les dons), et qui profitent à TOUS les membres pendant leur durée. Partagé entre
+     serveur (application des effets) et client (affichage du catalogue et des coûts). */
+  const GUILD_BOOSTS = [
+    { key:"prod20", name:"Élan économique", icon:"📈",
+      desc:"+20% de production de ressources pour toute la guilde pendant 1h.",
+      cost:{wood:3000,clay:3000,iron:3000}, durationSec:3600, type:"production", multiplier:1.20 },
+    { key:"prod50", name:"Âge d'or", icon:"✨",
+      desc:"+50% de production de ressources pour toute la guilde pendant 30 min.",
+      cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"production", multiplier:1.50 },
+    { key:"speed20", name:"Effort de guerre", icon:"⚙️",
+      desc:"+20% de vitesse de construction et d'entraînement pour toute la guilde pendant 1h.",
+      cost:{wood:3000,clay:3000,iron:3000}, durationSec:3600, type:"speed", multiplier:1.20 },
+    { key:"speed50", name:"Mobilisation générale", icon:"🚀",
+      desc:"+50% de vitesse de construction et d'entraînement pour toute la guilde pendant 30 min.",
+      cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"speed", multiplier:1.50 }
+  ];
+
   const TROOPS = {
     spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
     sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:20, requires:{barracks:1}},
@@ -72,7 +90,7 @@
   }
 
   return {
-    BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS,
+    BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR
   };
 });
