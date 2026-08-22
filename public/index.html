@@ -1532,7 +1532,7 @@ function renderPlayerProfile(p){
         </div>
         <div class="small muted" style="margin:10px 0; line-height:1.6;">
           👥 ${p.guild ? `Guilde : [${escapeHtml(p.guild.tag)}] ${escapeHtml(p.guild.name)}${p.guild.isLeader?' (chef)':''}` : "Aucune guilde"}<br>
-          🏆 Points : ${p.points} (Hôtel de ville niv. ${p.hq}, ${p.conquered} village${p.conquered>1?'s':''} conquis)<br>
+          🏆 Points : ${p.points} (niveau total des constructions ${p.buildingLevels} sur ${p.villageCount} village${p.villageCount>1?'s':''}, Hôtel de ville capitale niv. ${p.hq}, ${p.conquered} conquête${p.conquered>1?'s':''})<br>
           🏰 ${p.villageCount} village${p.villageCount>1?'s':''}${p.homeCoord?(' · capitale à '+p.homeCoord):''}
         </div>
         ${(p.villages&&p.villages.length) ? `
@@ -2097,15 +2097,16 @@ function renderLeaderboard(){
     <tr style="${p.username===username?'background:rgba(193,121,62,0.14);':''}">
       <td>${i+1}</td>
       <td class="player-link" data-open-profile="${escapeHtml(p.username)}">${escapeHtml(p.username)}${p.username===username?' (vous)':''}</td>
-      <td>${p.hq}</td>
+      <td>${p.villageCount}</td>
+      <td>${p.buildingLevels}</td>
       <td>${p.conquered}</td>
       <td>${p.points}</td>
     </tr>`).join("");
   return `<h2>🏆 Classement</h2>
-    <p class="muted small">Les meilleurs joueurs du monde, classés par points (niveau d'Hôtel de ville ×10 + villages conquis ×50).</p>
+    <p class="muted small">Les meilleurs joueurs du monde, classés par points (somme des niveaux de TOUTES les constructions sur TOUS les villages possédés ×10 + conquêtes réalisées ×50).</p>
     <div class="box"><table style="width:100%; border-collapse:collapse;">
-      <thead><tr><th>#</th><th>Joueur</th><th>Hôtel de ville</th><th>Conquis</th><th>Points</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" class="muted">Aucun joueur pour l’instant.</td></tr>'}</tbody>
+      <thead><tr><th>#</th><th>Joueur</th><th>Villages</th><th>Niveau total des constructions</th><th>Conquêtes</th><th>Points</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">Aucun joueur pour l’instant.</td></tr>'}</tbody>
     </table></div>`;
 }
 
