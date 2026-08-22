@@ -1,6 +1,6 @@
 "use strict";
 const GameData = require("../shared/gameData.js");
-const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, clamp,
+const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS, clamp,
         buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
@@ -10,6 +10,39 @@ function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles
    d'entraînement déjà en cours (recalées par adminSetSpeed) et nouvelles files. */
 function getSpeedMultiplier(db){
   return (db.settings && db.settings.speedMultiplier) || 1;
+}
+
+/* ------------------------------------------------------------------------ */
+/*  Évènements de serveur (panneau Admin) : boosts temporaires visibles et    */
+/*  appliqués à TOUS les joueurs (contrairement aux boosts de guilde, propres */
+/*  à une seule guilde). Voir SERVER_EVENTS dans shared/gameData.js.          */
+/* ------------------------------------------------------------------------ */
+
+function pruneServerEvents(db){
+  const t = now();
+  db.serverEvents = (db.serverEvents||[]).filter(e=>e.endAt>t);
+}
+
+/* Multiplicateur cumulé de tous les évènements actifs affectant "affects" (ex. "production",
+   "build", "train", "move", "loot", "points"). 1 s'il n'y en a aucun. En pratique un seul
+   évènement par "affects" peut être actif à la fois (adminStartServerEvent remplace l'ancien),
+   mais la boucle reste robuste si jamais plusieurs coexistaient. */
+function serverEventMultiplier(db, affects){
+  pruneServerEvents(db);
+  let mult = 1;
+  for(const e of db.serverEvents) if(e.affects===affects) mult *= e.multiplier;
+  return mult;
+}
+
+/* Vue publique des évènements actifs (envoyée dans chaque instantané, à tous les joueurs — pas
+   seulement aux admins — pour afficher une bannière "Boost de production x2, encore 12 min"). */
+function publicServerEvents(db){
+  pruneServerEvents(db);
+  const t = now();
+  return db.serverEvents.map(e=>({
+    id:e.id, key:e.key, name:e.name, icon:e.icon, affects:e.affects, multiplier:e.multiplier,
+    remainingSec: Math.max(0, Math.round(e.endAt-t))
+  }));
 }
 
 // Nombre maximum de nobles vivants qu'un même village peut entretenir à la fois.
@@ -93,7 +126,9 @@ function accumulateVillageScore(acc, v){
   if(v.buildings){ for(const k in v.buildings) acc.buildingLevels += (v.buildings[k]||0); }
   acc.conquered += (v.conqueredCount||0);
 }
-function scoreToPoints(acc){ return acc.buildingLevels*10 + acc.conquered*50; }
+// mult : multiplicateur de l'évènement "pointsBoost" éventuellement actif (voir serverEventMultiplier),
+// appliqué au TOTAL affiché plutôt qu'aux accumulateurs bruts, pour ne jamais fausser buildingLevels/conquered.
+function scoreToPoints(acc, mult){ return Math.round((acc.buildingLevels*10 + acc.conquered*50)*(mult||1)); }
 
 /* Score d'UN joueur : somme des niveaux de TOUTES ses constructions (tous types confondus) sur
    TOUS ses villages (village d'origine + conquis), plus un bonus pour les conquêtes réalisées —
@@ -103,7 +138,8 @@ function computePlayerScore(db, targetUsername){
   const villages = myVillages(db, targetUsername);
   const acc = { buildingLevels:0, conquered:0 };
   for(const v of villages) accumulateVillageScore(acc, v);
-  return { points: scoreToPoints(acc), buildingLevels: acc.buildingLevels, conquered: acc.conquered, villageCount: villages.length };
+  const mult = serverEventMultiplier(db, "points");
+  return { points: scoreToPoints(acc, mult), buildingLevels: acc.buildingLevels, conquered: acc.conquered, villageCount: villages.length };
 }
 
 /* Score de TOUS les joueurs en un seul passage sur db.villages, au lieu d'appeler
@@ -118,7 +154,8 @@ function computeAllPlayerScores(db){
     scores[v.owner].villageCount++;
     accumulateVillageScore(scores[v.owner], v);
   }
-  for(const uname in scores) scores[uname].points = scoreToPoints(scores[uname]);
+  const mult = serverEventMultiplier(db, "points");
+  for(const uname in scores) scores[uname].points = scoreToPoints(scores[uname], mult);
   return scores;
 }
 
@@ -154,7 +191,7 @@ function doBuild(db, username, key){
   const cost = buildCost(key, nextLevel);
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed");
+  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") / serverEventMultiplier(db, "build");
   // Une seule construction est réellement en cours à la fois dans le village (peu importe le
   // bâtiment) : chaque nouvel ordre démarre à la fin du DERNIER de toute la file, jamais
   // immédiatement. Avant ce correctif, deux bâtiments DIFFÉRENTS démarraient tous les deux à
@@ -220,7 +257,7 @@ function doTrain(db, username, key, count){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") / serverEventMultiplier(db, "train") });
   return { ok: true };
 }
 
@@ -251,7 +288,7 @@ function doMission(db, username, targetId, kind, troopsWanted){
   if(kind==="scout" && !troops.scout) return { error: "Une reconnaissance nécessite au moins un éclaireur." };
   for(const k in troops) v.troops[k]-=troops[k];
   const dx=target.x-v.x, dy=target.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
-  const travel = Math.max(4, Math.round(dist*maxSpeed));
+  const travel = Math.max(4, Math.round(dist*maxSpeed/serverEventMultiplier(db,"move")));
   const t = now();
   const mission = {
     id: "m"+Date.now()+Math.floor(Math.random()*100000),
@@ -284,7 +321,7 @@ function doSendSupport(db, username, targetId, troopsWanted){
   if(!any) return { error: "Sélectionnez au moins une troupe à envoyer." };
   for(const k in troops) v.troops[k]-=troops[k];
   const dx=target.x-v.x, dy=target.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
-  const travel = Math.max(4, Math.round(dist*maxSpeed));
+  const travel = Math.max(4, Math.round(dist*maxSpeed/serverEventMultiplier(db,"move")));
   const t = now();
   db.missions.push({
     id: "sp"+Date.now()+Math.floor(Math.random()*100000),
@@ -314,7 +351,7 @@ function doRecallSupport(db, username, supportId){
   const dx=homeVillage.x-hostVillage.x, dy=homeVillage.y-hostVillage.y, dist=Math.sqrt(dx*dx+dy*dy);
   let maxSpeed=0;
   for(const k in entry.troops) if(entry.troops[k]>0) maxSpeed=Math.max(maxSpeed, TROOPS[k].speed);
-  const travel = Math.max(4, Math.round(dist*maxSpeed));
+  const travel = Math.max(4, Math.round(dist*maxSpeed/serverEventMultiplier(db,"move")));
   const t = now();
   db.missions.push({
     id: "spr"+Date.now()+Math.floor(Math.random()*100000),
@@ -563,6 +600,7 @@ function resolveAttack(db, m){
   if(winner==="attacker" && target.owner!==m.attackerUsername){
     let carryCap=0;
     for(const k in m.troops) carryCap+=m.troops[k]*TROOPS[k].carry;
+    carryCap *= serverEventMultiplier(db, "loot");
     const protectedFrac=clamp(villageHide(target)*0.05,0,0.7);
     const avail={
       wood:target.resources.wood*(1-protectedFrac),
@@ -688,8 +726,9 @@ function runTick(db){
     const guild = guildOf(db, v.owner);
     const guildMult = guildBonusMultiplier(guild);
     const guildProdBoostMult = guildBoostMultiplier(guild, "production");
+    const eventProdMult = serverEventMultiplier(db, "production");
     for(const r of ["wood","clay","iron"]){
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -710,7 +749,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "speed"); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "speed") / serverEventMultiplier(db, "train"); }
       } else break;
     }
   }
@@ -1322,6 +1361,65 @@ function adminSetSpeed(db, multiplier){
   return { ok:true };
 }
 
+function adminListServerEvents(db){
+  return publicServerEvents(db);
+}
+
+/* Lance (ou remplace) un évènement de serveur visible et appliqué à TOUS les joueurs. Les paramètres
+   attendus dans "opts" dépendent du type (voir SERVER_EVENTS dans shared/gameData.js) :
+   - kind "instant" (ex. resourceGift) : opts.amount — quantité de bois/argile/fer offerte à chaque
+     village actif (plafonnée à la capacité de son entrepôt, comme la production normale).
+   - kind "duration" (les boosts de vitesse/production/butin/points) : opts.multiplier (>1 et <=20)
+     et opts.minutes (durée, jusqu'à 7 jours). */
+function adminStartServerEvent(db, key, opts){
+  const def = SERVER_EVENTS.find(e=>e.key===String(key));
+  if(!def) return { error:"Type d'évènement inconnu." };
+  opts = opts||{};
+
+  if(def.kind==="instant"){
+    const amount = Math.floor(Number(opts.amount));
+    if(!Number.isFinite(amount) || amount<=0 || amount>1000000) return { error:"Montant invalide (doit être entre 1 et 1 000 000)." };
+    let affected=0;
+    for(const id in db.villages){
+      const v = db.villages[id];
+      if(!v.owner || v.owner==="barbarian") continue;
+      const cap = storageCap(v.buildings.warehouse||0);
+      for(const r of ["wood","clay","iron"]){
+        const upperBound = Math.max(cap, v.resources[r]||0);
+        v.resources[r] = clamp((v.resources[r]||0)+amount, 0, upperBound);
+      }
+      affected++;
+    }
+    adminAnnounce(db, "Système", def.icon+" Évènement : "+def.name+" — chaque village actif reçoit "+amount+" de bois, d'argile et de fer !");
+    return { ok:true, affected };
+  }
+
+  const minutes = Math.floor(Number(opts.minutes));
+  const multiplier = Number(opts.multiplier);
+  if(!Number.isFinite(minutes) || minutes<=0 || minutes>10080) return { error:"Durée invalide (doit être entre 1 et 10 080 minutes, soit 7 jours)." };
+  if(!Number.isFinite(multiplier) || multiplier<=1 || multiplier>20) return { error:"Multiplicateur invalide (doit être strictement supérieur à 1, et au plus 20)." };
+  pruneServerEvents(db);
+  // Un seul évènement actif à la fois par catégorie ("affects") : en lancer un nouveau remplace
+  // silencieusement l'ancien plutôt que de cumuler deux multiplicateurs qu'un admin pourrait oublier.
+  db.serverEvents = db.serverEvents.filter(e=>e.affects!==def.affects);
+  const event = {
+    id:"ev"+Date.now()+Math.floor(Math.random()*100000),
+    key:def.key, name:def.name, icon:def.icon, affects:def.affects,
+    multiplier, startAt: now(), endAt: now()+minutes*60
+  };
+  db.serverEvents.push(event);
+  adminAnnounce(db, "Système", def.icon+" Évènement : "+def.name+" ×"+multiplier+" pendant "+minutes+" min !");
+  return { ok:true, event };
+}
+
+function adminStopServerEvent(db, id){
+  pruneServerEvents(db);
+  const before = db.serverEvents.length;
+  db.serverEvents = db.serverEvents.filter(e=>e.id!==String(id));
+  if(db.serverEvents.length===before) return { error:"Évènement introuvable ou déjà terminé." };
+  return { ok:true };
+}
+
 function adminAnnounce(db, authorUsername, text){
   text = String(text||"").trim();
   if(!text) return { error:"Le message d'annonce ne peut pas être vide." };
@@ -1493,6 +1591,7 @@ function buildSnapshot(db, username){
     chat: chatGlobal,
     guildChat: chatGuild,
     speedMultiplier: getSpeedMultiplier(db),
+    serverEvents: publicServerEvents(db),
     mySupport,
     guild: guild ? publicGuildView(db, guild, username) : null,
     guildInvites
@@ -1507,6 +1606,7 @@ module.exports = {
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
   adminListMissions, adminFinishMission,
+  adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
   doSendSupport, doRecallSupport, doGiveResources,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,

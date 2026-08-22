@@ -412,6 +412,20 @@ async function handleApi(req, res, pathname, url){
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, players: game.adminListPlayers(db), speedMultiplier: game.getSpeedMultiplier(db), snapshot: game.buildSnapshot(db, username) });
     }
+    if(pathname==="/api/admin/event/start" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminStartServerEvent(db, String(body.key||""), body);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/event/stop" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminStopServerEvent(db, String(body.id||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+    }
     return sendJson(res, 404, { error:"Route Admin inconnue." });
   }
 
