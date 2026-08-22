@@ -207,6 +207,9 @@
   .tag.weak{background:#2c4a22;color:#a8d98a;}
   .tag.medium{background:#4a3f22;color:#e0c98a;}
   .tag.strong{background:#4a2222;color:#e0a0a0;}
+  .tag.ally{background:#1f4a3a;color:#8ad9c0;}
+  .tag.pact{background:#22384a;color:#8ac0e0;}
+  .tag.war{background:#4a2222;color:#e0a0a0;}
   .send-form{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none;}
   .send-form.open{display:block; animation:fadeSlideIn .2s ease;}
   @keyframes fadeSlideIn{ 0%{opacity:0; transform:translateY(-4px);} 100%{opacity:1; transform:translateY(0);} }
@@ -237,6 +240,9 @@
   .villagePin.weak .dot{background:#4d7a37;}
   .villagePin.medium .dot{background:#9a7526;}
   .villagePin.strong .dot{background:#8a3226;}
+  .villagePin.ally .dot{background:#2c6a4a; border-color:#8ad9c0;}
+  .villagePin.pact .dot{background:#22506a; border-color:#8ac0e0;}
+  .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
   .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
   .villagePin .plabel{
@@ -1040,6 +1046,8 @@ let adminMissions = null;    // liste des missions en cours (panneau Admin), cha
 let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des joueurs)
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
+let guildDirectory = null;   // annuaire des autres guildes (onglet Guilde, diplomatie), chargé à la demande
+let guildDiplomacyForm = null; // {guildId, type} — sélection en cours dans le formulaire "Proposer une relation"
 // Sur petit écran, le panneau de chat ouvert occupe une bonne partie de l'écran et bloque le reste
 // de l'interface en dessous (boutons, tableaux...) : il démarre donc réduit (bulle) sur mobile,
 // et ouvert sur desktop où il ne gêne qu'un coin de l'écran.
@@ -1055,6 +1063,7 @@ const REPORT_FILTERS = [
   {key:"support", label:"🤝 Soutien", kinds:["supportIn","supportOut"]},
   {key:"gift", label:"🎁 Dons", kinds:["giftIn","giftOut"]},
   {key:"guildInvite", label:"👥 Guilde"},
+  {key:"diplomacy", label:"🕊️ Diplomatie", kinds:["diplomacyProposal","diplomacyAccepted","diplomacyDeclined","diplomacyEnded","diplomacyWar"]},
   {key:"announcement", label:"📢 Annonces"}
 ];
 function reportMatchesFilter(r, f){ return f.kinds ? f.kinds.includes(r.kind) : r.kind===f.key; }
@@ -1193,6 +1202,16 @@ async function refreshAdminData(){
     adminMissions = data.missions;
     adminSpeed = data.speedMultiplier||1;
     if(activeTab==="admin") renderActiveTabContent();
+  }catch(err){ toast("⚠️ "+err.message); }
+}
+
+/* Annuaire des autres guildes (pour proposer une relation diplomatique), chargé à la demande
+   uniquement pour le chef de guilde — les autres membres ne peuvent pas proposer de relation. */
+async function refreshGuildDirectory(){
+  try{
+    const data = await apiCall("/api/guilds","GET");
+    guildDirectory = data.guilds;
+    if(activeTab==="guild") renderActiveTabContent();
   }catch(err){ toast("⚠️ "+err.message); }
 }
 
@@ -1409,6 +1428,7 @@ function logout(silent){
   stopPolling();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
+  guildDirectory=null; guildDiplomacyForm=null;
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("gameRoot").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
@@ -1831,7 +1851,10 @@ function renderActiveTabContent(){
   else main.innerHTML=renderHelp();
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); attachMapHandlers(); }
-  if(activeTab==="guild") attachGuildHandlers();
+  if(activeTab==="guild"){
+    attachGuildHandlers();
+    if(state.guild && state.guild.isLeader && !guildDirectory) refreshGuildDirectory();
+  }
   if(activeTab==="admin" && state.isAdmin){
     attachAdminHandlers();
     if(!adminPlayers) refreshAdminData();
@@ -2088,6 +2111,19 @@ function renderLeaderboard(){
 
 const TIER_CLASS=["weak","weak","medium","strong","strong"];
 const TIER_LABEL=["Très faible","Faible","Moyen","Fort","Très fort"];
+const DIPLOMACY_LABEL={pact:"Pacte de non-agression", alliance:"Alliance", war:"Guerre"};
+const DIPLOMACY_LABEL_LOWER={pact:"un pacte de non-agression", alliance:"une alliance", war:"un état de guerre"};
+
+/* Relation active de NOTRE guilde avec la guilde propriétaire d'un village (pour la couleur des
+   pins sur la carte et l'avertissement avant d'attaquer). Renvoie null si sans guilde, village
+   sans guilde, ou relation non active (une proposition en attente ne compte pas encore). */
+function guildRelationFor(guildId){
+  if(!guildId || !state.guild || !state.guild.diplomacy) return null;
+  const rel = state.guild.diplomacy.find(r=>r.status==="active" && r.otherGuild.id===guildId);
+  if(!rel) return null;
+  const cls = rel.type==="war" ? "war" : (rel.type==="alliance" ? "ally" : "pact");
+  return { type:rel.type, cls, label: DIPLOMACY_LABEL[rel.type] };
+}
 
 
 function renderMapToolbar(){
@@ -2177,9 +2213,13 @@ function renderVillageActionModal(){
     ? `Vue lors d'une reconnaissance il y a ${fmtTime(Math.max(0,estimateNow()-intel.time))} : lanciers ${intel.troops.spear||0} · épéistes ${intel.troops.sword||0} · archers ${intel.troops.archer||0}${intel.loyalty!=null?(' · Loyauté '+Math.round(intel.loyalty)+'%'):''} — 🪵${fmt(intel.resources.wood)} 🧱${fmt(intel.resources.clay)} ⛏️${fmt(intel.resources.iron)}`
     : `Troupes et ressources inconnues — envoyez une reconnaissance pour les révéler.`;
 
+  const rel = t.isPlayer ? guildRelationFor(t.guildId) : null;
   const ownerTag = t.isPlayer
-    ? `<span class="tag medium">Joueur : ${escapeHtml(t.owner)}</span>`
+    ? `<span class="tag ${rel?rel.cls:'medium'}">Joueur : ${escapeHtml(t.owner)}${rel?(' · '+rel.label):''}</span>`
     : `<span class="tag ${TIER_CLASS[t.tier]}">${TIER_LABEL[t.tier]}</span>`;
+  const diplomacyWarning = (rel && (rel.type==="pact" || rel.type==="alliance"))
+    ? `<p class="small" style="color:#e0c98a; background:rgba(74,63,34,.35); border:1px solid #4a3f22; border-radius:8px; padding:6px 10px; margin:8px 0;">⚠️ Votre guilde a ${rel.type==="alliance"?"une alliance":"un pacte de non-agression"} avec ce joueur. L'attaque reste possible, mais réfléchissez-y à deux fois.</p>`
+    : "";
 
   const troopInputs=TROOP_ORDER.map(k=>{
     const avail=v.troops[k]||0;
@@ -2213,6 +2253,7 @@ function renderVillageActionModal(){
           ${ownerTag}
         </div>
         <div class="sub small" style="margin-bottom:8px;">${intelLine}${t.wallLevel>0?(' · Muraille niv.'+t.wallLevel):''}</div>
+        ${diplomacyWarning}
         <div class="send-form open">
           <div class="inputs">${troopInputs}</div>
           <button data-send="${t.id}_attack" class="primary">⚔️ Attaquer</button>
@@ -2323,9 +2364,10 @@ function renderMap(){
     const left=(t.x-minX)*ppf, top=(t.y-minY)*ppf;
     const sel = ui.selectedVillage===t.id;
     const mine = t.owner===username;
-    const cls = mine ? "player" : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]);
+    const rel = !mine && t.isPlayer ? guildRelationFor(t.guildId) : null;
+    const cls = mine ? "player" : (rel ? rel.cls : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]));
     const icon = mine ? "🚩" : (t.isPlayer ? "👤" : (t.wallLevel>0?'🏯':'🏚️'));
-    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''));
+    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'');
     return `<div class="villagePin ${cls} ${sel?'selected':''}" data-village-pin="${t.id}" style="left:${left}px; top:${top}px;" title="${title}">
       <div class="dot">${icon}</div>
       ${ppf>=20?`<div class="plabel">${t.x}|${t.y}</div>`:''}
@@ -2550,6 +2592,27 @@ function renderReports(){
           <button data-guild-invite-decline="${r.guildId}">❌ Refuser</button>
         </div>
       </div>`;
+    } else if(r.kind==="diplomacyProposal"){
+      return `<div class="report guild">
+        <div class="title"><span>🕊️ [${escapeHtml(r.fromGuildTag)}] ${escapeHtml(r.fromGuildName)} propose ${DIPLOMACY_LABEL_LOWER[r.relType]}</span>${reportActions(r)}</div>
+        <div class="details open">Rendez-vous dans l'onglet Guilde pour accepter ou refuser (chef de guilde uniquement).</div>
+      </div>`;
+    } else if(r.kind==="diplomacyAccepted"){
+      return `<div class="report guild">
+        <div class="title"><span>🤝 [${escapeHtml(r.fromGuildTag)}] ${escapeHtml(r.fromGuildName)} a accepté ${DIPLOMACY_LABEL_LOWER[r.relType]}</span>${reportActions(r)}</div>
+      </div>`;
+    } else if(r.kind==="diplomacyDeclined"){
+      return `<div class="report guild">
+        <div class="title"><span>❌ [${escapeHtml(r.fromGuildTag)}] ${escapeHtml(r.fromGuildName)} a refusé ${DIPLOMACY_LABEL_LOWER[r.relType]}</span>${reportActions(r)}</div>
+      </div>`;
+    } else if(r.kind==="diplomacyEnded"){
+      return `<div class="report guild">
+        <div class="title"><span>💔 [${escapeHtml(r.fromGuildTag)}] ${escapeHtml(r.fromGuildName)} a ${r.wasPending?"retiré sa proposition de ":"mis fin à "}${DIPLOMACY_LABEL_LOWER[r.relType]}</span>${reportActions(r)}</div>
+      </div>`;
+    } else if(r.kind==="diplomacyWar"){
+      return `<div class="report defense">
+        <div class="title"><span>⚔️ [${escapeHtml(r.fromGuildTag)}] ${escapeHtml(r.fromGuildName)} vous a déclaré la guerre !</span>${reportActions(r)}</div>
+      </div>`;
     } else if(r.kind==="announcement"){
       return `<div class="report announcement">
         <div class="title"><span>📢 Annonce${r.author?(' de '+escapeHtml(r.author)):''}</span>${reportActions(r)}</div>
@@ -2684,6 +2747,61 @@ function renderGuild(){
       ${g.invites.length?`<p class="small muted" style="margin-top:8px;">Invitations en attente : ${g.invites.map(escapeHtml).join(", ")}</p>`:''}
     </div>` : '';
 
+  const relTypeCls = r => r.type==="war" ? "war" : (r.type==="alliance" ? "ally" : "pact");
+  const diplomacy = g.diplomacy||[];
+  const activeRelations = diplomacy.filter(r=>r.status==="active");
+  const incomingPending = diplomacy.filter(r=>r.status==="pending" && r.direction==="incoming");
+  const outgoingPending = diplomacy.filter(r=>r.status==="pending" && r.direction==="outgoing");
+
+  const activeRelationsRows = activeRelations.map(r=>`
+    <div class="donation-row">
+      <span class="tag ${relTypeCls(r)}">${DIPLOMACY_LABEL[r.type]}</span>
+      <span>[${escapeHtml(r.otherGuild.tag)}] ${escapeHtml(r.otherGuild.name)}</span>
+      ${g.isLeader?`<button data-diplomacy-cancel="${r.id}">${r.type==="war"?"🕊️ Faire la paix":"💔 Rompre"}</button>`:''}
+    </div>`).join("") || `<p class="muted small">Aucune relation active pour l'instant.</p>`;
+
+  const incomingRows = incomingPending.map(r=>`
+    <div class="donation-row">
+      <span class="tag pact">Reçue</span>
+      <span>[${escapeHtml(r.otherGuild.tag)}] ${escapeHtml(r.otherGuild.name)} propose ${DIPLOMACY_LABEL_LOWER[r.type]}</span>
+      ${g.isLeader?`<span><button data-diplomacy-respond-accept="${r.id}" class="primary">Accepter</button> <button data-diplomacy-respond-decline="${r.id}">Refuser</button></span>`:''}
+    </div>`).join("");
+
+  const outgoingRows = outgoingPending.map(r=>`
+    <div class="donation-row">
+      <span class="tag pact">Envoyée</span>
+      <span>Proposition de ${DIPLOMACY_LABEL_LOWER[r.type]} envoyée à [${escapeHtml(r.otherGuild.tag)}] ${escapeHtml(r.otherGuild.name)}</span>
+      ${g.isLeader?`<button data-diplomacy-cancel="${r.id}">Annuler</button>`:''}
+    </div>`).join("");
+
+  const directoryOptions = (guildDirectory||[]).map(og=>`<option value="${og.id}">[${escapeHtml(og.tag)}] ${escapeHtml(og.name)} (${og.memberCount} membre${og.memberCount>1?'s':''})</option>`).join("");
+  const proposeBox = g.isLeader ? `
+    <div class="box">
+      <div class="flex-between" style="align-items:flex-start;">
+        <h3 style="margin:0;">🕊️ Proposer une relation</h3>
+        <button type="button" id="btnRefreshGuildDirectory" title="Actualiser la liste des guildes" style="padding:4px 8px;">🔄</button>
+      </div>
+      <p class="small muted">Un pacte ou une alliance doit être accepté par l'autre chef de guilde. Une déclaration de guerre est immédiate et unilatérale. Ces relations sont purement informatives : elles s'affichent sur la carte et avertissent avant une attaque, mais n'empêchent aucun combat.</p>
+      ${guildDirectory===null ? `<p class="muted small">Chargement de l'annuaire des guildes…</p>` :
+        (guildDirectory.length===0 ? `<p class="muted small">Aucune autre guilde dans le monde pour l'instant.</p>` : `
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+          <label class="small">Guilde<br><select id="diplomacyTargetGuild">${directoryOptions}</select></label>
+          <button type="button" data-diplomacy-propose="pact">🕊️ Proposer un pacte</button>
+          <button type="button" data-diplomacy-propose="alliance" class="primary">🤝 Proposer une alliance</button>
+          <button type="button" data-diplomacy-declare-war>⚔️ Déclarer la guerre</button>
+        </div>`)}
+    </div>` : '';
+
+  const diplomacyBox = `
+    <div class="box">
+      <h3>🕊️ Diplomatie</h3>
+      ${incomingRows ? `<div style="margin-bottom:10px;"><div class="small muted" style="margin-bottom:4px;">Propositions reçues</div>${incomingRows}</div>` : ''}
+      ${outgoingRows ? `<div style="margin-bottom:10px;"><div class="small muted" style="margin-bottom:4px;">Propositions envoyées</div>${outgoingRows}</div>` : ''}
+      <div class="small muted" style="margin-bottom:4px;">Relations actives</div>
+      ${activeRelationsRows}
+    </div>
+    ${proposeBox}`;
+
   return `<h2>👥 [${escapeHtml(g.tag)}] ${escapeHtml(g.name)}</h2>
     <p class="muted small">Bonus de production actuel : <b>+${g.bonusPercent}%</b> pour tous les membres (basé sur ${fmt(g.totalDonated)} ressources données au total).</p>
     <div class="box">
@@ -2691,6 +2809,7 @@ function renderGuild(){
       <table><thead><tr><th>Pseudo</th><th></th></tr></thead><tbody>${membersRows}</tbody></table>
     </div>
     ${inviteBox}
+    ${diplomacyBox}
     ${hallCard}
     ${donateBox}
     ${donationHistoryBox}
@@ -2748,6 +2867,31 @@ function attachGuildHandlers(){
   if(disbandBtn) disbandBtn.onclick=()=>{
     if(!confirm("Dissoudre définitivement la guilde pour tous les membres ?")) return;
     doAction(()=>apiCall("/api/guild/disband","POST"), "Guilde dissoute.", null);
+  };
+  const refreshDirBtn=document.getElementById("btnRefreshGuildDirectory");
+  if(refreshDirBtn) refreshDirBtn.onclick=()=>refreshGuildDirectory();
+  document.querySelectorAll("[data-diplomacy-cancel]").forEach(b=>b.onclick=()=>{
+    if(!confirm("Confirmer ?")) return;
+    doAction(()=>apiCall("/api/guild/diplomacy/cancel","POST",{relationId:b.dataset.diplomacyCancel}), "Relation mise à jour.", null);
+  });
+  document.querySelectorAll("[data-diplomacy-respond-accept]").forEach(b=>b.onclick=()=>{
+    doAction(()=>apiCall("/api/guild/diplomacy/respond","POST",{relationId:b.dataset.diplomacyRespondAccept, accept:true}), "🕊️ Proposition acceptée.", null);
+  });
+  document.querySelectorAll("[data-diplomacy-respond-decline]").forEach(b=>b.onclick=()=>{
+    doAction(()=>apiCall("/api/guild/diplomacy/respond","POST",{relationId:b.dataset.diplomacyRespondDecline, accept:false}), "Proposition refusée.", null);
+  });
+  document.querySelectorAll("[data-diplomacy-propose]").forEach(b=>b.onclick=()=>{
+    const sel=document.getElementById("diplomacyTargetGuild");
+    if(!sel || !sel.value){ toast("⚠️ Choisissez une guilde."); return; }
+    const type=b.dataset.diplomacyPropose;
+    doAction(()=>apiCall("/api/guild/diplomacy/propose","POST",{targetGuildId:sel.value, type}), "🕊️ Proposition envoyée.", null);
+  });
+  const warBtn=document.querySelector("[data-diplomacy-declare-war]");
+  if(warBtn) warBtn.onclick=()=>{
+    const sel=document.getElementById("diplomacyTargetGuild");
+    if(!sel || !sel.value){ toast("⚠️ Choisissez une guilde."); return; }
+    if(!confirm("Déclarer la guerre à cette guilde ?")) return;
+    doAction(()=>apiCall("/api/guild/diplomacy/declare-war","POST",{targetGuildId:sel.value}), "⚔️ Guerre déclarée.", null);
   };
 }
 
