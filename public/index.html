@@ -879,12 +879,17 @@ function estimateNow(){ return Date.now()/1000 + serverTimeOffset; }
 function vBuildTime(key, level){ return buildTime(key, level, state.village.buildings.hq||0) / (adminSpeed||1); }
 function vTrainTime(key){ return trainTime(key, state.village.buildings.barracks||0) / (adminSpeed||1); }
 
+// Doit correspondre à NOBLE_CAP_PER_VILLAGE côté serveur (server/gameLogic.js).
+const NOBLE_CAP_PER_VILLAGE = 4;
+
 function popUsed(){
   let used=0;
   for(const k of TROOP_ORDER) used += (state.village.troops[k]||0)*TROOPS[k].pop;
   for(const o of state.village.trainQueue) used += o.count*TROOPS[o.troop].pop;
+  // Ne compte que les troupes parties DEPUIS ce village précis (chaque village a sa propre
+  // population/ferme — les troupes d'un autre de vos villages ne doivent pas compter ici).
   for(const m of state.missions){
-    if(m.attackerUsername!==username) continue;
+    if(m.attackerUsername!==username || m.sourceVillageId!==state.village.id) continue;
     for(const k of TROOP_ORDER) used += (m.troops[k]||0)*TROOPS[k].pop;
   }
   return Math.round(used);
@@ -892,7 +897,7 @@ function popUsed(){
 function nobleCount(){
   let n = state.village.troops.noble||0;
   for(const o of state.village.trainQueue) if(o.troop==="noble") n+=o.count;
-  for(const m of state.missions) if(m.attackerUsername===username) n += m.troops.noble||0;
+  for(const m of state.missions) if(m.attackerUsername===username && m.sourceVillageId===state.village.id) n += m.troops.noble||0;
   return n;
 }
 function fmt(n){ return Math.floor(n).toLocaleString("fr-FR"); }
@@ -1038,6 +1043,7 @@ function sendMission(villageId, kind){
     if(!el) continue;
     let n=Math.floor(Number(el.value)||0);
     n=Math.max(0, Math.min(n, state.village.troops[k]||0));
+    if(k==="noble") n=Math.min(n,1); // un seul noble par attaque (le serveur l'impose aussi)
     if(n>0){ troops[k]=n; any=true; }
   }
   if(!any){ toast("Sélectionnez au moins une troupe à envoyer."); return; }
@@ -1240,6 +1246,10 @@ function renderTopBar(){
         <button class="btn-rename" id="btnRenameVillage" title="Renommer le village">✏️</button>
       </div>
       <span class="coord">${v.x}|${v.y} · ${username}${state.isAdmin?' <span class="tag strong">ADMIN</span>':''}</span>
+      ${state.myVillages && state.myVillages.length>1 ? `
+        <select id="villageSwitcher" title="Changer le village actuellement géré" style="margin-top:4px; max-width:240px;">
+          ${state.myVillages.map(mv=>`<option value="${mv.id}" ${mv.isActive?'selected':''}>${mv.isHome?'🏠 ':'🚩 '}${escapeHtml(mv.name)} (${mv.x}|${mv.y}) · HdV ${mv.hq}</option>`).join("")}
+        </select>` : ""}
     </div>
     <div class="res-group">
       ${["wood","clay","iron"].map(r=>`
@@ -1263,6 +1273,16 @@ function renderTopBar(){
   };
   document.getElementById("btnLogout").onclick=()=>logout(false);
   document.getElementById("btnRenameVillage").onclick=startRenameVillage;
+  const switcher=document.getElementById("villageSwitcher");
+  if(switcher) switcher.onchange=()=>switchVillage(switcher.value);
+}
+
+/* Change le village actuellement géré (bâtiments, caserne, files...) parmi ceux que possède le
+   joueur. goToBuildings=true en plus pour sauter directement sur l'onglet Bâtiments (utilisé
+   depuis le bouton "Gérer ce village" sur la carte). */
+function switchVillage(villageId, goToBuildings){
+  if(goToBuildings) activeTab="buildings";
+  doAction(()=>apiCall("/api/village/switch","POST",{villageId}), "🏰 Village actif changé.", null);
 }
 
 function startRenameVillage(){
@@ -1672,7 +1692,7 @@ function renderBarracks(){
     const lockedEntries=Object.entries(t.requires).filter(([rk,rv])=>(v.buildings[rk]||0)<rv);
     const locked=lockedEntries.length>0;
     const home=v.troops[k]||0;
-    const capNote = k==="noble" ? `<div class="unit-note">Nobles vivants : ${nobleCount()} / ${v.buildings.academy||0} (limite = niveau Académie)</div>` : "";
+    const capNote = k==="noble" ? `<div class="unit-note">Nobles vivants : ${nobleCount()} / ${NOBLE_CAP_PER_VILLAGE} dans ce village (1 seul noble peut partir par attaque)</div>` : "";
     return `<div class="troop-row">
       <div class="tname">${t.name}</div>
       <div class="stats-mini">⚔️${t.atk} 🛡️${t.defInf}/${t.defCav}/${t.defArch} 🎒${t.carry} 🐎${t.speed}</div>
@@ -1741,12 +1761,16 @@ function renderVillageDetail(){
   const dx=t.x-v.x, dy=t.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
 
   if(t.owner===username){
+    const isActive = t.id===v.id;
     return `<div class="box">
       <div class="flex-between">
         <h3 style="margin-bottom:0;">🚩 ${t.name} <span class="muted small" style="font-weight:normal;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs</span></h3>
         <span class="tag weak">Conquis</span>
       </div>
-      <div class="sub small" style="margin:6px 0;">Ce village vous appartient : il vous rapporte automatiquement des ressources chaque heure et augmente votre production de base.</div>
+      <div class="sub small" style="margin:6px 0;">Ce village vous appartient : vous pouvez l'améliorer et y entraîner des troupes comme votre premier village (ressources et troupes qui lui sont propres).</div>
+      ${isActive
+        ? `<div class="sub small" style="margin-top:6px;"><span class="tag strong">Village actif</span> — c'est celui que vous gérez actuellement (onglets Bâtiments/Caserne).</div>`
+        : `<button data-manage-village="${t.id}">🏗️ Gérer ce village</button>`}
     </div>`;
   }
 
@@ -1761,10 +1785,12 @@ function renderVillageDetail(){
 
   const troopInputs=TROOP_ORDER.map(k=>{
     const avail=v.troops[k]||0;
+    // Un seul Noble peut partir par attaque, quel que soit le nombre disponible au village.
+    const maxSend = k==="noble" ? Math.min(avail,1) : avail;
     return `<div class="inp">
       <span>${TROOPS[k].name}</span>
-      <input type="number" min="0" max="${avail}" value="0" id="send_${t.id}_${k}">
-      <a href="#" data-max="${t.id}_${k}" style="font-size:10px;">max ${avail}</a>
+      <input type="number" min="0" max="${maxSend}" value="0" id="send_${t.id}_${k}">
+      <a href="#" data-max="${t.id}_${k}" style="font-size:10px;">max ${maxSend}</a>
     </div>`;
   }).join("");
 
@@ -2236,8 +2262,9 @@ function renderAdmin(){
       <td>🪵${fmt(p.resources?p.resources.wood:0)} 🧱${fmt(p.resources?p.resources.clay:0)} ⛏️${fmt(p.resources?p.resources.iron:0)}</td>
       <td>🏛️ ${p.buildings?p.buildings.hq||0:0}</td>
       <td>${p.buildQueueLen||0} / ${p.trainQueueLen||0}</td>
+      <td>${p.villageCount||1}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="muted">${(adminPlayers||[]).length?'Aucun joueur ne correspond à la recherche.':'Chargement…'}</td></tr>`;
+  }).join("") || `<tr><td colspan="7" class="muted">${(adminPlayers||[]).length?'Aucun joueur ne correspond à la recherche.':'Chargement…'}</td></tr>`;
 
   const selP = (adminPlayers||[]).find(p=>p.username===adminSelected);
 
@@ -2295,7 +2322,7 @@ function renderAdmin(){
     </div>
     <p class="small muted">Cliquez sur un joueur pour modifier son village (ressources, bâtiments, troupes).</p>
     <div style="max-height:280px; overflow:auto;">
-      <table><thead><tr><th>Pseudo</th><th>Village</th><th>Coord.</th><th>Ressources</th><th>HdV</th><th>Files (constr./entr.)</th></tr></thead>
+      <table><thead><tr><th>Pseudo</th><th>Village</th><th>Coord.</th><th>Ressources</th><th>HdV</th><th>Files (constr./entr.)</th><th>Villages</th></tr></thead>
       <tbody>${rows}</tbody></table>
     </div>
   </div>
@@ -2498,6 +2525,7 @@ function attachTabHandlers(){
     sendMission(id, kind);
   });
   document.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ sendGift(b.dataset.gift); });
+  document.querySelectorAll("[data-manage-village]").forEach(b=>b.onclick=()=>{ switchVillage(b.dataset.manageVillage, true); });
   document.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{
     const i=el.dataset.toggle;
     if(ui.openReport.has(i)) ui.openReport.delete(i); else ui.openReport.add(i);
