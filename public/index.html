@@ -371,14 +371,14 @@
   .donation-row{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--border);}
   .donation-row:last-child{border-bottom:none;}
 
-  /* ---- Chat mondial (widget flottant) ---- */
+  /* ---- Chat (widget flottant, salons Mondial / Guilde) ---- */
   #chatWidget{position:fixed; bottom:14px; left:14px; z-index:150; font-size:13px;}
   .chat-bubble{
     width:50px; height:50px; border-radius:50%; font-size:22px;
     display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-lg);
   }
   .chat-panel{
-    width:300px; max-width:calc(100vw - 28px); max-height:70vh;
+    width:320px; max-width:calc(100vw - 28px); max-height:72vh;
     background:var(--panel); border:1px solid var(--gold); border-radius:var(--radius-lg);
     box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden;
   }
@@ -388,14 +388,32 @@
   }
   .chat-head .chat-toggle{background:transparent; border:none; box-shadow:none; padding:2px 6px; font-size:12px;}
   .chat-head .chat-toggle:hover{background:rgba(193,121,62,.15); transform:none; box-shadow:none;}
-  .chat-messages{max-height:240px; min-height:120px; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:6px;}
+  .chat-tabs{display:flex; border-bottom:1px solid var(--border); background:rgba(0,0,0,.15);}
+  .chat-tab{
+    flex:1; background:transparent; border:none; border-radius:0; box-shadow:none;
+    color:var(--text-dim); font-size:11.5px; font-weight:bold; padding:6px 8px;
+    border-bottom:2px solid transparent;
+  }
+  .chat-tab:hover{background:rgba(193,121,62,.1); color:var(--text); transform:none; box-shadow:none;}
+  .chat-tab.active{color:var(--gold); border-bottom-color:var(--gold); background:rgba(193,121,62,.08);}
+  .chat-messages{max-height:260px; min-height:120px; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:7px;}
   .chat-msg{font-size:12px; line-height:1.4; word-break:break-word;}
-  .chat-msg .chat-user{font-weight:bold; color:var(--gold); margin-right:6px;}
+  .chat-msg .chat-time{color:var(--text-dim); font-size:10px; margin-right:5px;}
+  .chat-msg .chat-user{font-weight:bold; color:var(--gold); margin-right:5px; cursor:pointer;}
+  .chat-msg .chat-user:hover{text-decoration:underline;}
   .chat-msg.me .chat-user{color:var(--green);}
-  .chat-form{display:flex; border-top:1px solid var(--border);}
+  .chat-msg .chat-user.admin-name{color:#ff5252; text-shadow:0 0 6px rgba(255,60,60,.55);}
+  .chat-msg.announce{background:rgba(193,121,62,.14); border:1px solid rgba(193,121,62,.4); border-radius:var(--radius-sm); padding:6px 8px;}
+  .chat-msg.announce .chat-user{color:var(--gold);}
+  .chat-msg .chat-announce-icon{margin-right:4px;}
+  .chat-form{display:flex; align-items:center; border-top:1px solid var(--border); gap:0;}
   .chat-form input{flex:1; border:none; border-radius:0; background:#1b1d20; padding:8px 10px; box-shadow:none;}
+  .chat-charcount{font-size:9.5px; color:var(--text-dim); padding:0 6px; white-space:nowrap;}
   .chat-form button{border:none; border-radius:0; box-shadow:none; background:var(--panel2); padding:8px 12px;}
   @media(max-width:480px){ #chatWidget{left:8px; bottom:8px;} .chat-panel{width:calc(100vw - 16px);} }
+
+  /* Pseudo d'administrateur : rouge vif et légèrement lumineux, partout où il apparaît */
+  .admin-name{color:#ff5252; font-weight:bold; text-shadow:0 0 6px rgba(255,60,60,.55);}
 
   /* ---- Panneau Admin ---- */
   #tabContent tr.admin-selected{background:rgba(193,121,62,.16);}
@@ -923,6 +941,7 @@ let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des jo
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
 let chatOpen = true;         // état d'ouverture du widget de chat (purement client, non persisté)
+let chatChannel = "global";  // salon actif du chat : "global" (mondial) ou "guild" (purement client, non persisté)
 let reportFilter = "all";    // filtre de catégorie pour l'onglet Rapports (purement client)
 const REPORT_FILTERS = [
   {key:"all", label:"Tous"},
@@ -966,6 +985,12 @@ function nobleCount(){
   return n;
 }
 function fmt(n){ return Math.floor(n).toLocaleString("fr-FR"); }
+/* Heure murale HH:MM à partir d'un timestamp serveur (secondes epoch réelles) — utilisé par le chat. */
+function fmtClock(t){
+  if(t==null) return "";
+  const d=new Date(t*1000);
+  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
 function fmtTime(sec){
   sec=Math.max(0,Math.round(sec));
   const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
@@ -1035,7 +1060,7 @@ async function doAction(promiseFn, successMsg, sfx){
     applySnapshot(data.snapshot);
     if(sfx) Audio.SFX[sfx]();
     if(successMsg) toast(successMsg);
-    renderTabs(); renderTopBar(); renderSidebar(); renderActiveTabContent();
+    renderTabs(); renderTopBar(); rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar); renderActiveTabContent();
   }catch(err){
     Audio.SFX.error();
     toast("⚠️ "+err.message);
@@ -1052,7 +1077,7 @@ async function adminAction(promiseFn, successMsg){
     if(data.missions) adminMissions = data.missions;
     if(data.speedMultiplier!=null) adminSpeed = data.speedMultiplier;
     if(successMsg) toast(successMsg);
-    renderTabs(); renderTopBar(); renderSidebar(); renderActiveTabContent();
+    renderTabs(); renderTopBar(); rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar); renderActiveTabContent();
   }catch(err){
     toast("⚠️ "+err.message);
   }
@@ -1074,7 +1099,9 @@ function sendChat(){
   const text=inp.value.trim();
   if(!text) return;
   inp.value="";
-  doAction(()=>apiCall("/api/chat/send","POST",{text}), null, null);
+  const cc=document.getElementById("chatCharCount");
+  if(cc) cc.textContent="0/300";
+  doAction(()=>apiCall("/api/chat/send","POST",{text, channel:chatChannel}), null, null);
 }
 
 function escapeHtml(s){
@@ -1163,9 +1190,9 @@ function rerenderPreservingInputs(containerEl, renderFn){
   const focusedId = (focused && containerEl.contains(focused)) ? focused.id : null;
   const focusedSelStart = focused && typeof focused.selectionStart==="number" ? focused.selectionStart : null;
   const values={};
-  containerEl.querySelectorAll("input").forEach(inp=>{ if(inp.id) values[inp.id]=inp.value; });
+  containerEl.querySelectorAll("input, textarea").forEach(inp=>{ if(inp.id) values[inp.id]=inp.value; });
   renderFn();
-  containerEl.querySelectorAll("input").forEach(inp=>{ if(inp.id && values[inp.id]!==undefined) inp.value=values[inp.id]; });
+  containerEl.querySelectorAll("input, textarea").forEach(inp=>{ if(inp.id && values[inp.id]!==undefined) inp.value=values[inp.id]; });
   if(focusedId){
     const el=document.getElementById(focusedId);
     if(el){
@@ -1182,7 +1209,7 @@ async function pollState(){
     applySnapshot(data.snapshot);
     renderTabs();
     updateTopBarStats();
-    renderSidebar();
+    rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar);
     rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
   }catch(err){
     // session expirée ou serveur momentanément injoignable : on retentera au prochain sondage
@@ -1318,7 +1345,7 @@ function renderTopBar(){
         <span class="name" id="villageNameDisplay">🏰 ${v.name}</span>
         <button class="btn-rename" id="btnRenameVillage" title="Renommer le village">✏️</button>
       </div>
-      <span class="coord">${v.x}|${v.y} · ${username}${state.isAdmin?' <span class="tag strong">ADMIN</span>':''}</span>
+      <span class="coord">${v.x}|${v.y} · ${state.isAdmin?`<span class="admin-name">${username}</span>`:username}${state.isAdmin?' <span class="tag strong">ADMIN</span>':''}</span>
       ${state.myVillages && state.myVillages.length>1 ? `
         <select id="villageSwitcher" title="Changer le village actuellement géré" style="margin-top:4px; max-width:240px;">
           ${state.myVillages.map(mv=>`<option value="${mv.id}" ${mv.isActive?'selected':''}>${mv.isHome?'🏠 ':'🚩 '}${escapeHtml(mv.name)} (${mv.x}|${mv.y}) · HdV ${mv.hq}</option>`).join("")}
@@ -1375,7 +1402,7 @@ function renderPlayerProfile(p){
     <div class="tutorial-backdrop" id="playerProfileBackdrop">
       <div class="tutorial-card" style="max-width:360px;">
         <div class="flex-between" style="align-items:flex-start;">
-          <h3 style="margin:0;">👤 ${escapeHtml(p.username)}${isSelf?' (vous)':''}</h3>
+          <h3 style="margin:0;">👤 ${p.isAdmin?`<span class="admin-name">${escapeHtml(p.username)}</span>`:escapeHtml(p.username)}${isSelf?' (vous)':''}</h3>
           <button id="btnClosePlayerProfile" title="Fermer" style="padding:4px 8px;">✖</button>
         </div>
         <div class="small muted" style="margin:10px 0; line-height:1.6;">
@@ -1588,46 +1615,93 @@ function renderSidebar(){
   });
 }
 
-/* Widget de chat flottant, indépendant du système d'onglets : reconstruit la coquille (ouvert/fermé)
-   seulement quand l'état change, et se contente sinon de rafraîchir la liste des messages pour ne
-   jamais couper la saisie en cours dans le champ de texte. */
+/* Widget de chat flottant, indépendant du système d'onglets : reconstruit la coquille (ouvert/fermé,
+   apparition/disparition de l'onglet Guilde) seulement quand cet état structurel change, et se
+   contente sinon de rafraîchir la liste des messages et l'onglet actif, pour ne jamais couper la
+   saisie en cours dans le champ de texte quand un rafraîchissement périodique arrive (même principe
+   que pour la carte et le reste du site, voir rerenderPreservingInputs). */
 function renderChat(){
   if(!state) return;
   const el=document.getElementById("chatWidget");
   if(!el) return;
-  if(chatOpen && el.querySelector(".chat-panel")){ updateChatMessages(); return; }
-  if(!chatOpen && el.querySelector(".chat-bubble")) return;
+  const hasGuild = !!state.guild;
+  if(!hasGuild) chatChannel="global"; // on ne peut pas rester sur un onglet Guilde qui a disparu
+
+  if(chatOpen && el.querySelector(".chat-panel")){
+    const hadGuildTab = !!el.querySelector('[data-chat-channel="guild"]');
+    if(hadGuildTab===hasGuild){ updateChatTabs(); updateChatMessages(); return; }
+  } else if(!chatOpen && el.querySelector(".chat-bubble")){
+    return;
+  }
 
   if(chatOpen){
     el.innerHTML = `
       <div class="chat-panel">
         <div class="chat-head">
-          <span>💬 Chat mondial</span>
+          <span>💬 Chat</span>
           <button class="chat-toggle" id="chatCollapseBtn" title="Réduire">➖</button>
+        </div>
+        <div class="chat-tabs">
+          <button class="chat-tab" data-chat-channel="global">🌍 Mondial</button>
+          ${hasGuild ? `<button class="chat-tab" data-chat-channel="guild">🛡️ Guilde${state.guild.tag?(' ['+escapeHtml(state.guild.tag)+']'):''}</button>` : ""}
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <form id="chatForm" class="chat-form">
           <input type="text" id="chatInput" maxlength="300" placeholder="Écrire un message…" autocomplete="off">
+          <span class="chat-charcount" id="chatCharCount">0/300</span>
           <button type="submit">➤</button>
         </form>
       </div>`;
+    updateChatTabs();
     updateChatMessages();
     document.getElementById("chatCollapseBtn").onclick=()=>{ chatOpen=false; renderChat(); };
     document.getElementById("chatForm").onsubmit=(e)=>{ e.preventDefault(); sendChat(); };
+    document.getElementById("chatInput").oninput=(e)=>{
+      const cc=document.getElementById("chatCharCount");
+      if(cc) cc.textContent=e.target.value.length+"/300";
+    };
+    el.querySelectorAll("[data-chat-channel]").forEach(btn=>btn.onclick=()=>{
+      chatChannel=btn.dataset.chatChannel;
+      updateChatTabs();
+      updateChatMessages();
+    });
+    // Délégation sur le conteneur des messages : un clic sur un pseudo ouvre sa fiche joueur,
+    // sans avoir besoin de réattacher un gestionnaire à chaque nouveau message reçu.
+    document.getElementById("chatMessages").addEventListener("click", (e)=>{
+      const link=e.target.closest("[data-open-profile]");
+      if(link) openPlayerProfile(link.dataset.openProfile);
+    });
   } else {
     el.innerHTML = `<button class="chat-bubble" id="chatExpandBtn" title="Ouvrir le chat">💬</button>`;
     document.getElementById("chatExpandBtn").onclick=()=>{ chatOpen=true; renderChat(); };
   }
 }
 
+function updateChatTabs(){
+  const el=document.getElementById("chatWidget");
+  if(!el) return;
+  el.querySelectorAll("[data-chat-channel]").forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.chatChannel===chatChannel);
+  });
+}
+
 function updateChatMessages(){
   const box=document.getElementById("chatMessages");
   if(!box || !state) return;
-  const messages=state.chat||[];
+  const messages = chatChannel==="guild" ? (state.guildChat||[]) : (state.chat||[]);
   const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
   box.innerHTML = messages.length
-    ? messages.map(m=>`<div class="chat-msg${m.username===username?' me':''}"><span class="chat-user">${escapeHtml(m.username)}</span><span class="chat-text">${escapeHtml(m.text)}</span></div>`).join("")
-    : `<div class="muted small" style="padding:8px;">Aucun message pour l'instant. Dites bonjour !</div>`;
+    ? messages.map(m=>{
+        const isAnnounce = m.kind==="announce";
+        const nameCls = "chat-user"+(m.isAdmin?" admin-name":"");
+        return `<div class="chat-msg${isAnnounce?' announce':''}${m.username===username?' me':''}">
+          <span class="chat-time">${fmtClock(m.time)}</span>
+          ${isAnnounce?'<span class="chat-announce-icon">📢</span>':''}
+          <span class="${nameCls}" data-open-profile="${escapeHtml(m.username)}">${escapeHtml(m.username)}</span>
+          <span class="chat-text">${escapeHtml(m.text)}</span>
+        </div>`;
+      }).join("")
+    : `<div class="muted small" style="padding:8px;">${chatChannel==="guild"?"Aucun message dans le chat de guilde pour l'instant.":"Aucun message pour l'instant. Dites bonjour !"}</div>`;
   if(nearBottom) box.scrollTop = box.scrollHeight;
 }
 
