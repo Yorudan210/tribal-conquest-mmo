@@ -300,6 +300,7 @@
   .report.announcement{border-left:4px solid var(--gold);}
   .report.support{border-left:4px solid var(--green);}
   .report.gift{border-left:4px solid var(--gold);}
+  .report.market{border-left:4px solid var(--blue);}
   .report.guild{border-left:4px solid #7a3fae;}
   .report .title .actions{display:flex; align-items:center; gap:8px; font-weight:normal;}
   .report-del{background:none; border:none; cursor:pointer; font-size:13px; opacity:.55; padding:2px 5px; border-radius:4px; line-height:1;}
@@ -1077,6 +1078,7 @@ const REPORT_FILTERS = [
   {key:"raid", label:"⚠️ Raids de pillards"},
   {key:"support", label:"🤝 Soutien", kinds:["supportIn","supportOut"]},
   {key:"gift", label:"🎁 Dons", kinds:["giftIn","giftOut"]},
+  {key:"market", label:"🏪 Marché", kinds:["marketSold","marketBought"]},
   {key:"guildInvite", label:"👥 Guilde"},
   {key:"diplomacy", label:"🕊️ Diplomatie", kinds:["diplomacyProposal","diplomacyAccepted","diplomacyDeclined","diplomacyEnded","diplomacyWar"]},
   {key:"announcement", label:"📢 Annonces"}
@@ -1667,7 +1669,7 @@ function updateTopBarStats(){
 
 function renderTabs(){
   const questsDone=state.quests.filter(q=>q.claimed).length;
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
   if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
@@ -1882,6 +1884,7 @@ function renderActiveTabContent(){
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
   else if(activeTab==="guild") main.innerHTML=renderGuild();
+  else if(activeTab==="market") main.innerHTML=renderMarket();
   else if(activeTab==="admin" && state.isAdmin) main.innerHTML=renderAdmin();
   else main.innerHTML=renderHelp();
   attachTabHandlers();
@@ -1890,6 +1893,7 @@ function renderActiveTabContent(){
     attachGuildHandlers();
     if(state.guild && state.guild.isLeader && !guildDirectory) refreshGuildDirectory();
   }
+  if(activeTab==="market") attachMarketHandlers();
   if(activeTab==="admin" && state.isAdmin){
     attachAdminHandlers();
     if(!adminPlayers) refreshAdminData();
@@ -2717,6 +2721,16 @@ function renderReports(){
         <div class="title"><span>🎁 Don envoyé à ${escapeHtml(r.target)}</span>${reportActions(r)}</div>
         <div class="details open">🪵${fmt(r.wood)} 🧱${fmt(r.clay)} ⛏️${fmt(r.iron)}</div>
       </div>`;
+    } else if(r.kind==="marketSold"){
+      return `<div class="report market">
+        <div class="title"><span>🏪 Offre acceptée par ${escapeHtml(r.other)}</span>${reportActions(r)}</div>
+        <div class="details open">Vous avez donné ${RES_ICON[r.giveRes]} ${fmt(r.giveAmount)} ${RES_NAME[r.giveRes].toLowerCase()} contre ${RES_ICON[r.wantRes]} ${fmt(r.wantAmount)} ${RES_NAME[r.wantRes].toLowerCase()} reçu(e)(s).</div>
+      </div>`;
+    } else if(r.kind==="marketBought"){
+      return `<div class="report market">
+        <div class="title"><span>🏪 Échange conclu avec ${escapeHtml(r.other)}</span>${reportActions(r)}</div>
+        <div class="details open">Vous avez donné ${RES_ICON[r.wantRes]} ${fmt(r.wantAmount)} ${RES_NAME[r.wantRes].toLowerCase()} contre ${RES_ICON[r.giveRes]} ${fmt(r.giveAmount)} ${RES_NAME[r.giveRes].toLowerCase()} reçu(e)(s).</div>
+      </div>`;
     } else if(r.kind==="guildInvite"){
       return `<div class="report guild">
         <div class="title"><span>👥 Invitation de guilde : [${escapeHtml(r.guildTag)}] ${escapeHtml(r.guildName)} (par ${escapeHtml(r.from)})</span>${reportActions(r)}</div>
@@ -2755,6 +2769,86 @@ function renderReports(){
     return `<div class="report"><div class="title"><span>${r.text||''}</span>${reportActions(r)}</div></div>`;
   }).join("");
   return `<h2>Rapports</h2>${filterBar}${bulkBar}${items}`;
+}
+
+/* Marché : offres d'échange publiques entre joueurs. La ressource proposée est mise en dépôt dès
+   la publication (voir doMarketCreateOffer côté serveur) ; ce tableau se contente d'afficher
+   state.market (déjà trié du plus récent au plus ancien par buildSnapshot) et de proposer les
+   actions Annuler (sur ses propres offres) / Échanger (sur celles des autres). */
+function renderMarket(){
+  const v = state.village;
+  const offers = state.market||[];
+  const mine = offers.filter(o=>o.seller===username);
+  const others = offers.filter(o=>o.seller!==username);
+
+  const resOptionsHtml = (selected) => ["wood","clay","iron"].map(r=>
+    `<option value="${r}" ${r===selected?'selected':''}>${RES_ICON[r]} ${RES_NAME[r]}</option>`).join("");
+
+  const stockLine = `<p class="small muted">Votre stock actuel : ${["wood","clay","iron"].map(r=>`${RES_ICON[r]} ${fmt(v.resources[r])}`).join(" · ")}</p>`;
+
+  const createBox = `
+    <div class="box">
+      <h3>➕ Publier une offre</h3>
+      <p class="small muted">La ressource proposée est mise en dépôt immédiatement (retirée de votre village) ; elle vous est rendue si vous annulez l'offre avant qu'un autre joueur ne l'accepte. Échange instantané, sans marchand ni délai de trajet.</p>
+      ${stockLine}
+      <form id="marketCreateForm" style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;">
+        <div>
+          <label class="small muted">Je donne</label><br>
+          <select id="marketGiveRes">${resOptionsHtml("wood")}</select>
+          <input type="number" id="marketGiveAmount" min="1" max="1000000" value="500" style="width:110px;">
+        </div>
+        <div>
+          <label class="small muted">Je veux en échange</label><br>
+          <select id="marketWantRes">${resOptionsHtml("clay")}</select>
+          <input type="number" id="marketWantAmount" min="1" max="1000000" value="500" style="width:110px;">
+        </div>
+        <button type="submit" class="primary">📣 Publier l'offre</button>
+      </form>
+    </div>`;
+
+  const offerRow = (o, isMine) => `
+    <div class="flex-between" style="background:rgba(0,0,0,0.15); padding:8px 12px; border-radius:8px; margin-bottom:6px;">
+      <span>
+        ${isMine?'':`<span class="player-link" data-open-profile="${escapeHtml(o.seller)}">${escapeHtml(o.seller)}</span> — `}donne
+        ${RES_ICON[o.giveRes]} <b>${fmt(o.giveAmount)}</b> ${RES_NAME[o.giveRes].toLowerCase()}
+        contre ${RES_ICON[o.wantRes]} <b>${fmt(o.wantAmount)}</b> ${RES_NAME[o.wantRes].toLowerCase()}
+      </span>
+      ${isMine
+        ? `<button data-market-cancel="${o.id}">🗑️ Annuler</button>`
+        : `<button class="primary" data-market-accept="${o.id}">🤝 Échanger</button>`}
+    </div>`;
+
+  const othersBox = `
+    <div class="box">
+      <h3>🌍 Offres des autres joueurs (${others.length})</h3>
+      ${others.length ? others.map(o=>offerRow(o,false)).join("") : `<p class="small muted">Aucune offre disponible pour l'instant.</p>`}
+    </div>`;
+
+  const mineBox = `
+    <div class="box">
+      <h3>📋 Mes offres (${mine.length})</h3>
+      ${mine.length ? mine.map(o=>offerRow(o,true)).join("") : `<p class="small muted">Vous n'avez publié aucune offre.</p>`}
+    </div>`;
+
+  return `<h2>🏪 Marché</h2>
+    <p class="muted small">Échangez vos surplus de ressources contre ce qui vous manque. Publiez une offre ou acceptez celle d'un autre joueur.</p>
+    ${createBox}
+    ${othersBox}
+    ${mineBox}`;
+}
+
+function attachMarketHandlers(){
+  const form=document.getElementById("marketCreateForm");
+  if(form) form.onsubmit=(e)=>{
+    e.preventDefault();
+    const giveRes=document.getElementById("marketGiveRes").value;
+    const giveAmount=Number(document.getElementById("marketGiveAmount").value);
+    const wantRes=document.getElementById("marketWantRes").value;
+    const wantAmount=Number(document.getElementById("marketWantAmount").value);
+    if(giveRes===wantRes){ toast("⚠️ Choisissez deux ressources différentes."); return; }
+    if(!giveAmount || giveAmount<=0 || !wantAmount || wantAmount<=0){ toast("⚠️ Indiquez des quantités valides."); return; }
+    doAction(()=>apiCall("/api/market/offer","POST",{giveRes, giveAmount, wantRes, wantAmount}), "📣 Offre publiée sur le marché.", null);
+  };
 }
 
 function renderGuild(){
@@ -3392,6 +3486,12 @@ function attachTabHandlers(){
   document.querySelectorAll("[data-guild-invite-decline]").forEach(b=>b.onclick=(e)=>{
     e.stopPropagation();
     doAction(()=>apiCall("/api/guild/decline","POST",{guildId:b.dataset.guildInviteDecline}), "Invitation refusée.", null);
+  });
+  document.querySelectorAll("[data-market-cancel]").forEach(b=>b.onclick=()=>{
+    doAction(()=>apiCall("/api/market/cancel","POST",{offerId:b.dataset.marketCancel}), "🗑️ Offre annulée, ressources récupérées.", null);
+  });
+  document.querySelectorAll("[data-market-accept]").forEach(b=>b.onclick=()=>{
+    doAction(()=>apiCall("/api/market/accept","POST",{offerId:b.dataset.marketAccept}), "🤝 Échange effectué !", null);
   });
 }
 
