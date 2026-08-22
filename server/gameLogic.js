@@ -1234,14 +1234,18 @@ function publicPlayerView(db, targetUsername){
   const guild = guildOf(db, targetUsername);
   const hq = home && home.buildings ? (home.buildings.hq||0) : 0;
   const conquered = home ? (home.conqueredCount||0) : 0;
+  const villages = myVillages(db, targetUsername)
+    .map(v=>({ id:v.id, name:v.name, x:v.x, y:v.y, isHome: home ? v.id===home.id : false }))
+    .sort((a,b)=> b.isHome-a.isHome || a.name.localeCompare(b.name));
   return {
     username: targetUsername,
     guild: guild ? { id:guild.id, name:guild.name, tag:guild.tag, isLeader: guild.leader===targetUsername } : null,
     points: hq*10 + conquered*50,
     hq, conquered,
-    villageCount: myVillages(db, targetUsername).length,
+    villageCount: villages.length,
     homeVillageId: home ? home.id : null,
-    homeCoord: home ? (home.x+"|"+home.y) : null
+    homeCoord: home ? (home.x+"|"+home.y) : null,
+    villages
   };
 }
 
