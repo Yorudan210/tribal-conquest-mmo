@@ -1528,6 +1528,17 @@ function buildSnapshot(db, username){
   const v = villageByUser(db, username);
   if(!v) return null;
   const myMissions = db.missions.filter(m=>m.attackerUsername===username || (m.kind==="raid" && db.villages[m.targetId] && db.villages[m.targetId].owner===username));
+
+  // Missions "monde" : attaques et reconnaissances actuellement en approche (trajet aller
+  // uniquement, pas le retour) lancées par D'AUTRES joueurs — sert uniquement à afficher un
+  // marqueur générique en mouvement sur la carte (position + type), pour qu'on voie qu'"il se
+  // passe quelque chose" entre deux villages, comme sur la carte du monde officielle. On ne
+  // révèle ni l'identité de l'attaquant ni la composition des troupes (ça reste soumis à
+  // reconnaissance comme partout ailleurs) : seules les coordonnées des villages source/cible,
+  // déjà publiques via la liste "villages", permettent éventuellement de deviner qui est qui.
+  const worldMissions = db.missions
+    .filter(m => (m.kind==="attack" || m.kind==="scout") && !m.resolveDone && m.attackerUsername!==username)
+    .map(m => ({ id:m.id, kind:m.kind, sourceVillageId:m.sourceVillageId, targetId:m.targetId, departAt:m.departAt, arriveAt:m.arriveAt, travel:m.travel }));
   const villages = Object.values(db.villages).map(v=>publicVillageView(v, db));
   const questStatus = QUESTS.map(q=>({
     key:q.key, title:q.title, desc:q.desc, icon:q.icon, reward:q.reward,
@@ -1582,6 +1593,7 @@ function buildSnapshot(db, username){
     serverTime: now(),
     village: v,
     missions: myMissions,
+    worldMissions,
     reports: (db.reports[username]||[]).slice(0,60),
     villages,
     myVillages: myVillagesList,
