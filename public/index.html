@@ -7,20 +7,28 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
 <style>
   :root{
-    --bg:#1b1d20; --bg2:#24272b; --panel:#2c3034; --panel2:#383d42;
-    --border:#565c63; --text:#ece7dd; --text-dim:#a3a8ad; --gold:#c1793e;
+    --bg:#ecdcae; --bg2:#241a10; --panel:#2e2417; --panel2:#3c2f1c;
+    --border:#6b5333; --text:#f2e6c8; --text-dim:#bfa878; --gold:#c1793e;
     --green:#6bab5e; --red:#c15b46; --blue:#5b93b0;
-    --shadow-sm:0 2px 6px rgba(0,0,0,.3);
-    --shadow-md:0 4px 16px rgba(0,0,0,.35);
-    --shadow-lg:0 8px 28px rgba(0,0,0,.45);
+    --shadow-sm:0 2px 6px rgba(30,17,6,.32);
+    --shadow-md:0 4px 16px rgba(30,17,6,.4);
+    --shadow-lg:0 8px 28px rgba(30,17,6,.5);
     --ring:0 0 0 3px rgba(193,121,62,.24);
     --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
   }
   *{box-sizing:border-box;}
   body{
     margin:0; font-family:Georgia,'Times New Roman',serif; background:var(--bg);
-    color:var(--text); background-image:radial-gradient(ellipse at top, #24272b 0%, #121315 100%);
-    min-height:100vh;
+    color:var(--text); min-height:100vh; position:relative;
+  }
+  /* Fond parchemin en position fixe (au lieu de background-attachment:fixed, peu fiable sur
+     mobile/Safari) : un calque décoratif derrière tout le contenu, qui ne bouge pas au défilement
+     et ne déforme jamais l'image même sur une page très longue. */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-1;
+    background-image:url('assets/bg-parchment.jpg');
+    background-size:cover; background-position:top center; background-repeat:no-repeat;
+    background-color:var(--bg);
   }
   #gameRoot{display:flex; flex-direction:column; min-height:100vh;}
   .app-shell{display:flex; align-items:flex-start; flex:1 1 auto; min-height:0;}
@@ -32,14 +40,14 @@
   ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px; border:2px solid var(--bg2);}
   ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
   button{
-    font-family:inherit; background:linear-gradient(180deg,#41454a,#2f3337); color:var(--text);
+    font-family:inherit; background:linear-gradient(180deg,#453626,#2e2417); color:var(--text);
     border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px; cursor:pointer;
     font-size:13px; font-weight:600; letter-spacing:.2px;
     box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.05);
     transition:transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
   }
   button:hover:not(:disabled){
-    background:linear-gradient(180deg,#4d5257,#393e43); border-color:var(--gold);
+    background:linear-gradient(180deg,#5a4936,#3d3020); border-color:var(--gold);
     transform:translateY(-1px); box-shadow:var(--shadow-md);
   }
   button:active:not(:disabled){transform:translateY(0); box-shadow:var(--shadow-sm);}
@@ -48,21 +56,21 @@
   button.primary{background:linear-gradient(180deg,#a3703c,#7d5228); border-color:var(--gold); font-weight:bold;}
   button.danger{background:linear-gradient(180deg,#7a2e24,#5c2018); border-color:#a55;}
   input[type=number]{
-    width:70px; background:#1b1d20; color:var(--text); border:1px solid var(--border);
+    width:70px; background:var(--bg2); color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   input[type=number]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
   input[type=text]{
-    background:#1b1d20; color:var(--text); border:1px solid var(--border);
+    background:var(--bg2); color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   input[type=text]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
   input[type=password]{
-    background:#1b1d20; color:var(--text); border:1px solid var(--border);
+    background:var(--bg2); color:var(--text); border:1px solid var(--border);
     border-radius:7px; padding:6px 8px; font-family:inherit; width:100%; box-sizing:border-box;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
@@ -72,7 +80,7 @@
   #authScreen label.small{display:flex; flex-direction:column; gap:4px; color:var(--text-dim);}
   #authTabs button.ghost{background:transparent; box-shadow:none;}
   select{
-    background:#1b1d20;color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
+    background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
     box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
@@ -80,7 +88,7 @@
 
   header#topbar{
     display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between;
-    background:linear-gradient(180deg, rgba(44,48,52,.94), rgba(36,39,43,.94));
+    background:linear-gradient(180deg, rgba(46,36,23,.94), rgba(36,28,17,.94));
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 18px; margin:14px 0;
     position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md);
@@ -106,7 +114,7 @@
   /* ---- Logo centré en haut de page ---- */
   .top-banner{
     display:flex; align-items:center; justify-content:center; gap:12px; padding:14px 18px;
-    background:linear-gradient(180deg, rgba(44,48,52,.97), rgba(36,39,43,.97));
+    background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(36,28,17,.97));
     border-bottom:1px solid var(--border); box-shadow:var(--shadow-sm); position:relative; z-index:26;
   }
   .top-banner svg{width:34px; height:40px; flex:0 0 auto; overflow:visible;}
@@ -116,7 +124,7 @@
   .side-nav{
     flex:0 0 224px; position:sticky; top:0; align-self:flex-start; height:100%; overflow-y:auto;
     display:flex; flex-direction:column; gap:10px; padding:18px 12px 24px;
-    background:linear-gradient(180deg, rgba(44,48,52,.97), rgba(28,30,33,.97));
+    background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(28,22,13,.97));
     border-right:1px solid var(--border); box-shadow:var(--shadow-md); z-index:25;
   }
   nav#tabs{
@@ -184,7 +192,7 @@
   }
   .queue-item:hover, .mission-item:hover{background:rgba(0,0,0,.14);}
   .queue-item:last-child, .mission-item:last-child{border-bottom:none;}
-  .bar-bg{background:#1b1d20; border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .bar-bg{background:var(--bg2); border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
   .bar-fill{background:linear-gradient(90deg, var(--green), #8fd06a); height:100%; transition:width .2s ease;}
   .troop-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
   .troop-row:hover{background:rgba(0,0,0,.14);}
@@ -310,9 +318,14 @@
     nav#tabs button{white-space:nowrap; flex:0 0 auto; width:auto; border-left:none; border-bottom:3px solid transparent;}
     nav#tabs button.active{border-left-color:transparent; border-bottom-color:var(--gold);}
     #app{max-width:100%;}
-    .layout{flex-direction:column;}
+    /* align-items:flex-start (hérité de la règle desktop) ne s'applique normalement qu'à l'axe
+       vertical ; mais une fois flex-direction basculé en column ici, cet axe devient horizontal,
+       et sans stretch le contenu principal ne s'étire plus sur toute la largeur : il reprend sa
+       largeur intrinsèque (parfois plus large que l'écran), ce qui provoquait un débordement
+       horizontal de toute la page sur mobile (bug corrigé). */
+    .layout{flex-direction:column; align-items:stretch;}
     aside#sidebar{flex:1 1 auto; width:100%;}
-    main#tabContent{padding:12px;}
+    main#tabContent{padding:12px; width:100%;}
     .troop-row{flex-wrap:wrap; row-gap:6px;}
     .troop-row .tname{width:auto; flex:1 1 100%;}
     #mapCanvas{height:400px;}
@@ -407,10 +420,17 @@
   .chat-msg.announce .chat-user{color:var(--gold);}
   .chat-msg .chat-announce-icon{margin-right:4px;}
   .chat-form{display:flex; align-items:center; border-top:1px solid var(--border); gap:0;}
-  .chat-form input{flex:1; border:none; border-radius:0; background:#1b1d20; padding:8px 10px; box-shadow:none;}
+  .chat-form input{flex:1; border:none; border-radius:0; background:var(--bg2); padding:8px 10px; box-shadow:none;}
   .chat-charcount{font-size:9.5px; color:var(--text-dim); padding:0 6px; white-space:nowrap;}
   .chat-form button{border:none; border-radius:0; box-shadow:none; background:var(--panel2); padding:8px 12px;}
-  @media(max-width:480px){ #chatWidget{left:8px; bottom:8px;} .chat-panel{width:calc(100vw - 16px);} }
+  @media(max-width:480px){
+    #chatWidget{left:8px; bottom:8px;}
+    /* Le panneau ouvert reste volontairement compact sur mobile (au lieu de prendre jusqu'à 72vh) :
+       assez petit pour ne pas recouvrir la barre du haut (nom du village, son, déconnexion) même sur
+       un petit écran, tout en restant assez grand pour lire quelques messages sans excès de défilement. */
+    .chat-panel{width:calc(100vw - 16px); max-height:38vh;}
+    .chat-messages{max-height:16vh; min-height:70px;}
+  }
 
   /* Pseudo d'administrateur : rouge vif et légèrement lumineux, partout où il apparaît */
   .admin-name{color:#ff5252; font-weight:bold; text-shadow:0 0 6px rgba(255,60,60,.55);}
@@ -940,7 +960,10 @@ let adminMissions = null;    // liste des missions en cours (panneau Admin), cha
 let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des joueurs)
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
-let chatOpen = true;         // état d'ouverture du widget de chat (purement client, non persisté)
+// Sur petit écran, le panneau de chat ouvert occupe une bonne partie de l'écran et bloque le reste
+// de l'interface en dessous (boutons, tableaux...) : il démarre donc réduit (bulle) sur mobile,
+// et ouvert sur desktop où il ne gêne qu'un coin de l'écran.
+let chatOpen = window.innerWidth > 480;   // état d'ouverture du widget de chat (purement client, non persisté)
 let chatChannel = "global";  // salon actif du chat : "global" (mondial) ou "guild" (purement client, non persisté)
 let reportFilter = "all";    // filtre de catégorie pour l'onglet Rapports (purement client)
 const REPORT_FILTERS = [
