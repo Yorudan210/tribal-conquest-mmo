@@ -385,6 +385,90 @@ function doGiveResources(db, username, targetUsername, wood, clay, iron){
   return { ok:true };
 }
 
+const MARKET_RES_KEYS = ["wood","clay","iron"];
+
+/* ---------------------------------------------------------------------- */
+/*  Marché (offres d'échange entre joueurs)                                */
+/* ---------------------------------------------------------------------- */
+
+/* Publie une offre d'échange visible par tous ("je donne X {giveRes} contre Y {wantRes}").
+   Contrairement au don direct (doGiveResources, instantané et sans contrepartie), la ressource
+   offerte est mise en dépôt dès la publication (retirée du village vendeur immédiatement) : elle
+   n'est livrée à l'acheteur qu'à l'acceptation, et rendue au vendeur s'il annule avant. Toujours
+   sans marchands ni délai de trajet, pour rester dans l'esprit simplifié déjà adopté ailleurs
+   (voir doGiveResources, doSendSupport...). */
+function doMarketCreateOffer(db, username, giveRes, giveAmount, wantRes, wantAmount){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  giveRes = String(giveRes||""); wantRes = String(wantRes||"");
+  giveAmount = Math.floor(Number(giveAmount)||0);
+  wantAmount = Math.floor(Number(wantAmount)||0);
+  if(!MARKET_RES_KEYS.includes(giveRes) || !MARKET_RES_KEYS.includes(wantRes)) return { error: "Ressource invalide." };
+  if(giveRes===wantRes) return { error: "Choisissez deux ressources différentes." };
+  if(giveAmount<=0 || wantAmount<=0) return { error: "Indiquez des quantités valides (supérieures à zéro)." };
+  if(giveAmount>1000000 || wantAmount>1000000) return { error: "Quantité trop élevée (maximum 1 000 000)." };
+  if((v.resources[giveRes]||0) < giveAmount) return { error: "Ressources insuffisantes pour publier cette offre." };
+  if(!db.market) db.market = [];
+  if(db.market.length>=200) return { error: "Trop d'offres actives sur le marché en ce moment, réessayez plus tard." };
+  v.resources[giveRes] -= giveAmount;
+  const offer = {
+    id: "mk"+Date.now()+Math.floor(Math.random()*100000),
+    seller: username, sellerVillageId: v.id,
+    giveRes, giveAmount, wantRes, wantAmount,
+    createdAt: now()
+  };
+  db.market.push(offer);
+  return { ok:true, offer };
+}
+
+/* Annule une offre publiée (uniquement par son propre auteur) et lui rend la ressource mise en
+   dépôt, plafonnée par la capacité de stockage actuelle de son village d'origine (comme un
+   surplus de production — ne fait jamais perdre de ressources déjà au-dessus du plafond). Si ce
+   village a depuis été perdu (conquête), le dépôt reste perdu : cohérent avec le sort du reste de
+   ses ressources dans un village conquis. */
+function doMarketCancelOffer(db, username, offerId){
+  const offers = db.market||[];
+  const idx = offers.findIndex(o=>o.id===offerId);
+  if(idx<0) return { error: "Offre introuvable (déjà acceptée ou annulée ?)." };
+  const offer = offers[idx];
+  if(offer.seller!==username) return { error: "Vous ne pouvez annuler que vos propres offres." };
+  offers.splice(idx,1);
+  const homeVillage = db.villages[offer.sellerVillageId];
+  if(homeVillage && homeVillage.owner===username){
+    const cap = storageCap(homeVillage.buildings.warehouse);
+    homeVillage.resources[offer.giveRes] = Math.max(homeVillage.resources[offer.giveRes], Math.min(homeVillage.resources[offer.giveRes]+offer.giveAmount, cap));
+  }
+  return { ok:true };
+}
+
+/* Accepte l'offre d'un autre joueur : prélève ce qui est demandé chez l'acheteur (son village
+   actif), le livre au vendeur (plafonné par son stockage), et livre la ressource mise en dépôt à
+   l'acheteur (plafonné par le sien). */
+function doMarketAcceptOffer(db, username, offerId){
+  const offers = db.market||[];
+  const idx = offers.findIndex(o=>o.id===offerId);
+  if(idx<0) return { error: "Offre introuvable (déjà acceptée ou annulée ?)." };
+  const offer = offers[idx];
+  if(offer.seller===username) return { error: "Vous ne pouvez pas accepter votre propre offre." };
+  const buyerVillage = villageByUser(db, username);
+  if(!buyerVillage) return { error: "Village introuvable." };
+  const sellerVillage = db.villages[offer.sellerVillageId];
+  if(!sellerVillage || sellerVillage.owner!==offer.seller){
+    offers.splice(idx,1); // village vendeur introuvable/conquis depuis : offre périmée, on la retire
+    return { error: "Cette offre n'est plus valable (village du vendeur introuvable)." };
+  }
+  if((buyerVillage.resources[offer.wantRes]||0) < offer.wantAmount) return { error: "Ressources insuffisantes pour accepter cette offre." };
+  offers.splice(idx,1);
+  buyerVillage.resources[offer.wantRes] -= offer.wantAmount;
+  const buyerCap = storageCap(buyerVillage.buildings.warehouse);
+  buyerVillage.resources[offer.giveRes] = Math.max(buyerVillage.resources[offer.giveRes], Math.min(buyerVillage.resources[offer.giveRes]+offer.giveAmount, buyerCap));
+  const sellerCap = storageCap(sellerVillage.buildings.warehouse);
+  sellerVillage.resources[offer.wantRes] = Math.max(sellerVillage.resources[offer.wantRes], Math.min(sellerVillage.resources[offer.wantRes]+offer.wantAmount, sellerCap));
+  pushReport(db, offer.seller, { kind:"marketSold", time:now(), other:username, giveRes:offer.giveRes, giveAmount:offer.giveAmount, wantRes:offer.wantRes, wantAmount:offer.wantAmount });
+  pushReport(db, username, { kind:"marketBought", time:now(), other:offer.seller, giveRes:offer.giveRes, giveAmount:offer.giveAmount, wantRes:offer.wantRes, wantAmount:offer.wantAmount });
+  return { ok:true };
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Résolution des combats                                                 */
 /* ---------------------------------------------------------------------- */
@@ -1604,6 +1688,7 @@ function buildSnapshot(db, username){
     guildChat: chatGuild,
     speedMultiplier: getSpeedMultiplier(db),
     serverEvents: publicServerEvents(db),
+    market: (db.market||[]).slice().sort((a,b)=>b.createdAt-a.createdAt),
     mySupport,
     guild: guild ? publicGuildView(db, guild, username) : null,
     guildInvites
@@ -1620,6 +1705,7 @@ module.exports = {
   adminListMissions, adminFinishMission,
   adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
   doSendSupport, doRecallSupport, doGiveResources,
+  doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
   doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic

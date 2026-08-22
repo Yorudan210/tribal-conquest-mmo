@@ -27,6 +27,7 @@ function emptyDb(){
     diplomacy: [],        // [{id, guildA, guildB, type:"pact"|"alliance"|"war", status:"pending"|"active", proposedBy, createdAt}, ...]
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     serverEvents: [],     // [{id, key, name, icon, affects, multiplier, startAt, endAt}, ...] évènements admin en cours (voir gameLogic.js)
+    market: [],           // [{id, seller, sellerVillageId, giveRes, giveAmount, wantRes, wantAmount, createdAt}, ...] offres d'échange publiques (voir gameLogic.js)
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
   };
@@ -47,6 +48,7 @@ function migrateDb(){
   if(!db.settings) db.settings = {};
   if(!db.settings.speedMultiplier) db.settings.speedMultiplier = 1;
   if(!db.serverEvents) db.serverEvents = [];
+  if(!db.market) db.market = [];
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
     if(db.users[uname].guildId === undefined) db.users[uname].guildId = null;

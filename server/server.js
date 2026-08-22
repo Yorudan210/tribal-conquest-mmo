@@ -237,6 +237,29 @@ async function handleApi(req, res, pathname, url){
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
 
+  // ---- Marché ----
+  if(pathname==="/api/market/offer" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doMarketCreateOffer(db, username, body.giveRes, body.giveAmount, body.wantRes, body.wantAmount);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/market/cancel" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doMarketCancelOffer(db, username, String(body.offerId||""));
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/market/accept" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doMarketAcceptOffer(db, username, String(body.offerId||""));
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+
   // ---- Guildes ----
   if(pathname==="/api/guild/create" && req.method==="POST"){
     const body = await readBody(req);
