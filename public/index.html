@@ -1378,11 +1378,45 @@ function stopPolling(){
 
 /* ============================= AUTHENTIFICATION ============================= */
 
+const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"🎖️", title:"Les Succès remplacent les Objectifs", body:"9 catégories reprises du jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, attaques remportées, soutien, échanges au Marché, murailles démolies, adversaires distincts), chacune avec 4 paliers Bois / Bronze / Argent / Or débloqués automatiquement." },
+  { tag:"Nouveau", icon:"🏪", title:"Le Marché", body:"Proposez des échanges de ressources et acceptez les offres publiées par les autres joueurs." },
+  { tag:"Amélioration", icon:"🗺️", title:"Carte du monde vivante", body:"Les attaques et reconnaissances en approche des autres joueurs s'affichent désormais sur la carte." },
+  { tag:"Nouveau", icon:"📯", title:"Évènements de serveur", body:"Le panneau Admin peut déclencher des évènements temporaires (bonus de production, etc.), affichés au joueur sous forme de badges-icônes." },
+  { tag:"Équilibrage", icon:"⚖️", title:"Bâtiments et troupes recalibrés", body:"Coûts, temps de construction, production des bâtiments et statistiques des troupes alignés sur les valeurs officielles de Tribal Wars." },
+  { tag:"Nouveau", icon:"🧭", title:"Zone d'influence", body:"La carte affiche désormais la zone d'influence de chaque village." },
+  { tag:"Amélioration", icon:"🏆", title:"Classement global", body:"Le classement cumule maintenant les points de tous les villages d'un même joueur." },
+  { tag:"Nouveau", icon:"🤝", title:"Diplomatie de guilde", body:"Pactes de non-agression, alliances et déclarations de guerre entre guildes." },
+  { tag:"Amélioration", icon:"⚔️", title:"Fenêtre de mission unifiée", body:"Attaque, reconnaissance, soutien et don de ressources regroupés dans une seule fenêtre." },
+  { tag:"Visuel", icon:"🏗️", title:"Bâtiments détaillés", body:"Charpentes, fumée, accessoires et textures ajoutés aux illustrations de bâtiments." },
+  { tag:"Visuel", icon:"📜", title:"Nouvelle ambiance visuelle", body:"Fond parchemin, palette pierre et bronze, navigation latérale, logo écusson et corrections d'ergonomie mobile." },
+  { tag:"Nouveau", icon:"💬", title:"Chat mondial et de guilde", body:"Pseudo des administrateurs affiché en rouge, annonces relayées directement dans le chat." },
+  { tag:"Nouveau", icon:"👤", title:"Fiche joueur et rapports détaillés", body:"Liste de vos villages avec navigation directe vers la carte, rapports de combat détaillés, dons de guilde visibles, boutique de guilde." },
+  { tag:"Nouveau", icon:"🏰", title:"Villages multiples", body:"Améliorez les villages conquis et envoyez jusqu'à 4 nobles par village." },
+  { tag:"Nouveau", icon:"🏛️", title:"Guildes, soutien et dons", body:"Hall de guilde, envoi de renforts et de ressources entre joueurs, file de construction avec annulation." },
+  { tag:"Nouveau", icon:"🛡️", title:"Panneau Admin", body:"Outils de modération et de suivi pour les administrateurs, sauvegarde distante persistante entre redémarrages." },
+  { tag:"Lancement", icon:"🚩", title:"Lancement du monde", body:"Première mise en ligne de Conquête Tribale !" }
+];
+
+function renderChangelogPanel(){
+  return `<div style="max-height:360px; overflow-y:auto; text-align:left; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+    ${CHANGELOG_ENTRIES.map(e=>`
+      <div class="card" style="padding:10px 12px;">
+        <div class="card-head" style="margin-bottom:4px;">
+          <div class="icon-mini shop-icon" style="width:30px; height:30px; font-size:15px;">${e.icon}</div>
+          <h4 style="margin:0;">${e.title}<span class="small muted" style="font-weight:normal;">${e.tag}</span></h4>
+        </div>
+        <div class="desc small">${e.body}</div>
+      </div>`).join("")}
+  </div>`;
+}
+
 function renderAuthScreen(mode, errorMsg){
   mode = mode || "login";
   const el=document.getElementById("authScreen");
+  const isChangelog = mode==="changelog";
   el.innerHTML = `
-    <div class="box" style="max-width:380px; margin:80px auto; text-align:center;">
+    <div class="box" style="max-width:${isChangelog?460:380}px; margin:80px auto; text-align:center;">
       <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:6px;">
         <svg viewBox="0 0 64 76" width="64" height="76" xmlns="http://www.w3.org/2000/svg">
           <path d="M32 3 L59 13 L59 37 C59 59 46 69 32 75 C18 69 5 59 5 37 L5 13 Z" fill="var(--panel2)" stroke="var(--gold)" stroke-width="3"/>
@@ -1395,10 +1429,12 @@ function renderAuthScreen(mode, errorMsg){
         <h2 style="text-transform:uppercase; letter-spacing:1px; margin:0;">Conquête Tribale</h2>
       </div>
       <p class="muted small">Un monde partagé, en temps réel, avec de vrais joueurs. Connectez-vous ou créez un compte pour rejoindre la partie.</p>
-      <div style="display:flex; gap:8px; justify-content:center; margin:14px 0;">
+      <div style="display:flex; gap:8px; justify-content:center; margin:14px 0; flex-wrap:wrap;">
         <button id="authTabLogin" class="${mode==='login'?'primary':''}">Connexion</button>
         <button id="authTabRegister" class="${mode==='register'?'primary':''}">Créer un compte</button>
+        <button id="authTabChangelog" class="${isChangelog?'primary':''}">🗞️ Nouveautés</button>
       </div>
+      ${isChangelog ? renderChangelogPanel() : `
       <form id="authForm" style="display:flex; flex-direction:column; gap:10px; text-align:left;">
         <label class="small">Pseudo
           <input type="text" id="authUsername" maxlength="20" autocomplete="username" placeholder="3 à 20 caractères">
@@ -1408,16 +1444,19 @@ function renderAuthScreen(mode, errorMsg){
         </label>
         <div class="muted small" id="authError" style="color:#e0836a; min-height:16px;">${errorMsg||""}</div>
         <button type="submit" class="primary" id="authSubmit">${mode==='register'?'Créer mon compte':'Se connecter'}</button>
-      </form>
+      </form>`}
     </div>`;
   document.getElementById("authTabLogin").onclick=()=>renderAuthScreen("login");
   document.getElementById("authTabRegister").onclick=()=>renderAuthScreen("register");
-  document.getElementById("authForm").onsubmit=(e)=>{
-    e.preventDefault();
-    const u=document.getElementById("authUsername").value.trim();
-    const p=document.getElementById("authPassword").value;
-    if(mode==="register") doRegister(u,p); else doLogin(u,p);
-  };
+  document.getElementById("authTabChangelog").onclick=()=>renderAuthScreen("changelog");
+  if(!isChangelog){
+    document.getElementById("authForm").onsubmit=(e)=>{
+      e.preventDefault();
+      const u=document.getElementById("authUsername").value.trim();
+      const p=document.getElementById("authPassword").value;
+      if(mode==="register") doRegister(u,p); else doLogin(u,p);
+    };
+  }
 }
 
 async function doLogin(u,p){
