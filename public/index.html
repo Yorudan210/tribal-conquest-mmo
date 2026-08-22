@@ -519,6 +519,15 @@ const BUILDING_ART = {
     <rect x="-11" y="-26" width="22" height="26" rx="2" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
     <rect x="-33" y="-38" width="12" height="12" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
     <rect x="12" y="-38" width="12" height="12" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
+    <line x1="-42" y1="-52" x2="-20" y2="-30" stroke="${m.wallDark}" stroke-width="3" opacity=".7"/>
+    <line x1="42" y1="-52" x2="20" y2="-30" stroke="${m.wallDark}" stroke-width="3" opacity=".7"/>
+    <line x1="-36" y1="-58" x2="-6" y2="-88" stroke="${m.roofDark}" stroke-width="2" opacity=".6"/>
+    <line x1="36" y1="-58" x2="6" y2="-88" stroke="${m.roofDark}" stroke-width="2" opacity=".6"/>
+    <rect x="-16" y="-2" width="32" height="4" rx="1" fill="#3a2414" stroke="#2a1c10" stroke-width="1"/>
+    <line x1="0" y1="-26" x2="0" y2="0" stroke="#2a1c10" stroke-width="1"/>
+    <circle cx="6" cy="-13" r="1.6" fill="#d9a441"/>
+    <line x1="0" y1="-96" x2="0" y2="-104" stroke="#2a1c10" stroke-width="1.5"/>
+    <polygon points="0,-104 11,-100 0,-96" fill="#5b93b0" stroke="#2a1c10" stroke-width="1"/>
   `,
   wood: (m) => `
     <rect x="-18" y="-40" width="30" height="24" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
@@ -531,18 +540,38 @@ const BUILDING_ART = {
       <circle cx="-46" cy="-5.5" r="4.5" fill="#c9a15a"/>
       <circle cx="-12" cy="-5.5" r="4.5" fill="#a9764a"/>
     </g>
+    <circle cx="-46" cy="-15.5" r="2.1" fill="none" stroke="#5c3c22" stroke-width=".8"/>
+    <circle cx="-12" cy="-15.5" r="2.1" fill="none" stroke="#5c3c22" stroke-width=".8"/>
+    <circle cx="-46" cy="-5.5" r="2.1" fill="none" stroke="#5c3c22" stroke-width=".8"/>
+    <circle cx="-12" cy="-5.5" r="2.1" fill="none" stroke="#5c3c22" stroke-width=".8"/>
     <rect x="24" y="-30" width="5" height="30" fill="#4a331d"/>
     <polygon points="26.5,-30 14,-46 39,-46" fill="#3f6b34" stroke="#2a1c10" stroke-width="1.5"/>
     <polygon points="26.5,-40 17,-54 36,-54" fill="#4a7a3a" stroke="#2a1c10" stroke-width="1.5"/>
+    <rect x="0" y="-70" width="5" height="10" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="3" cy="-74" rx="3.5" ry="5" fill="#c9c2b4" opacity=".45"/>
+    <ellipse cx="6" cy="-82" rx="4.5" ry="6" fill="#c9c2b4" opacity=".3"/>
+    <ellipse cx="-56" cy="-2" rx="7" ry="4" fill="#5c3c22" stroke="#2a1c10" stroke-width="1"/>
+    <line x1="-56" y1="-2" x2="-50" y2="-20" stroke="#3a2414" stroke-width="2"/>
+    <polygon points="-50,-20 -42,-24 -46,-14" fill="#9c9182" stroke="#2a1c10" stroke-width="1"/>
+    <polygon points="-20,2 -16,-1 -18,4" fill="#c9a15a" opacity=".8"/>
+    <polygon points="32,3 36,0 35,5" fill="#a9764a" opacity=".8"/>
   `,
   clay: (m) => `
     <ellipse cx="0" cy="0" rx="44" ry="16" fill="#6b4a2a" stroke="#2a1c10" stroke-width="2"/>
     <ellipse cx="0" cy="0" rx="30" ry="10" fill="#43301c"/>
+    <ellipse cx="0" cy="2" rx="20" ry="7" fill="none" stroke="#2a1c10" stroke-width="1" opacity=".4"/>
+    <ellipse cx="0" cy="4" rx="11" ry="4" fill="none" stroke="#2a1c10" stroke-width="1" opacity=".3"/>
     <ellipse cx="-30" cy="-4" rx="10" ry="6" fill="#b07a4c" stroke="#2a1c10" stroke-width="1.5"/>
     <ellipse cx="28" cy="-6" rx="9" ry="5" fill="#a06b3f" stroke="#2a1c10" stroke-width="1.5"/>
     <ellipse cx="8" cy="8" rx="8" ry="5" fill="#b07a4c" stroke="#2a1c10" stroke-width="1.5"/>
     <line x1="-38" y1="-14" x2="-30" y2="-32" stroke="${m.wallDark}" stroke-width="4" stroke-linecap="round"/>
     <rect x="-36" y="-34" width="12" height="4" fill="${m.wall}" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="-44" y1="10" x2="-68" y2="16" stroke="#4a331d" stroke-width="2" opacity=".55"/>
+    <line x1="-42" y1="13" x2="-66" y2="19" stroke="#4a331d" stroke-width="2" opacity=".55"/>
+    <line x1="34" y1="-30" x2="34" y2="-10" stroke="#5c3c22" stroke-width="2"/>
+    <line x1="20" y1="-26" x2="46" y2="-26" stroke="#5c3c22" stroke-width="2"/>
+    <ellipse cx="20" cy="-20" rx="5" ry="7" fill="#a06b3f" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="46" cy="-20" rx="5" ry="7" fill="#b07a4c" stroke="#2a1c10" stroke-width="1"/>
   `,
   iron: (m) => `
     <polygon points="-40,4 -30,-38 -6,-56 18,-40 34,4" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
@@ -552,11 +581,24 @@ const BUILDING_ART = {
     <rect x="-2" y="-2" width="16" height="8" rx="2" fill="#4a331d" stroke="#2a1c10" stroke-width="1.2"/>
     <circle cx="2" cy="6" r="3" fill="#2a1c10"/>
     <circle cx="12" cy="6" r="3" fill="#2a1c10"/>
+    <rect x="-4" y="-58" width="7" height="14" fill="#3a3a3a" stroke="#2a1c10" stroke-width="1.2"/>
+    <ellipse cx="0" cy="-62" rx="5" ry="7" fill="#7d7568" opacity=".4"/>
+    <ellipse cx="4" cy="-72" rx="6.5" ry="8" fill="#9c9182" opacity=".26"/>
+    <circle cx="10" cy="-14" r="1.3" fill="#ffb347"/>
+    <circle cx="14" cy="-20" r="1" fill="#ff8c42"/>
+    <circle cx="-2" cy="-22" r="1.1" fill="#ffb347"/>
+    <line x1="-20" y1="4" x2="-11" y2="-9" stroke="#5c3c22" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="-16" y="-13" width="9" height="5" fill="#7d7568" stroke="#2a1c10" stroke-width="1"/>
   `,
   warehouse: (m) => `
     <rect x="-38" y="-44" width="76" height="44" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
     <polygon points="-44,-44 0,-40 0,-66 -20,-66" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
     <polygon points="44,-44 0,-40 0,-66 20,-66" fill="${m.roofDark}" stroke="#2a1c10" stroke-width="2"/>
+    <line x1="-38" y1="-42" x2="-4" y2="-40" stroke="${m.roofDark}" stroke-width="1.1" opacity=".5"/>
+    <line x1="-28" y1="-51" x2="-2" y2="-47" stroke="${m.roofDark}" stroke-width="1.1" opacity=".5"/>
+    <line x1="38" y1="-42" x2="4" y2="-40" stroke="${m.roof}" stroke-width="1.1" opacity=".5"/>
+    <line x1="28" y1="-51" x2="2" y2="-47" stroke="${m.roof}" stroke-width="1.1" opacity=".5"/>
+    <rect x="-30" y="-34" width="10" height="10" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
     <rect x="-15" y="-26" width="13" height="26" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
     <rect x="2" y="-26" width="13" height="26" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
     <g stroke="#2a1c10" stroke-width="1.5">
@@ -566,11 +608,18 @@ const BUILDING_ART = {
       <line x1="34" y1="-8" x2="50" y2="-8"/>
       <line x1="42" y1="-16" x2="42" y2="0"/>
     </g>
+    <rect x="-64" y="-14" width="14" height="14" fill="#7a5230" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="-64" y1="-7" x2="-50" y2="-7" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="60" cy="-4" rx="9" ry="6" fill="#c9a15a" stroke="#2a1c10" stroke-width="1"/>
+    <path d="M 54 -8 Q 60 -14 66 -8" fill="none" stroke="#2a1c10" stroke-width="1"/>
   `,
   farm: (m) => `
     <rect x="-18" y="-34" width="36" height="30" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
     <polygon points="-24,-34 0,-54 24,-34" fill="${m.roof}" stroke="#2a1c10" stroke-width="2"/>
     <rect x="-6" y="-16" width="12" height="12" fill="#3a2414" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="0" y1="-16" x2="0" y2="-4" stroke="#2a1c10" stroke-width="1"/>
+    <rect x="10" y="-54" width="5" height="10" fill="${m.wallDark}" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="12" cy="-60" rx="4" ry="6" fill="#c9c2b4" opacity=".4"/>
     <g stroke="#8a6a1f" stroke-width="3" stroke-linecap="round">
       <line x1="24" y1="4" x2="24" y2="-14"/>
       <line x1="32" y1="4" x2="32" y2="-18"/>
@@ -582,6 +631,12 @@ const BUILDING_ART = {
     </g>
     <ellipse cx="-32" cy="2" rx="14" ry="9" fill="#e0c060" stroke="#8a6a1f" stroke-width="1.5"/>
     <path d="M -44 2 Q -32 -10 -20 2" fill="none" stroke="#b89a3d" stroke-width="1.2"/>
+    <line x1="-52" y1="4" x2="-52" y2="-16" stroke="#5c3c22" stroke-width="2"/>
+    <line x1="-58" y1="-8" x2="-46" y2="-8" stroke="#5c3c22" stroke-width="2"/>
+    <circle cx="-52" cy="-19" r="4" fill="#c9a15a" stroke="#2a1c10" stroke-width="1"/>
+    <polygon points="-58,-3 -46,-3 -52,5" fill="#8a6238" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="-2" cy="10" rx="9" ry="6" fill="#e8e2d0" stroke="#2a1c10" stroke-width="1"/>
+    <circle cx="6" cy="7" r="3" fill="#3a2414"/>
   `,
   barracks: (m) => `
     <rect x="-36" y="-42" width="72" height="42" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
@@ -589,12 +644,21 @@ const BUILDING_ART = {
     <line x1="0" y1="-70" x2="0" y2="-88" stroke="#2a1c10" stroke-width="2"/>
     <polygon points="0,-88 20,-82 0,-76" fill="#8a2e22" stroke="#2a1c10" stroke-width="1.5"/>
     <rect x="-11" y="-22" width="22" height="22" fill="#2a1c10"/>
+    <circle cx="-6" cy="-11" r="1" fill="#8a6238"/><circle cx="6" cy="-11" r="1" fill="#8a6238"/>
+    <circle cx="-6" cy="-3" r="1" fill="#8a6238"/><circle cx="6" cy="-3" r="1" fill="#8a6238"/>
     <g stroke="#c9c2b4" stroke-width="4" stroke-linecap="round">
       <line x1="-24" y1="-32" x2="-6" y2="-14"/>
       <line x1="-6" y1="-32" x2="-24" y2="-14"/>
       <line x1="6" y1="-32" x2="24" y2="-14"/>
       <line x1="24" y1="-32" x2="6" y2="-14"/>
     </g>
+    <circle cx="26" cy="-20" r="9" fill="#7d7568" stroke="#2a1c10" stroke-width="1.5"/>
+    <line x1="26" y1="-29" x2="26" y2="-11" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="17" y1="-20" x2="35" y2="-20" stroke="#2a1c10" stroke-width="1.2"/>
+    <line x1="-48" y1="-38" x2="-48" y2="0" stroke="#5c3c22" stroke-width="2"/>
+    <line x1="-52" y1="-40" x2="-44" y2="-40" stroke="#5c3c22" stroke-width="2"/>
+    <line x1="-52" y1="-6" x2="-44" y2="-6" stroke="#5c3c22" stroke-width="2"/>
+    <polygon points="-48,-40 -52,-50 -44,-50" fill="#9c9182" stroke="#2a1c10" stroke-width="1"/>
   `,
   wall: (m) => `
     <rect x="-48" y="-10" width="96" height="26" fill="${m.wallLight}" stroke="#2a1c10" stroke-width="2"/>
@@ -621,16 +685,28 @@ const BUILDING_ART = {
     <circle cx="6" cy="-7" r="2.5" fill="#d9a441"/>
     <ellipse cx="24" cy="6" rx="6" ry="3" fill="#7d7568" stroke="#2a1c10" stroke-width="1"/>
     <ellipse cx="-26" cy="8" rx="5" ry="2.5" fill="#7d7568" stroke="#2a1c10" stroke-width="1"/>
+    <path d="M -32 -10 Q 0 -22 32 -10" fill="none" stroke="#2a1c10" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>
+    <path d="M -28 -3 Q 0 -13 28 -3" fill="none" stroke="#2a1c10" stroke-width="1" stroke-dasharray="3 3" opacity=".45"/>
+    <rect x="-8" y="-3" width="16" height="7" rx="1" fill="#6b4a2b" stroke="#2a1c10" stroke-width="1"/>
+    <rect x="-8" y="-5" width="16" height="3" fill="#8a6238" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="14" cy="10" rx="4" ry="2.5" fill="#5a6b3f" stroke="#2a1c10" stroke-width="1"/>
+    <ellipse cx="-18" cy="11" rx="3.5" ry="2" fill="#5a6b3f" stroke="#2a1c10" stroke-width="1"/>
   `,
   academy: (m) => `
     <rect x="-20" y="-50" width="40" height="50" rx="4" fill="${m.wall}" stroke="#2a1c10" stroke-width="2"/>
     <path d="M -24 -50 Q 0 -80 24 -50 Z" fill="#4f6b8a" stroke="#2a1c10" stroke-width="2"/>
     <circle cx="0" cy="-66" r="4" fill="#d9a441" stroke="#2a1c10" stroke-width="1"/>
+    <path d="M -4 -60 Q 0 -66 4 -60 L 3 -54 L -3 -54 Z" fill="#c9a15a" stroke="#2a1c10" stroke-width="1"/>
     <rect x="-9" y="-36" width="18" height="16" fill="#2a1c10" stroke="#d9a441" stroke-width="1"/>
+    <line x1="0" y1="-36" x2="0" y2="-20" stroke="#d9a441" stroke-width="1"/>
+    <line x1="-9" y1="-28" x2="9" y2="-28" stroke="#d9a441" stroke-width="1"/>
     <rect x="-10" y="-14" width="20" height="14" fill="#3a2414" stroke="#2a1c10" stroke-width="1.5"/>
     <rect x="12" y="-12" width="11" height="9" rx="1" fill="#c9b88a" stroke="#2a1c10" stroke-width="1"/>
     <line x1="14" y1="-7.5" x2="21" y2="-7.5" stroke="#5c3c22" stroke-width="1"/>
     <line x1="14" y1="-5" x2="19" y2="-5" stroke="#5c3c22" stroke-width="1"/>
+    <rect x="-22" y="-6" width="10" height="6" fill="#8a2e22" stroke="#2a1c10" stroke-width="1"/>
+    <rect x="-22" y="-12" width="10" height="6" fill="#4f6b8a" stroke="#2a1c10" stroke-width="1"/>
+    <rect x="20" y="-46" width="6" height="20" fill="#5b93b0" stroke="#2a1c10" stroke-width="1"/>
   `
 };
 
