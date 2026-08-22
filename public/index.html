@@ -182,6 +182,8 @@
   .card .icon-mini.shop-icon{font-size:22px;}
   .free-tag{color:var(--green); font-weight:bold;}
   .card.quest-done{border-color:var(--green); opacity:.75;}
+  .tier-pip{display:inline-block; width:11px; height:11px; border-radius:50%; background:#2a2116; border:1px solid var(--border); margin-left:3px; vertical-align:middle;}
+  .tier-pip.reached{border-color:rgba(0,0,0,.5); box-shadow:0 0 4px rgba(255,255,255,.3);}
   .card h4{margin:0; color:var(--gold); font-size:15px; display:flex; flex-direction:column; gap:2px;}
   .card .desc{font-size:11px; color:var(--text-dim); margin-bottom:6px; min-height:28px;}
   .card .cost{font-size:11px; margin-bottom:6px;}
@@ -507,6 +509,7 @@
 
 /* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
 const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
+        ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS,
         clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 /* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
@@ -943,8 +946,8 @@ const TUTORIAL_STEPS = [
    body:"Construisez une Caserne pour entraîner des troupes dans l'onglet du même nom : lanciers, cavalerie, béliers... chacune a un rôle différent à l'attaque comme à la défense."},
   {icon:"🗺️", title:"La carte",
    body:"Explorez la carte pour repérer des villages barbares : envoyez une reconnaissance pour les espionner, ou une attaque pour piller leurs ressources. Attention : un village attaqué peut riposter !"},
-  {icon:"🎯", title:"Objectifs et classement",
-   body:"L'onglet Objectifs propose des jalons de progression avec des récompenses, et l'onglet Classement affiche les meilleurs joueurs du monde. Bonne conquête !"}
+  {icon:"🎖️", title:"Succès et classement",
+   body:"L'onglet Succès suit votre progression par paliers (Bois/Bronze/Argent/Or), comme sur le jeu officiel, et l'onglet Classement affiche les meilleurs joueurs du monde. Bonne conquête !"}
 ];
 
 function renderTutorial(){
@@ -1260,10 +1263,6 @@ function queueTrain(key, count){
   if(!count || count<=0) return;
   const t=TROOPS[key];
   doAction(()=>apiCall("/api/train","POST",{key, count}), count+" "+t.name+"(s) mis en formation.", "trainQueued");
-}
-
-function claimQuest(key){
-  doAction(()=>apiCall("/api/quest/claim","POST",{key}), "🎯 Objectif rempli — récompense reçue !", "victory");
 }
 
 function sendMission(villageId, kind){
@@ -1668,8 +1667,8 @@ function updateTopBarStats(){
 }
 
 function renderTabs(){
-  const questsDone=state.quests.filter(q=>q.claimed).length;
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["quests","🎯 Objectifs ("+questsDone+"/"+state.quests.length+")"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
+  const achievementPoints=(state.achievements||[]).reduce((s,a)=>s+a.points,0);
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["achievements","🎖️ Succès ("+achievementPoints+" pts)"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
   if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
@@ -1879,7 +1878,7 @@ function renderActiveTabContent(){
   const main=document.getElementById("tabContent");
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
   else if(activeTab==="barracks") main.innerHTML=renderBarracks();
-  else if(activeTab==="quests") main.innerHTML=renderQuests();
+  else if(activeTab==="achievements") main.innerHTML=renderAchievements();
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
@@ -2077,31 +2076,42 @@ function renderBuildMenuCard(key){
   </div>`;
 }
 
-function renderQuests(){
-  const done = state.quests.filter(q=>q.claimed).length;
-  const cards = state.quests.map(q=>{
-    const rewardParts=[];
-    if(q.reward.wood) rewardParts.push(`🪵 ${fmt(q.reward.wood)}`);
-    if(q.reward.clay) rewardParts.push(`🧱 ${fmt(q.reward.clay)}`);
-    if(q.reward.iron) rewardParts.push(`⛏️ ${fmt(q.reward.iron)}`);
-    if(q.reward.troops) for(const tk in q.reward.troops) rewardParts.push(`${TROOPS[tk].name} ×${q.reward.troops[tk]}`);
-    let btnLabel, btnDisabled;
-    if(q.claimed){ btnLabel="✅ Récompense reçue"; btnDisabled=true; }
-    else if(q.met){ btnLabel="🎁 Réclamer la récompense"; btnDisabled=false; }
-    else{ btnLabel="Objectif non atteint"; btnDisabled=true; }
-    return `<div class="card ${q.claimed?'quest-done':''}">
+/* Succès : mêmes catégories/paliers (Bois/Bronze/Argent/Or) que le jeu officiel, calculés côté
+   serveur (computeAchievements) à partir de compteurs cumulatifs liés au COMPTE — jamais réclamés
+   manuellement ni remis à zéro, contrairement aux anciens Objectifs qu'ils remplacent : ils se
+   débloquent tout seuls au fil de la progression, purement indicatifs (aucune récompense en jeu). */
+const ACHIEVEMENT_TIER_COLORS = ["#a9895f","#cd7f32","#c0c0c0","#e0b83c"];
+function renderAchievements(){
+  const list = state.achievements||[];
+  const totalPoints = list.reduce((s,a)=>s+a.points,0);
+  const maxPoints = list.length*10; // 1+2+3+4 par succès entièrement gravi jusqu'à l'Or
+
+  const cards = list.map(a=>{
+    const tierLabel = a.tier>0 ? ACHIEVEMENT_TIER_LABELS[a.tier-1] : null;
+    const floorValue = a.tier>0 ? a.tiers[a.tier-1] : 0;
+    const progressPct = a.nextThreshold!=null
+      ? clamp(100*(a.value-floorValue)/(a.nextThreshold-floorValue), 0, 100)
+      : 100;
+    const badgesRow = a.tiers.map((t,i)=>{
+      const reached = a.tier>i;
+      return `<span class="tier-pip${reached?' reached':''}" style="${reached?('background:'+ACHIEVEMENT_TIER_COLORS[i]+';'):''}" title="${ACHIEVEMENT_TIER_LABELS[i]} — ${fmt(t)}"></span>`;
+    }).join("");
+    return `<div class="card ${a.tier>=4?'quest-done':''}">
       <div class="card-head">
-        <div class="icon-mini shop-icon">${q.icon}</div>
-        <h4>${q.title}<span class="small muted" style="font-weight:normal;">${q.claimed?'Terminé':(q.met?'Prêt !':'')}</span></h4>
+        <div class="icon-mini shop-icon">${a.icon}</div>
+        <h4>${a.name}<span class="small muted" style="font-weight:normal;">${tierLabel?('Palier '+tierLabel):'Non débuté'}</span></h4>
       </div>
-      <div class="desc">${q.desc}</div>
-      <div class="cost">${rewardParts.map(p=>`<span>${p}</span>`).join("")}</div>
-      <button data-claim-quest="${q.key}" class="primary" ${btnDisabled?'disabled':''}>${btnLabel}</button>
+      <div class="desc">${a.desc}</div>
+      <div class="bar-bg" style="margin:8px 0 4px;"><div class="bar-fill" style="width:${progressPct}%;"></div></div>
+      <div class="small muted flex-between">
+        <span>${fmt(a.value)}${a.nextThreshold!=null?(' / '+fmt(a.nextThreshold)):' — maximum atteint'}</span>
+        <span>${badgesRow}</span>
+      </div>
     </div>`;
   }).join("");
 
-  return `<h2>🎯 Objectifs</h2>
-    <p class="muted small">${done}/${state.quests.length} objectifs remplis — des jalons de progression avec une récompense en ressources ou en troupes.</p>
+  return `<h2>🎖️ Succès</h2>
+    <p class="muted small">${totalPoints}/${maxPoints} points de succès — mêmes catégories et paliers (Bois/Bronze/Argent/Or) que le jeu officiel, purement indicatifs (pas de récompense).</p>
     <div class="grid-buildings">${cards}</div>`;
 }
 
@@ -3413,8 +3423,8 @@ function renderHelp(){
   <p>Le <b>Bélier</b> et la <b>Catapulte</b> sont des unités de siège : envoyées dans une attaque victorieuse contre un village barbare, elles endommagent respectivement sa muraille et sa capacité de stockage (l'entrepôt d'un vrai joueur ne peut pas être endommagé ainsi). Construisez une <b>Académie</b> (dès Hôtel de ville niveau 20 — coûteuse et longue, elle ne peut être bâtie qu'une seule fois) pour former des <b>Nobles</b> : chaque noble survivant à une attaque victorieuse contre un village barbare réduit sa loyauté d'environ 20 à 35% et est alors consommé ; à 0% le village est conquis et devient vôtre. La conquête d'un village appartenant à un autre joueur n'est pas possible dans cette version.</p>
   <h3>Un monde vivant, avec de vrais joueurs</h3>
   <p>Les villages barbares se développent tout seuls avec le temps (nouvelles troupes, muraille renforcée, réserves agrandies), surtout les plus éloignés du centre, et peuvent riposter par un raid si vous les attaquez trop souvent. Les autres joueurs, eux, agissent quand ils le souhaitent : soyez prêt à défendre votre village (troupes en garnison, muraille) à tout moment, même hors ligne — l'économie et les combats continuent en votre absence, le monde tourne en temps réel 24h/24.</p>
-  <h3>Objectifs et Classement</h3>
-  <p>L'onglet <b>Objectifs</b> propose des jalons de progression (améliorer vos bâtiments, entraîner une armée, remporter une bataille, conquérir un village...) qui rapportent chacun une récompense unique en ressources ou en troupes. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
+  <h3>Succès et Classement</h3>
+  <p>L'onglet <b>Succès</b> reprend les mêmes catégories que le jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, soutien, échanges au Marché, murailles démolies, nombre d'adversaires distincts attaqués...), chacune avec 4 paliers — Bois, Bronze, Argent, Or — qui se débloquent automatiquement au fil de votre progression, sans réclamation ni récompense en jeu : c'est purement indicatif. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
   <h3>Compte et progression</h3>
   <p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>
   ${state.isAdmin ? "" : `
@@ -3439,7 +3449,6 @@ function attachTabHandlers(){
     const inp=document.getElementById("trainCount_"+k);
     queueTrain(k, Number(inp.value));
   });
-  document.querySelectorAll("[data-claim-quest]").forEach(b=>b.onclick=()=>claimQuest(b.dataset.claimQuest));
   const replayBtn=document.getElementById("btnReplayTutorial");
   if(replayBtn) replayBtn.onclick=showTutorial;
   const claimForm=document.getElementById("adminClaimForm");
