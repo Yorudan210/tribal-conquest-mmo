@@ -230,6 +230,7 @@
   }
   #mapCanvas.dragging{cursor:grabbing;}
   #mapWorld{position:absolute;}
+  #mapInfluence{position:absolute; left:0; top:0; pointer-events:none;}
   .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
   .villagePin .dot{
     width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
@@ -1850,7 +1851,7 @@ function renderActiveTabContent(){
   else if(activeTab==="admin" && state.isAdmin) main.innerHTML=renderAdmin();
   else main.innerHTML=renderHelp();
   attachTabHandlers();
-  if(activeTab==="map"){ positionMapWorld(); attachMapHandlers(); }
+  if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); attachMapHandlers(); }
   if(activeTab==="guild"){
     attachGuildHandlers();
     if(state.guild && state.guild.isLeader && !guildDirectory) refreshGuildDirectory();
@@ -2394,12 +2395,15 @@ function renderMap(){
       linear-gradient(to bottom, rgba(255,255,255,.16) 1px, transparent 1px);
     background-size:${ppf}px ${ppf}px, ${ppf}px ${ppf}px, ${ppf*10}px ${ppf*10}px, ${ppf*10}px ${ppf*10}px;`;
 
+  const influenceCanvas = `<canvas id="mapInfluence" width="${Math.round(worldW)}" height="${Math.round(worldH)}"></canvas>`;
+
   return `<h2>Carte du monde</h2>
     <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur.</p>
+    <p class="muted small">🗺️ Zones d'influence (purement visuelles, sans effet sur le jeu) : <span style="color:var(--gold);">■</span> vous · <span style="color:var(--green);">■</span> allié · <span style="color:var(--blue);">■</span> pacte · <span style="color:var(--red);">■</span> guerre · <span style="color:#9a7526;">■</span> autre joueur.</p>
     ${renderMapToolbar()}
     <div id="mapCanvas">
       <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
-        ${pins}${playerPin}${markers}
+        ${influenceCanvas}${pins}${playerPin}${markers}
       </div>
     </div>`;
 }
@@ -2412,6 +2416,56 @@ function positionMapWorld(){
   const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
   world.style.left = (canvas.clientWidth/2 - (mv.cx-minX)*mv.ppf) + "px";
   world.style.top = (canvas.clientHeight/2 - (mv.cy-minY)*mv.ppf) + "px";
+}
+
+/* Couleurs des zones d'influence (RGB, sans le "rgb()") — reprennent exactement la palette déjà
+   utilisée pour colorer les pins de village selon la diplomatie (voir guildRelationFor), pour que
+   la carte reste cohérente. "Autre joueur" (sans relation ni guilde en commun) reste une teinte
+   neutre unique : on ne cherche pas à distinguer chaque guilde adverse par sa propre couleur, afin
+   de ne pas transformer la carte en bruit arc-en-ciel — l'objectif est purement décoratif. */
+const ZONE_RGB = { mine:"193,121,62", ally:"107,171,94", pact:"91,147,176", war:"193,91,70", other:"154,117,38" };
+
+/* Dessine les zones d'influence (halos semi-transparents) autour de chaque village de joueur sur
+   le canvas #mapInfluence, en superposition sous les pins. Purement cosmétique : rayon fixe, ne
+   révèle aucune information cachée (troupes/ressources restent soumises à reconnaissance comme
+   partout ailleurs) — seule la relation diplomatique déjà publique (carte, onglet Guilde) et
+   l'appartenance à une guilde (déjà visible via le pin) déterminent la couleur. Appelé après
+   chaque rendu complet de la carte (positionMapWorld) ; pas besoin de redessiner pendant un
+   glissé, le canvas étant un enfant de #mapWorld qui se déplace avec lui automatiquement. */
+function drawMapInfluence(){
+  const canvas=document.getElementById("mapInfluence");
+  const world=document.getElementById("mapWorld");
+  if(!canvas||!world||!mapView) return;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+  const ppf=mapView.ppf;
+  const v=state.village;
+  const radius=ppf*3.2;
+
+  const zoneOf=(t, mine)=>{
+    if(mine) return ZONE_RGB.mine;
+    const rel = t.isPlayer ? guildRelationFor(t.guildId) : null;
+    return rel ? ZONE_RGB[rel.type==="war"?"war":(rel.type==="alliance"?"ally":"pact")] : ZONE_RGB.other;
+  };
+  const drawZone=(x, y, rgb)=>{
+    const cx=(x-minX)*ppf, cy=(y-minY)*ppf;
+    const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);
+    grad.addColorStop(0, "rgba("+rgb+",.30)");
+    grad.addColorStop(1, "rgba("+rgb+",0)");
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius,0,Math.PI*2);
+    ctx.fill();
+  };
+
+  ctx.globalCompositeOperation="lighter"; // les zones qui se chevauchent s'illuminent, pour montrer la densité de territoire
+  for(const t of state.villages){
+    if(t.id===v.id || !t.isPlayer) continue;
+    drawZone(t.x, t.y, zoneOf(t, t.owner===username));
+  }
+  drawZone(v.x, v.y, ZONE_RGB.mine); // village actif : toujours "vous", même s'il a été conquis récemment
+  ctx.globalCompositeOperation="source-over";
 }
 
 function attachMapHandlers(){
