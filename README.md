@@ -177,6 +177,14 @@ Un joueur peut fonder ou rejoindre une guilde depuis le nouvel onglet **Guilde**
   ressources** à la guilde — chaque don augmente définitivement un bonus de production partagé par
   **tous les membres** (jusqu'à +25%, au prorata du total donné par la guilde). Le niveau du Hall
   limite le montant d'un don unique (1000 ressources par niveau).
+- **Historique des dons** : l'onglet Guilde affiche désormais les dons récents de tous les membres
+  (qui a donné, combien, quand) ainsi qu'un tableau du total cumulé par membre — la contribution de
+  chacun à la banque commune est visible par toute la guilde.
+- **Boutique de guilde** : le chef de guilde peut dépenser les ressources de la **banque de guilde**
+  (alimentée par les dons, séparée du bonus de production permanent) pour acheter un bonus temporaire
+  qui profite à **tous les membres** pendant sa durée — accélération de la production de ressources,
+  ou de la construction et de l'entraînement. Plusieurs bonus sont disponibles (différents coûts,
+  durées et intensités) ; les bonus actifs et leur temps restant sont affichés dans l'onglet.
 
 ## Renforts et dons entre joueurs
 
@@ -198,6 +206,23 @@ chaque catégorie. Chaque rapport possède un bouton 🗑️ pour le supprimer
 individuellement, et un bouton de suppression groupée permet d'effacer en une
 fois soit tous les rapports, soit uniquement ceux de la catégorie actuellement
 affichée (une confirmation est demandée avant toute suppression groupée).
+
+Les rapports de combat (attaque et défense) sont **détaillés** : puissance
+d'attaque/défense et répartition par type de troupe (infanterie/cavalerie/
+archers), composition complète de l'armée engagée (envoyée / survivante /
+perdue, troupe par troupe, des deux côtés), pourcentage de pertes, butin,
+dégâts de muraille (avec le niveau restant) et d'entrepôt, et pour une
+tentative de conquête : nombre de nobles envoyés, ayant survécu au combat, et
+leur chance de survie.
+
+## Descriptif d'un joueur
+
+Cliquer sur le pseudo d'un joueur — dans la liste des membres de votre guilde
+ou dans le **Classement** — ouvre sa fiche : sa guilde (si membre), ses points,
+son nombre de villages, et des actions rapides adaptées (🎁 lui envoyer des
+ressources directement, ⚔️ l'attaquer ou 🔭 l'espionner — ces deux dernières
+basculent sur la carte avec son village d'origine déjà sélectionné). Ces
+actions sont masquées sur votre propre fiche.
 
 ## Carte interactive
 
