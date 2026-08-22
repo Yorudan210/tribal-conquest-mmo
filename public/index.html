@@ -269,6 +269,13 @@
   .troop-marker.marker-attack .tdot{background:linear-gradient(180deg,#c95c4a,#8a3226);}
   .troop-marker.marker-scout .tdot{background:linear-gradient(180deg,#5a9ac0,#2f5f7a);}
   .troop-marker.marker-returning{opacity:.72;}
+  /* Mission d'un AUTRE joueur (attaque/reconnaissance en approche) : plus petite, plus discrète et
+     bordure pointillée grisée, pour bien la distinguer visuellement des missions du joueur actif
+     tout en la gardant lisible (aucune identité ni composition de troupes n'est révélée, voir
+     buildSnapshot côté serveur). */
+  .troop-marker.marker-foreign{opacity:.6;}
+  .troop-marker.marker-foreign .tdot{width:15px; height:15px; font-size:9px; border:2px dashed #cfae7a;}
+  .troop-marker.marker-foreign .tdot{animation:none;}
   @keyframes marchPulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.14);} }
   #villageDetail .box{margin-top:10px;}
   .report{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; background:var(--panel2); box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, border-color .15s ease;}
@@ -2344,12 +2351,37 @@ function missionMarkerPos(m){
   return { wx: fromX+(toX-fromX)*frac, wy: fromY+(toY-fromY)*frac, returning };
 }
 
-function mapMarkerHTML(m, pos, minX, minY, ppf){
+/* Cherche un village par id, que ce soit le village actif du joueur (absent de state.villages,
+   qui liste tout SAUF le village actif — voir renderMap) ou n'importe quel autre village du monde. */
+function findAnyVillage(id){
+  if(state.village && state.village.id===id) return state.village;
+  return (state.villages||[]).find(x=>x.id===id) || null;
+}
+
+/* Position d'un marqueur "monde" (attaque/reconnaissance en approche lancée par un AUTRE joueur) :
+   contrairement à missionMarkerPos, ne connaît que le trajet aller (le serveur ne renvoie jamais
+   ces missions une fois arrivées — voir buildSnapshot) et ne suppose pas que la source ou la
+   cible soit le village du joueur actif. */
+function worldMissionMarkerPos(m){
+  const from=findAnyVillage(m.sourceVillageId), to=findAnyVillage(m.targetId);
+  if(!from || !to) return null;
+  const now=estimateNow();
+  const frac=clamp((now-m.departAt)/Math.max(1,m.travel),0,1);
+  return { wx: from.x+(to.x-from.x)*frac, wy: from.y+(to.y-from.y)*frac, returning:false };
+}
+
+function mapMarkerHTML(m, pos, minX, minY, ppf, foreign){
   const left=(pos.wx-minX)*ppf, top=(pos.wy-minY)*ppf;
   const kindCls = m.kind==="scout" ? "marker-scout" : "marker-attack";
   const icon = m.kind==="scout" ? "🔭" : (m.kind==="raid" ? "⚠️" : "⚔️");
-  const label = m.kind==="scout" ? "Reconnaissance" : (m.kind==="raid" ? "Raid barbare" : "Attaque");
-  return `<div class="troop-marker ${kindCls} ${pos.returning?'marker-returning':''}" id="marker_${m.id}" style="left:${left}px; top:${top}px;" title="${label} ${pos.returning?'(retour)':'(aller)'}">
+  const domId = "marker_"+(foreign?"w_":"")+m.id;
+  let label;
+  if(foreign){
+    label = (m.kind==="scout" ? "Reconnaissance" : "Attaque")+" en approche (autre joueur — composition inconnue)";
+  } else {
+    label = (m.kind==="scout" ? "Reconnaissance" : (m.kind==="raid" ? "Raid barbare" : "Attaque"))+" "+(pos.returning?"(retour)":"(aller)");
+  }
+  return `<div class="troop-marker ${kindCls} ${foreign?'marker-foreign':''} ${pos.returning?'marker-returning':''}" id="${domId}" style="left:${left}px; top:${top}px;" title="${label}">
     <div class="tdot">${icon}</div>
   </div>`;
 }
@@ -2363,20 +2395,34 @@ function updateMapMarkers(){
   for(const m of state.missions){
     const pos=missionMarkerPos(m);
     if(!pos) continue;
-    activeIds.add(m.id);
+    const domId="marker_"+m.id;
+    activeIds.add(domId);
     const left=(pos.wx-minX)*ppf, top=(pos.wy-minY)*ppf;
-    let el=document.getElementById("marker_"+m.id);
+    let el=document.getElementById(domId);
     if(!el){
-      world.insertAdjacentHTML("beforeend", mapMarkerHTML(m, pos, minX, minY, ppf));
+      world.insertAdjacentHTML("beforeend", mapMarkerHTML(m, pos, minX, minY, ppf, false));
       continue;
     }
     el.style.left=left+"px";
     el.style.top=top+"px";
     el.classList.toggle("marker-returning", pos.returning);
   }
+  for(const m of (state.worldMissions||[])){
+    const pos=worldMissionMarkerPos(m);
+    if(!pos) continue;
+    const domId="marker_w_"+m.id;
+    activeIds.add(domId);
+    const left=(pos.wx-minX)*ppf, top=(pos.wy-minY)*ppf;
+    let el=document.getElementById(domId);
+    if(!el){
+      world.insertAdjacentHTML("beforeend", mapMarkerHTML(m, pos, minX, minY, ppf, true));
+      continue;
+    }
+    el.style.left=left+"px";
+    el.style.top=top+"px";
+  }
   world.querySelectorAll(".troop-marker").forEach(el=>{
-    const id=el.id.slice("marker_".length);
-    if(!activeIds.has(id)) el.remove();
+    if(!activeIds.has(el.id)) el.remove();
   });
 }
 
@@ -2411,7 +2457,11 @@ function renderMap(){
 
   const markers = state.missions.map(m=>{
     const pos=missionMarkerPos(m);
-    return pos ? mapMarkerHTML(m, pos, minX, minY, ppf) : "";
+    return pos ? mapMarkerHTML(m, pos, minX, minY, ppf, false) : "";
+  }).join("");
+  const foreignMarkers = (state.worldMissions||[]).map(m=>{
+    const pos=worldMissionMarkerPos(m);
+    return pos ? mapMarkerHTML(m, pos, minX, minY, ppf, true) : "";
   }).join("");
 
   const gridBg = `
@@ -2427,10 +2477,11 @@ function renderMap(){
   return `<h2>Carte du monde</h2>
     <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur.</p>
     <p class="muted small">🗺️ Zones d'influence (purement visuelles, sans effet sur le jeu) : <span style="color:var(--gold);">■</span> vous · <span style="color:var(--green);">■</span> allié · <span style="color:var(--blue);">■</span> pacte · <span style="color:var(--red);">■</span> guerre · <span style="color:#9a7526;">■</span> autre joueur.</p>
+    <p class="muted small">⚔️/🔭 pleins et animés = vos propres troupes en mouvement. ⚔️/🔭 pointillés et discrets = attaque ou reconnaissance d'un <b>autre joueur</b> actuellement en approche (composition et identité de l'attaquant non révélées, comme partout ailleurs tant qu'aucune reconnaissance n'a réussi).</p>
     ${renderMapToolbar()}
     <div id="mapCanvas">
       <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
-        ${influenceCanvas}${pins}${playerPin}${markers}
+        ${influenceCanvas}${pins}${playerPin}${markers}${foreignMarkers}
       </div>
     </div>`;
 }
