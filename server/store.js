@@ -50,6 +50,12 @@ function migrateDb(){
     // qu'un joueur possède plusieurs villages) : par défaut, son village d'origine.
     if(!db.users[uname].activeVillageId) db.users[uname].activeVillageId = db.users[uname].villageId;
   }
+  for(const gid in db.guilds){
+    const g = db.guilds[gid];
+    if(!g.donations) g.donations = [];
+    if(!g.donorTotals) g.donorTotals = {};
+    if(!g.activeBoosts) g.activeBoosts = [];
+  }
   for(const id in db.villages){
     const v = db.villages[id];
     if(v.owner!=="barbarian" && !v.support) v.support = [];
