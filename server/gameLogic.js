@@ -12,6 +12,11 @@ function getSpeedMultiplier(db){
   return (db.settings && db.settings.speedMultiplier) || 1;
 }
 
+// Nombre maximum de nobles vivants qu'un même village peut entretenir à la fois.
+const NOBLE_CAP_PER_VILLAGE = 4;
+// Nombre maximum de nobles qu'une seule attaque peut emporter (voir doMission).
+const NOBLE_PER_ATTACK_CAP = 1;
+
 function villageWall(v){ return v.owner==="barbarian" ? (v.wallLevel||0) : (v.buildings.wall||0); }
 function villageHide(v){ return v.owner==="barbarian" ? (v.hideLevel||0) : (v.buildings.hide||0); }
 function villageResCap(v){ return v.owner==="barbarian" ? (v.resCap||600) : storageCap(v.buildings.warehouse); }
@@ -49,10 +54,47 @@ function doReportClear(db, username, kind){
   return { ok:true, removed };
 }
 
+/* Village "actif" d'un joueur : celui qu'il gère actuellement dans l'interface (bâtiments,
+   entraînement, envoi de troupes...). Par défaut son village d'origine, mais un joueur peut
+   posséder plusieurs villages (après une conquête) et choisir lequel gérer via doSwitchVillage.
+   Si le village actif enregistré n'existe plus ou ne lui appartient plus, on retombe sur le
+   village d'origine (qui, lui, ne peut jamais être perdu — voir resolveAttack). */
 function villageByUser(db, username){
   const u = db.users[username];
   if(!u) return null;
+  const activeId = u.activeVillageId || u.villageId;
+  let v = db.villages[activeId];
+  if(!v || v.owner!==username){
+    v = db.villages[u.villageId] || null;
+    u.activeVillageId = u.villageId;
+  }
+  return v;
+}
+
+/* Village d'origine (capitale) d'un joueur, indépendamment du village actuellement actif dans
+   l'interface : utilisé pour les actions qui doivent viser un point stable et prévisible (recevoir
+   un don, être la cible d'une riposte barbare, ou pour l'administration). */
+function homeVillageOf(db, username){
+  const u = db.users[username];
+  if(!u) return null;
   return db.villages[u.villageId] || null;
+}
+
+/* Tous les villages actuellement possédés par un joueur (son village d'origine, plus tout village
+   barbare conquis) : la liste affichée par le sélecteur de village côté client. */
+function myVillages(db, username){
+  return Object.values(db.villages).filter(v=>v.owner===username);
+}
+
+/* Change le village actuellement géré par le joueur (doit lui appartenir). */
+function doSwitchVillage(db, username, villageId){
+  const u = db.users[username];
+  if(!u) return { error:"Utilisateur introuvable." };
+  const v = db.villages[String(villageId)];
+  if(!v) return { error:"Village introuvable." };
+  if(v.owner!==username) return { error:"Ce village ne vous appartient pas." };
+  u.activeVillageId = v.id;
+  return { ok:true };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -126,9 +168,14 @@ function doTrain(db, username, key, count){
   if(!t) return { error: "Troupe inconnue." };
   for(const rk in t.requires){ if((v.buildings[rk]||0) < t.requires[rk]) return { error: "Bâtiment requis insuffisant pour "+t.name+"." }; }
   if(key==="noble"){
-    const cap = v.buildings.academy||0;
+    // Une Académie (niveau max 1) autorise jusqu'à NOBLE_CAP_PER_VILLAGE nobles vivants à la fois
+    // DANS CE VILLAGE (chaque village conquis peut avoir la sienne et former les siens séparément).
+    // Un seul noble peut en revanche partir par attaque (voir doMission).
+    const hasAcademy = (v.buildings.academy||0) > 0;
+    if(!hasAcademy) return { error: "Construisez une Académie pour pouvoir former des Nobles." };
+    const cap = NOBLE_CAP_PER_VILLAGE;
     const alive = (v.troops.noble||0) + v.trainQueue.filter(o=>o.troop==="noble").reduce((s,o)=>s+o.count,0);
-    if(alive+count > cap) return { error: "Académie niveau "+cap+" : "+cap+" noble(s) vivant(s) maximum à la fois." };
+    if(alive+count > cap) return { error: cap+" noble(s) vivant(s) maximum à la fois dans ce village." };
   }
   const cost = { wood:t.cost.wood*count, clay:t.cost.clay*count, iron:t.cost.iron*count };
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour entraîner "+count+" "+t.name+"." };
@@ -159,6 +206,9 @@ function doMission(db, username, targetId, kind, troopsWanted){
   for(const k of TROOP_ORDER){
     let n = Math.floor(Number(troopsWanted[k])||0);
     n = Math.max(0, Math.min(n, v.troops[k]||0));
+    // Un seul Noble peut partir par attaque (l'escorte protège toujours ce noble unique) : sans
+    // cette limite, plusieurs nobles envoyés d'un coup rendraient la conquête bien trop facile.
+    if(k==="noble") n = Math.min(n, NOBLE_PER_ATTACK_CAP);
     if(n>0){ troops[k]=n; any=true; maxSpeed=Math.max(maxSpeed, TROOPS[k].speed); }
   }
   if(!any) return { error: "Sélectionnez au moins une troupe à envoyer." };
@@ -221,7 +271,9 @@ function doRecallSupport(db, username, supportId){
   if(!entry) return { error: "Soutien introuvable (déjà rappelé ?)." };
   if(entry.from!==username) return { error: "Vous ne pouvez rappeler que vos propres troupes en soutien." };
   hostVillage.support = hostVillage.support.filter(x=>x.id!==supportId);
-  const homeVillage = villageByUser(db, username);
+  // Les troupes rentrent au village qui les a envoyées à l'origine (pas forcément le village
+  // actuellement actif du joueur, s'il en possède plusieurs).
+  const homeVillage = db.villages[entry.fromVillageId] || villageByUser(db, username);
   if(!homeVillage) return { ok:true };
   const dx=homeVillage.x-hostVillage.x, dy=homeVillage.y-hostVillage.y, dist=Math.sqrt(dx*dx+dy*dy);
   let maxSpeed=0;
@@ -244,7 +296,9 @@ function doGiveResources(db, username, targetUsername, wood, clay, iron){
   if(!v) return { error: "Village introuvable." };
   targetUsername = String(targetUsername||"").trim();
   if(targetUsername===username) return { error: "Impossible de vous donner des ressources à vous-même." };
-  const target = villageByUser(db, targetUsername);
+  // Toujours livré dans le village d'ORIGINE du destinataire (prévisible pour l'expéditeur, qui ne
+  // sait pas forcément lequel de ses villages le destinataire gère actuellement).
+  const target = homeVillageOf(db, targetUsername);
   if(!target) return { error: "Joueur cible introuvable." };
   const amt = { wood:Math.max(0,Math.floor(Number(wood)||0)), clay:Math.max(0,Math.floor(Number(clay)||0)), iron:Math.max(0,Math.floor(Number(iron)||0)) };
   if(!amt.wood && !amt.clay && !amt.iron) return { error: "Indiquez au moins une ressource à donner." };
@@ -365,7 +419,9 @@ function resolveSupportArrival(db, m){
 function resolveAttack(db, m){
   const target = db.villages[m.targetId];
   m.resolveDone=true; m.returnAt=m.arriveAt+m.travel;
-  const attackerVillage = villageByUser(db, m.attackerUsername);
+  // C'est le village qui a réellement lancé l'attaque (et pas le village actif actuel, qui a pu
+  // changer entre-temps) qui gagne le bonus d'empire lié à cette conquête.
+  const attackerVillage = db.villages[m.sourceVillageId] || villageByUser(db, m.attackerUsername);
   if(!target){ pushReport(db, m.attackerUsername, {kind:"attack", time:now(), lost:true, text:"Le village ciblé n'existe plus."}); return; }
 
   const { power: attackPower, shareInf, shareCav, shareArch } = computePower(m.troops);
@@ -657,7 +713,9 @@ function growVillage(v){
 }
 
 function spawnRaid(db, source, attackerUsername){
-  const attackerVillage = villageByUser(db, attackerUsername);
+  // La riposte cible toujours le village d'origine de l'agresseur : l'aggro n'est enregistrée que
+  // par pseudo (pas par village précis), donc la capitale reste la cible la plus prévisible.
+  const attackerVillage = homeVillageOf(db, attackerUsername);
   if(!attackerVillage) return;
   const dx=attackerVillage.x-source.x, dy=attackerVillage.y-source.y, dist=Math.sqrt(dx*dx+dy*dy);
   const power = 10+source.tier*8+(source.aggro[attackerUsername]||0)*4;
@@ -888,6 +946,7 @@ function adminListPlayers(db){
   return Object.keys(db.users).map(uname=>{
     const u = db.users[uname];
     const v = db.villages[u.villageId];
+    const owned = myVillages(db, uname);
     return {
       username: uname,
       isAdmin: !!u.isAdmin,
@@ -899,7 +958,8 @@ function adminListPlayers(db){
       buildings: v ? { ...v.buildings } : null,
       troops: v ? { ...v.troops } : null,
       buildQueueLen: v ? v.buildQueue.length : 0,
-      trainQueueLen: v ? v.trainQueue.length : 0
+      trainQueueLen: v ? v.trainQueue.length : 0,
+      villageCount: owned.length
     };
   }).sort((a,b)=>a.username.localeCompare(b.username));
 }
@@ -912,7 +972,7 @@ function adminSetAdmin(db, targetUsername, flag){
 }
 
 function adminUpdateVillage(db, targetUsername, patch){
-  const v = villageByUser(db, targetUsername);
+  const v = homeVillageOf(db, targetUsername);
   if(!v) return { error:"Village introuvable pour "+targetUsername+"." };
   if(patch.resources && typeof patch.resources==="object"){
     for(const r of ["wood","clay","iron"]){
@@ -943,7 +1003,7 @@ function adminUpdateVillage(db, targetUsername, patch){
 }
 
 function adminGiveResources(db, targetUsername, wood, clay, iron){
-  const v = villageByUser(db, targetUsername);
+  const v = homeVillageOf(db, targetUsername);
   if(!v) return { error:"Village introuvable pour "+targetUsername+"." };
   const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
   for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]+add[r], 0, 1e12);
@@ -951,7 +1011,7 @@ function adminGiveResources(db, targetUsername, wood, clay, iron){
 }
 
 function adminFinishBuildQueue(db, targetUsername){
-  const v = villageByUser(db, targetUsername);
+  const v = homeVillageOf(db, targetUsername);
   if(!v) return { error:"Village introuvable." };
   if(!v.buildQueue.length) return { error:"File de construction déjà vide." };
   for(const item of v.buildQueue){
@@ -963,7 +1023,7 @@ function adminFinishBuildQueue(db, targetUsername){
 }
 
 function adminFinishTrainQueue(db, targetUsername){
-  const v = villageByUser(db, targetUsername);
+  const v = homeVillageOf(db, targetUsername);
   if(!v) return { error:"Village introuvable." };
   if(!v.trainQueue.length) return { error:"File d'entraînement déjà vide." };
   for(const order of v.trainQueue) v.troops[order.troop] = (v.troops[order.troop]||0)+order.count;
@@ -1049,7 +1109,7 @@ function adminGiveResourcesToAll(db, wood, clay, iron){
   const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
   let count=0;
   for(const uname in db.users){
-    const v = villageByUser(db, uname);
+    const v = homeVillageOf(db, uname);
     if(!v) continue;
     for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]+add[r], 0, 1e12);
     count++;
@@ -1105,12 +1165,22 @@ function buildSnapshot(db, username){
     if(g.invites.includes(username)) guildInvites.push({ id:g.id, name:g.name, tag:g.tag, leader:g.leader });
   }
 
+  // Liste des villages possédés par ce joueur (origine + conquêtes), pour le sélecteur de village
+  // actif côté client. Le village d'origine (villageId) est toujours listé en premier.
+  const homeId = db.users[username].villageId;
+  const myVillagesList = myVillages(db, username).map(mv=>({
+    id: mv.id, name: mv.name, x: mv.x, y: mv.y,
+    hq: (mv.buildings && mv.buildings.hq) || 0,
+    isActive: mv.id===v.id, isHome: mv.id===homeId
+  })).sort((a,b)=>(b.isHome-a.isHome) || a.name.localeCompare(b.name));
+
   return {
     serverTime: now(),
     village: v,
     missions: myMissions,
     reports: (db.reports[username]||[]).slice(0,60),
     villages,
+    myVillages: myVillagesList,
     quests: questStatus,
     leaderboard,
     isAdmin: isAdminUser(db, username),
@@ -1123,7 +1193,8 @@ function buildSnapshot(db, username){
 }
 
 module.exports = {
-  now, villageByUser, villageWall, villageHide, villageResCap, popUsed,
+  now, villageByUser, homeVillageOf, myVillages, doSwitchVillage,
+  villageWall, villageHide, villageResCap, popUsed,
   doBuild, doBuildCancel, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,

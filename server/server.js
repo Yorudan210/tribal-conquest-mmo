@@ -115,7 +115,7 @@ async function handleApi(req, res, pathname){
     if(db.users[username]) return sendJson(res, 409, { error:"Ce pseudo est déjà pris." });
     const { salt, hash } = auth.hashPassword(password);
     const villageId = store.createPlayerVillage(username);
-    db.users[username] = { passwordHash: hash, salt, villageId, createdAt: Date.now(), isAdmin: false, guildId: null };
+    db.users[username] = { passwordHash: hash, salt, villageId, activeVillageId: villageId, createdAt: Date.now(), isAdmin: false, guildId: null };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
     return sendJson(res, 200, { token, username, snapshot: game.buildSnapshot(db, username) });
@@ -169,6 +169,13 @@ async function handleApi(req, res, pathname){
   if(pathname==="/api/village/rename" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doRename(db, username, body.name);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/village/switch" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doSwitchVillage(db, username, body.villageId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });

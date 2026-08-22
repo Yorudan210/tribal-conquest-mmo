@@ -46,6 +46,9 @@ function migrateDb(){
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
     if(db.users[uname].guildId === undefined) db.users[uname].guildId = null;
+    // Village actuellement géré dans l'interface (peut différer du village d'origine une fois
+    // qu'un joueur possède plusieurs villages) : par défaut, son village d'origine.
+    if(!db.users[uname].activeVillageId) db.users[uname].activeVillageId = db.users[uname].villageId;
   }
   for(const id in db.villages){
     const v = db.villages[id];
