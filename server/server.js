@@ -105,7 +105,7 @@ function authenticate(req){
 
 const USERNAME_RE = /^[A-Za-z0-9_\-]{3,20}$/;
 
-async function handleApi(req, res, pathname){
+async function handleApi(req, res, pathname, url){
   if(pathname==="/api/register" && req.method==="POST"){
     const body = await readBody(req);
     const username = String(body.username||"").trim();
@@ -137,6 +137,12 @@ async function handleApi(req, res, pathname){
 
   if(pathname==="/api/state" && req.method==="GET"){
     return sendJson(res, 200, { snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/player" && req.method==="GET"){
+    const target = String((url && url.searchParams.get("username"))||"").trim();
+    const info = game.publicPlayerView(db, target);
+    if(!info) return sendJson(res, 404, { error:"Joueur introuvable." });
+    return sendJson(res, 200, { player: info });
   }
   if(pathname==="/api/build" && req.method==="POST"){
     const body = await readBody(req);
@@ -279,6 +285,13 @@ async function handleApi(req, res, pathname){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/guild/buy-boost" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doGuildBuyBoost(db, username, String(body.key||""));
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
   if(pathname==="/api/guild/disband" && req.method==="POST"){
     const result = game.doGuildDisband(db, username);
     if(result.error) return sendJson(res, 400, result);
@@ -391,7 +404,7 @@ const server = http.createServer((req, res)=>{
     return send(res, 204, "", { "Access-Control-Allow-Methods":"GET,POST,OPTIONS", "Access-Control-Allow-Headers":"Content-Type,Authorization" });
   }
   if(pathname.startsWith("/api/")){
-    handleApi(req, res, pathname).catch(err=>{
+    handleApi(req, res, pathname, url).catch(err=>{
       console.error("[api] erreur:", err);
       sendJson(res, 400, { error: err.message||"Erreur serveur." });
     });

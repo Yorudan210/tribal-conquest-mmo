@@ -1,6 +1,6 @@
 "use strict";
 const GameData = require("../shared/gameData.js");
-const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp,
+const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, clamp,
         buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
@@ -118,7 +118,7 @@ function doBuild(db, username, key){
   const cost = buildCost(key, nextLevel);
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db);
+  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed");
   // Une seule construction est réellement en cours à la fois dans le village (peu importe le
   // bâtiment) : chaque nouvel ordre démarre à la fin du DERNIER de toute la file, jamais
   // immédiatement. Avant ce correctif, deux bâtiments DIFFÉRENTS démarraient tous les deux à
@@ -184,7 +184,7 @@ function doTrain(db, username, key, count){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") });
   return { ok: true };
 }
 
@@ -424,6 +424,9 @@ function resolveAttack(db, m){
   const attackerVillage = db.villages[m.sourceVillageId] || villageByUser(db, m.attackerUsername);
   if(!target){ pushReport(db, m.attackerUsername, {kind:"attack", time:now(), lost:true, text:"Le village ciblé n'existe plus."}); return; }
 
+  // Composition de l'armée AVANT pertes (m.troops est muté plus bas) : nécessaire pour un rapport
+  // de combat détaillé montrant "envoyées / survivantes / perdues" pour chaque type de troupe.
+  const troopsSent = {...m.troops};
   const { power: attackPower, shareInf, shareCav, shareArch } = computePower(m.troops);
   const defensePower = defensePowerOf(combinedDefenseTroops(target), shareInf, shareCav, shareArch, villageWall(target));
   const luck = (Math.random()*2-1)*0.25;
@@ -456,18 +459,21 @@ function resolveAttack(db, m){
      perte, même infime (Math.floor(1*0.98)=0) — impossible de conquérir quoi que ce soit.
      Nouvelle règle : chaque noble est tiré au sort indépendamment, avec une chance de survie qui
      augmente avec la domination de l'attaque (donc avec l'escorte envoyée pour le protéger). */
+  let nobleSurvivedCount=0, nobleSurvivalChancePct=null;
   if(originalNobleCount>0){
-    let noblesSurviving=0;
+    let noblesSurviving=0, survivalChance;
     if(winner==="attacker"){
       const dominance = clamp(1-attackerLossFrac, 0, 1); // proche de 1 si l'attaque écrase la défense
-      const survivalChance = clamp(0.15+dominance*0.8, 0.05, 0.97);
+      survivalChance = clamp(0.15+dominance*0.8, 0.05, 0.97);
       for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
     } else {
-      const survivalChance = 0.05; // défaite : le noble a une petite chance de s'échapper malgré tout
+      survivalChance = 0.05; // défaite : le noble a une petite chance de s'échapper malgré tout
       for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
     }
     m.troops.noble = noblesSurviving;
     attackerLosses.noble = originalNobleCount-noblesSurviving;
+    nobleSurvivedCount = noblesSurviving;
+    nobleSurvivalChancePct = Math.round(survivalChance*100);
   }
 
   let wallDamage=0, storageDamageFrac=0, loyaltyReduced=0, conquered=false;
@@ -512,6 +518,10 @@ function resolveAttack(db, m){
       m.troops.noble = 0; // consommé même contre un joueur (pas de conquête de joueur en MVP)
     }
   }
+  // État final des troupes de l'attaquant après combat (celles qui rentreront réellement au
+  // village — voir completeMission) : le noble y apparaît toujours à 0 puisqu'il est consommé par
+  // la tentative de conquête même s'il a survécu au combat lui-même (voir nobleSurvivedCount).
+  const attackerSurvivors = {...m.troops};
 
   let loot={wood:0,clay:0,iron:0};
   if(winner==="attacker" && target.owner!==m.attackerUsername){
@@ -534,21 +544,40 @@ function resolveAttack(db, m){
   }
   m.loot=loot;
 
+  // Champs communs aux deux rapports (attaquant et défenseur), pour un compte-rendu de combat
+  // bien plus détaillé : composition complète de l'armée attaquante (envoyée/survivante/perdue),
+  // répartition de sa puissance par type de troupe, et l'état du village après le combat.
+  const attackShare = {
+    inf: Math.round(shareInf*100), cav: Math.round(shareCav*100), arch: Math.round(shareArch*100)
+  };
+  const attackerLossPct = Math.round(attackerLossFrac*100);
+  const defenderLossPct = Math.round(defenderLossFrac*100);
+  const targetWallLevelAfter = villageWall(target);
+  const targetResCapAfter = target.owner==="barbarian" ? target.resCap : null;
+
   const report = {
     kind:"attack", time:now(), winner, target:target.name, coord:target.x+"|"+target.y,
     targetIsPlayer: target.owner!=="barbarian", targetOwner: target.owner==="barbarian"?null:target.owner,
     attackPower:Math.round(attackPower), effAttack:Math.round(effAttack), defensePower:Math.round(defensePower),
-    luck, attackerLosses, defenderLosses, loot,
-    wallDamage, storageDamageFrac, loyaltyReduced, conquered, targetLoyalty: target.loyalty
+    luck, attackShare,
+    troopsSent, attackerSurvivors, attackerLosses, attackerLossPct, defenderLosses, defenderLossPct, loot,
+    nobleSent: originalNobleCount, nobleSurvived: nobleSurvivedCount, nobleSurvivalChancePct,
+    wallDamage, targetWallLevelAfter, storageDamageFrac, targetResCapAfter,
+    loyaltyReduced, conquered, targetLoyalty: target.loyalty
   };
   pushReport(db, m.attackerUsername, report);
 
-  // rapport de défense pour la victime, si c'est un vrai joueur
+  // rapport de défense pour la victime, si c'est un vrai joueur : mêmes détails (y compris la
+  // composition de l'armée qui a attaqué et ses pertes), pour qu'elle sache exactement ce qui l'a
+  // frappée et ce qu'elle a réussi à détruire — ce n'est pas du renseignement "à l'avance" (comme
+  // le ferait une reconnaissance) mais un compte-rendu APRÈS coup du combat qui vient d'avoir lieu.
   if(target.owner!=="barbarian" && target.owner!==m.attackerUsername){
     pushReport(db, target.owner, {
       kind:"defense", time:now(), winner, source: m.attackerUsername,
       attackPower:Math.round(attackPower), effAttack:Math.round(effAttack), defensePower:Math.round(defensePower),
-      luck, defenderLosses, loot, wallDamage, storageDamageFrac
+      luck, attackShare,
+      troopsSent, attackerSurvivors, attackerLosses, attackerLossPct, defenderLosses, defenderLossPct, loot,
+      wallDamage, targetWallLevelAfter, storageDamageFrac
     });
   }
 }
@@ -586,7 +615,8 @@ function resolveRaid(db, m){
   pushReport(db, target.owner, {
     kind:"defense", time:now(), winner, source: m.raidSourceName||"Village barbare",
     attackPower:Math.round(attackPower), effAttack:Math.round(effAttack), defensePower:Math.round(defensePower),
-    luck, defenderLosses, loot
+    luck, attackShare:{ inf:Math.round(shareInf*100), cav:Math.round(shareCav*100), arch:Math.round(shareArch*100) },
+    troopsSent:{...m.troops}, defenderLosses, defenderLossPct: Math.round(defenderLossFrac*100), loot
   });
 }
 
@@ -619,9 +649,11 @@ function runTick(db){
     const cap = storageCap(v.buildings.warehouse);
     const empireMult = 1+0.02*(v.conqueredCount||0);
     const speedMult = getSpeedMultiplier(db);
-    const guildMult = guildBonusMultiplier(guildOf(db, v.owner));
+    const guild = guildOf(db, v.owner);
+    const guildMult = guildBonusMultiplier(guild);
+    const guildProdBoostMult = guildBoostMultiplier(guild, "production");
     for(const r of ["wood","clay","iron"]){
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -642,7 +674,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "speed"); }
       } else break;
     }
   }
@@ -659,6 +691,12 @@ function runTick(db){
     }
   }
   db.missions = db.missions.filter(m=>!m.completed);
+
+  // purge des bonus de guilde expirés (simple hygiène : évite une liste qui grossit indéfiniment)
+  for(const gid in db.guilds){
+    const g = db.guilds[gid];
+    if(g.activeBoosts && g.activeBoosts.length) g.activeBoosts = g.activeBoosts.filter(b=>b.expiresAt>t);
+  }
 
   // villages barbares : régénération, apaisement, croissance, ripostes
   for(const id in db.villages){
@@ -803,13 +841,34 @@ function guildBonusMultiplier(guild){
   return 1 + pct/100;
 }
 
+/* Multiplicateur cumulé des bonus de boutique de guilde actuellement actifs, pour un type donné
+   ("production" ou "speed"). Les bonus expirés (expiresAt dépassé) sont ignorés sans avoir besoin
+   d'être déjà purgés du tableau (voir runTick, qui les purge aussi périodiquement par hygiène). */
+function guildBoostMultiplier(guild, type){
+  if(!guild || !guild.activeBoosts || !guild.activeBoosts.length) return 1;
+  const t = now();
+  let mult = 1;
+  for(const b of guild.activeBoosts){
+    if(b.type===type && b.expiresAt>t) mult *= b.multiplier;
+  }
+  return mult;
+}
+
 function publicGuildView(db, guild, username){
+  const t = now();
+  const activeBoosts = (guild.activeBoosts||[]).filter(b=>b.expiresAt>t).map(b=>({
+    key:b.key, name:b.name, icon:b.icon, type:b.type, multiplier:b.multiplier,
+    secondsLeft: Math.max(0, Math.round(b.expiresAt-t)), buyer:b.buyer
+  }));
   return {
     id: guild.id, name: guild.name, tag: guild.tag, leader: guild.leader,
     members: guild.members, invites: guild.invites,
     bank: {...guild.bank}, totalDonated: guild.totalDonated||0,
     bonusPercent: Math.min(GUILD_MAX_BONUS_PERCENT, Math.floor((guild.totalDonated||0)/GUILD_DONATION_PER_PERCENT)),
-    isLeader: guild.leader===username
+    isLeader: guild.leader===username,
+    donations: (guild.donations||[]).slice(0,30),
+    donorTotals: {...(guild.donorTotals||{})},
+    activeBoosts
   };
 }
 
@@ -822,7 +881,11 @@ function doGuildCreate(db, username, name, tag){
   if(Object.values(db.guilds).some(g=>g.name.toLowerCase()===name.toLowerCase())) return { error:"Ce nom de guilde est déjà pris." };
   if(Object.values(db.guilds).some(g=>g.tag===tag)) return { error:"Ce tag de guilde est déjà pris." };
   const id = String(db.nextGuildId++);
-  db.guilds[id] = { id, name, tag, leader:username, members:[username], invites:[], bank:{wood:0,clay:0,iron:0}, totalDonated:0, createdAt: now() };
+  db.guilds[id] = {
+    id, name, tag, leader:username, members:[username], invites:[],
+    bank:{wood:0,clay:0,iron:0}, totalDonated:0, createdAt: now(),
+    donations:[], donorTotals:{}, activeBoosts:[]
+  };
   db.users[username].guildId = id;
   return { ok:true };
 }
@@ -904,6 +967,35 @@ function doGuildDonate(db, username, wood, clay, iron){
   v.resources.wood-=amt.wood; v.resources.clay-=amt.clay; v.resources.iron-=amt.iron;
   guild.bank.wood+=amt.wood; guild.bank.clay+=amt.clay; guild.bank.iron+=amt.iron;
   guild.totalDonated=(guild.totalDonated||0)+total;
+  // Historique des dons (visible par tous les membres) + total cumulé par donateur, pour que la
+  // contribution de chacun à la banque commune soit visible (et pas seulement le total global).
+  guild.donations = guild.donations||[];
+  guild.donations.unshift({ username, wood:amt.wood, clay:amt.clay, iron:amt.iron, total, time: now() });
+  if(guild.donations.length>50) guild.donations.length=50;
+  guild.donorTotals = guild.donorTotals||{};
+  guild.donorTotals[username] = (guild.donorTotals[username]||0)+total;
+  return { ok:true };
+}
+
+/* Achète un bonus temporaire dans la boutique de guilde, payé avec la BANQUE de guilde (alimentée
+   par les dons cumulés — voir doGuildDonate). Le bonus profite à TOUS les membres pendant sa durée
+   (production accélérée ou construction/entraînement accélérés, selon le bonus). Réservé au chef de
+   guilde, comme les autres décisions qui engagent les ressources communes (inviter, exclure...). */
+function doGuildBuyBoost(db, username, key){
+  const guild = guildOf(db, username);
+  if(!guild) return { error:"Vous n'êtes dans aucune guilde." };
+  if(guild.leader!==username) return { error:"Seul le chef de guilde peut acheter un bonus dans la boutique de guilde." };
+  const boost = GUILD_BOOSTS.find(b=>b.key===key);
+  if(!boost) return { error:"Bonus de guilde inconnu." };
+  if(guild.bank.wood<boost.cost.wood || guild.bank.clay<boost.cost.clay || guild.bank.iron<boost.cost.iron){
+    return { error:"La banque de guilde n'a pas assez de ressources pour ce bonus." };
+  }
+  guild.bank.wood-=boost.cost.wood; guild.bank.clay-=boost.cost.clay; guild.bank.iron-=boost.cost.iron;
+  guild.activeBoosts = (guild.activeBoosts||[]).filter(b=>b.expiresAt>now());
+  guild.activeBoosts.push({
+    key:boost.key, name:boost.name, icon:boost.icon, type:boost.type, multiplier:boost.multiplier,
+    expiresAt: now()+boost.durationSec, buyer:username
+  });
   return { ok:true };
 }
 
@@ -1129,6 +1221,30 @@ function publicVillageView(v){
   };
 }
 
+/* Descriptif public d'un joueur (guilde, points, nombre de villages...), consulté depuis la liste
+   des membres d'une guilde ou depuis le Classement. Ne renvoie JAMAIS les troupes/ressources d'un
+   village qui n'est pas le sien : ce renseignement reste soumis à reconnaissance, comme partout
+   ailleurs dans le jeu (voir README, section "Renseignement masqué"). Les points/HdV/conquêtes
+   reprennent exactement la même formule que le Classement (buildSnapshot), pour ne jamais afficher
+   un total différent d'un écran à l'autre. */
+function publicPlayerView(db, targetUsername){
+  const u = db.users[targetUsername];
+  if(!u) return null;
+  const home = db.villages[u.villageId] || null;
+  const guild = guildOf(db, targetUsername);
+  const hq = home && home.buildings ? (home.buildings.hq||0) : 0;
+  const conquered = home ? (home.conqueredCount||0) : 0;
+  return {
+    username: targetUsername,
+    guild: guild ? { id:guild.id, name:guild.name, tag:guild.tag, isLeader: guild.leader===targetUsername } : null,
+    points: hq*10 + conquered*50,
+    hq, conquered,
+    villageCount: myVillages(db, targetUsername).length,
+    homeVillageId: home ? home.id : null,
+    homeCoord: home ? (home.x+"|"+home.y) : null
+  };
+}
+
 function buildSnapshot(db, username){
   const v = villageByUser(db, username);
   if(!v) return null;
@@ -1202,5 +1318,5 @@ module.exports = {
   adminListMissions, adminFinishMission,
   doSendSupport, doRecallSupport, doGiveResources,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
-  doGuildDonate, doGuildDisband
+  doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView
 };
