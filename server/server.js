@@ -116,7 +116,13 @@ async function handleApi(req, res, pathname, url){
     if(db.users[username]) return sendJson(res, 409, { error:"Ce pseudo est déjà pris." });
     const { salt, hash } = auth.hashPassword(password);
     const villageId = store.createPlayerVillage(username);
-    db.users[username] = { passwordHash: hash, salt, villageId, activeVillageId: villageId, createdAt: Date.now(), isAdmin: false, guildId: null };
+    db.users[username] = {
+      passwordHash: hash, salt, villageId, activeVillageId: villageId, createdAt: Date.now(), isAdmin: false, guildId: null,
+      // Compteurs cumulatifs utilisés par les Succès (voir computeAchievements, gameLogic.js) — au
+      // niveau du COMPTE (pas du village, contrairement aux anciens Objectifs), pour rester valables
+      // même en cas de conquête/perte de village.
+      stats: { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, opponents:[] }
+    };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
     return sendJson(res, 200, { token, username, snapshot: game.buildSnapshot(db, username) });
@@ -162,13 +168,6 @@ async function handleApi(req, res, pathname, url){
   if(pathname==="/api/mission" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doMission(db, username, body.targetId, body.kind, body.troops||{});
-    if(result.error) return sendJson(res, 400, result);
-    store.scheduleSave();
-    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
-  }
-  if(pathname==="/api/quest/claim" && req.method==="POST"){
-    const body = await readBody(req);
-    const result = game.doClaimQuest(db, username, body.key);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });

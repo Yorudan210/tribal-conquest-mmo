@@ -1,6 +1,7 @@
 "use strict";
 const GameData = require("../shared/gameData.js");
-const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS, clamp,
+const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
+        ACHIEVEMENTS, clamp,
         buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
@@ -328,6 +329,7 @@ function doSendSupport(db, username, targetId, troopsWanted){
     kind:"support", attackerUsername: username, sourceVillageId: v.id, targetId: target.id, troops,
     departAt: t, arriveAt: t+travel, travel, resolveDone:false, returnAt:null, completed:false
   });
+  bumpStat(db, username, "supportsSent", 1);
   return { ok:true, travel };
 }
 
@@ -466,6 +468,8 @@ function doMarketAcceptOffer(db, username, offerId){
   sellerVillage.resources[offer.wantRes] = Math.max(sellerVillage.resources[offer.wantRes], Math.min(sellerVillage.resources[offer.wantRes]+offer.wantAmount, sellerCap));
   pushReport(db, offer.seller, { kind:"marketSold", time:now(), other:username, giveRes:offer.giveRes, giveAmount:offer.giveAmount, wantRes:offer.wantRes, wantAmount:offer.wantAmount });
   pushReport(db, username, { kind:"marketBought", time:now(), other:offer.seller, giveRes:offer.giveRes, giveAmount:offer.giveAmount, wantRes:offer.wantRes, wantAmount:offer.wantAmount });
+  bumpStat(db, offer.seller, "marketTrades", 1);
+  bumpStat(db, username, "marketTrades", 1);
   return { ok:true };
 }
 
@@ -701,6 +705,21 @@ function resolveAttack(db, m){
     }
   }
   m.loot=loot;
+
+  // Statistiques de succès (voir ACHIEVEMENTS / computeAchievements) : mises à jour une seule fois
+  // ici, quel que soit le camp gagnant — jamais recalculées dans buildSnapshot, qui ne fait que LIRE
+  // ces compteurs persistants. "Guerrier tous azimuts" compte les adversaires JOUEURS distincts
+  // (pas les villages barbares) attaqués, gagné ou perdu ; les autres ne comptent qu'en cas de victoire.
+  if(target.owner!=="barbarian") addOpponent(db, m.attackerUsername, target.owner);
+  if(winner==="attacker"){
+    bumpStat(db, m.attackerUsername, "attacksWon", 1);
+    bumpStat(db, m.attackerUsername, "totalLoot", loot.wood+loot.clay+loot.iron);
+    bumpStat(db, m.attackerUsername, "wallLevelsDestroyed", wallDamage);
+  }
+  const defenderLossesTotal = Object.values(defenderLosses||{}).reduce((s,n)=>s+(n||0),0);
+  const attackerLossesTotal = Object.values(attackerLosses||{}).reduce((s,n)=>s+(n||0),0);
+  bumpStat(db, m.attackerUsername, "unitsKilled", defenderLossesTotal); // troupes (et renforts) adverses détruites
+  if(target.owner!=="barbarian") bumpStat(db, target.owner, "unitsKilled", attackerLossesTotal); // troupes attaquantes détruites en défense
 
   // Champs communs aux deux rapports (attaquant et défenseur), pour un compte-rendu de combat
   // bien plus détaillé : composition complète de l'armée attaquante (envoyée/survivante/perdue),
@@ -941,43 +960,59 @@ function doRename(db, username, name){
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Objectifs (jalons de progression, récompense unique)                   */
+/*  Succès (mêmes catégories/paliers que le jeu officiel — voir ACHIEVEMENTS) */
 /* ---------------------------------------------------------------------- */
 
-const QUESTS = [
-  {key:"hq3", title:"Bâtisseur en herbe", desc:"Faites atteindre le niveau 3 à votre Hôtel de ville.", icon:"🏗️",
-    check:v=>v.buildings.hq>=3, reward:{wood:500,clay:500,iron:500}},
-  {key:"economy5", title:"Économie locale", desc:"Amenez le Camp de bûcherons, la Carrière d'argile et la Fonderie de fer au niveau 5.", icon:"🌾",
-    check:v=>v.buildings.wood>=5 && v.buildings.clay>=5 && v.buildings.iron>=5, reward:{wood:1000,clay:1000,iron:1000}},
-  {key:"barracks1", title:"Premiers soldats", desc:"Construisez une Caserne.", icon:"⚔️",
-    check:v=>(v.buildings.barracks||0)>=1, reward:{troops:{spear:10}}},
-  {key:"wall1", title:"Fortification", desc:"Construisez une Muraille.", icon:"🧱",
-    check:v=>(v.buildings.wall||0)>=1, reward:{wood:800,clay:800,iron:800}},
-  {key:"troops50", title:"Armée en marche", desc:"Possédez au moins 50 troupes au total.", icon:"🪖",
-    check:v=>TROOP_ORDER.reduce((s,k)=>s+(v.troops[k]||0),0)>=50, reward:{wood:1500,clay:1500,iron:1500}},
-  {key:"firstVictory", title:"Premier assaut", desc:"Remportez votre première attaque contre un village.", icon:"🏆",
-    check:(v,db,username)=>(db.reports[username]||[]).some(r=>r.kind==="attack" && r.winner==="attacker"), reward:{wood:2000,clay:2000,iron:2000}},
-  {key:"firstConquest", title:"Premier fief", desc:"Conquérez votre premier village.", icon:"👑",
-    check:v=>(v.conqueredCount||0)>=1, reward:{wood:4000,clay:4000,iron:4000}},
-  {key:"hq20", title:"Métropole", desc:"Faites atteindre le niveau 20 à votre Hôtel de ville.", icon:"🏛️",
-    check:v=>v.buildings.hq>=20, reward:{wood:8000,clay:8000,iron:8000}}
-];
+const EMPTY_STATS = ()=>({ totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, opponents:[] });
 
-function doClaimQuest(db, username, key){
-  const v = villageByUser(db, username);
-  if(!v) return { error:"Village introuvable." };
-  const q = QUESTS.find(x=>x.key===key);
-  if(!q) return { error:"Objectif inconnu." };
-  v.claimedQuests = v.claimedQuests||[];
-  if(v.claimedQuests.includes(key)) return { error:"Récompense déjà réclamée." };
-  if(!q.check(v, db, username)) return { error:"Objectif pas encore atteint." };
-  if(q.reward.wood||q.reward.clay||q.reward.iron){
-    const cap = storageCap(v.buildings.warehouse);
-    for(const r of ["wood","clay","iron"]) if(q.reward[r]) v.resources[r]=clamp(v.resources[r]+q.reward[r],0,cap);
-  }
-  if(q.reward.troops) for(const tk in q.reward.troops) v.troops[tk]=(v.troops[tk]||0)+q.reward.troops[tk];
-  v.claimedQuests.push(key);
-  return { ok:true };
+/* Incrémente un compteur de succès pour un joueur (no-op silencieux si le compte n'existe pas —
+   ex. cible barbare — pour ne jamais avoir à vérifier "est-ce un vrai joueur ?" à chaque appel). */
+function bumpStat(db, username, key, amount){
+  if(!amount) return;
+  const u = db.users[username];
+  if(!u) return;
+  if(!u.stats) u.stats = EMPTY_STATS();
+  u.stats[key] = (u.stats[key]||0) + amount;
+}
+
+/* Enregistre un adversaire (joueur) distinct attaqué, pour le succès "Guerrier tous azimuts". */
+function addOpponent(db, username, opponentUsername){
+  const u = db.users[username];
+  if(!u) return;
+  if(!u.stats) u.stats = EMPTY_STATS();
+  if(!u.stats.opponents) u.stats.opponents = [];
+  if(!u.stats.opponents.includes(opponentUsername)) u.stats.opponents.push(opponentUsername);
+}
+
+/* Calcule, pour un joueur, le palier atteint (0 à 4) et les points de succès de chaque catégorie
+   (voir ACHIEVEMENTS, shared/gameData.js). "points"/"conquered" viennent du score déjà calculé par
+   ailleurs (computePlayerScore) ; les autres viennent des compteurs persistants (db.users[..].stats,
+   mis à jour au fil des combats/soutiens/échanges — voir bumpStat/addOpponent). */
+function computeAchievements(db, username){
+  const u = db.users[username];
+  const stats = (u && u.stats) || EMPTY_STATS();
+  const score = computePlayerScore(db, username);
+  const values = {
+    points: score.points,
+    conquered: score.conquered,
+    totalLoot: stats.totalLoot||0,
+    unitsKilled: stats.unitsKilled||0,
+    attacksWon: stats.attacksWon||0,
+    supportsSent: stats.supportsSent||0,
+    marketTrades: stats.marketTrades||0,
+    wallLevelsDestroyed: stats.wallLevelsDestroyed||0,
+    distinctOpponents: (stats.opponents||[]).length
+  };
+  return ACHIEVEMENTS.map(a=>{
+    const value = values[a.stat]||0;
+    let tier = 0;
+    for(let i=0;i<a.tiers.length;i++) if(value>=a.tiers[i]) tier=i+1;
+    return {
+      key:a.key, name:a.name, icon:a.icon, desc:a.desc, tiers:a.tiers,
+      value, tier, nextThreshold: tier<a.tiers.length ? a.tiers[tier] : null,
+      points: tier*(tier+1)/2 // 1+2+...+tier (palier Or entièrement gravi = 1+2+3+4 = 10 points)
+    };
+  });
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1624,11 +1659,7 @@ function buildSnapshot(db, username){
     .filter(m => (m.kind==="attack" || m.kind==="scout") && !m.resolveDone && m.attackerUsername!==username)
     .map(m => ({ id:m.id, kind:m.kind, sourceVillageId:m.sourceVillageId, targetId:m.targetId, departAt:m.departAt, arriveAt:m.arriveAt, travel:m.travel }));
   const villages = Object.values(db.villages).map(v=>publicVillageView(v, db));
-  const questStatus = QUESTS.map(q=>({
-    key:q.key, title:q.title, desc:q.desc, icon:q.icon, reward:q.reward,
-    claimed: (v.claimedQuests||[]).includes(q.key),
-    met: q.check(v, db, username)
-  }));
+  const achievements = computeAchievements(db, username);
   const allScores = computeAllPlayerScores(db);
   const leaderboard = Object.keys(db.users).map(uname=>{
     const s = allScores[uname];
@@ -1681,7 +1712,7 @@ function buildSnapshot(db, username){
     reports: (db.reports[username]||[]).slice(0,60),
     villages,
     myVillages: myVillagesList,
-    quests: questStatus,
+    achievements,
     leaderboard,
     isAdmin: isAdminUser(db, username),
     chat: chatGlobal,
@@ -1698,7 +1729,7 @@ function buildSnapshot(db, username){
 module.exports = {
   now, villageByUser, homeVillageOf, myVillages, doSwitchVillage,
   villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doBuildCancel, doTrain, doMission, doClaimQuest, doRename, runTick, buildSnapshot, QUESTS,
+  doBuild, doBuildCancel, doTrain, doMission, doRename, runTick, buildSnapshot,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,

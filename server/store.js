@@ -52,6 +52,10 @@ function migrateDb(){
   for(const uname in db.users){
     if(db.users[uname].isAdmin == null) db.users[uname].isAdmin = false;
     if(db.users[uname].guildId === undefined) db.users[uname].guildId = null;
+    // Compteurs de Succès (voir gameLogic.js/computeAchievements) : absents des comptes créés avant
+    // l'introduction des Succès (qui remplacent les anciens Objectifs, jamais migrés) — sans cette
+    // ligne, bumpStat() créerait l'objet à la volée, mais on préfère un état initial explicite ici.
+    if(!db.users[uname].stats) db.users[uname].stats = { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, opponents:[] };
     // Village actuellement géré dans l'interface (peut différer du village d'origine une fois
     // qu'un joueur possède plusieurs villages) : par défaut, son village d'origine.
     if(!db.users[uname].activeVillageId) db.users[uname].activeVillageId = db.users[uname].villageId;
@@ -225,7 +229,6 @@ function createPlayerVillage(username){
     troops: Object.fromEntries(GameData.TROOP_ORDER.map(k=>[k,0])),
     buildQueue: [], trainQueue: [], support: [],
     conqueredCount: 0,
-    claimedQuests: [],
     createdAt: Date.now()
   };
   return id;
