@@ -132,6 +132,31 @@ envoyé sans escorte suffisante contre une défense sérieuse a de bonnes chance
 de mourir ; avec une escorte largement supérieure à la défense adverse, ses
 chances de survie sont élevées (mais jamais garanties à 100%).
 
+Une Académie permet de former jusqu'à **4 Nobles vivants à la fois dans le
+village qui l'a construite** (chaque village conquis peut avoir la sienne et
+former les siens séparément). En revanche, **une seule attaque ne peut
+emporter qu'un seul Noble à la fois**, quel que soit le nombre disponible au
+village — l'escorte reste le principal facteur de survie.
+
+## Plusieurs villages : gérer un village conquis
+
+Un village barbare conquis par un Noble devient un village de joueur à part
+entière : il peut être **amélioré exactement comme votre premier village**
+(bâtiments, files de construction, entraînement de troupes...), avec ses
+**propres ressources et ses propres troupes**, totalement indépendantes de
+vos autres villages.
+
+- Dès que vous possédez plus d'un village, un **sélecteur** apparaît en haut
+  de l'écran (à côté du nom du village) pour choisir celui que vous gérez
+  actuellement — les onglets Bâtiments et Caserne agissent toujours sur le
+  village actuellement sélectionné.
+- Sur la carte, cliquez sur un de vos villages conquis puis sur **« Gérer ce
+  village »** pour basculer directement dessus et l'améliorer.
+- Un don de ressources reçu arrive toujours dans votre village d'origine
+  (votre capitale), et des renforts rappelés reviennent toujours au village
+  qui les avait envoyés à l'origine — quel que soit le village que vous êtes
+  en train de gérer au moment du rappel.
+
 ## File de construction (une seule à la fois) et annulation
 
 Une seule construction est réellement en cours à la fois dans un village, quel que soit le
