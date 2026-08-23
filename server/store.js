@@ -247,7 +247,7 @@ function createPlayerVillage(username){
     resources: {wood:600,clay:600,iron:600},
     troops: Object.fromEntries(GameData.TROOP_ORDER.map(k=>[k,0])),
     buildQueue: [], trainQueue: [], support: [],
-    conqueredCount: 0,
+    conqueredCount: 0, resourceBonus: null, // jamais de gisement sur un village d'origine, seulement sur une conquête barbare
     createdAt: Date.now()
   };
   return id;
