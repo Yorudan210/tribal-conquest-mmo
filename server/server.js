@@ -165,6 +165,13 @@ async function handleApi(req, res, pathname, url){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/troops/disband" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doDisbandTroops(db, username, body.key, body.count);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
   if(pathname==="/api/mission" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doMission(db, username, body.targetId, body.kind, body.troops||{});

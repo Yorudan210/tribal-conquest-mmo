@@ -262,6 +262,25 @@ function doTrain(db, username, key, count){
   return { ok: true };
 }
 
+/* Licencie (détruit définitivement) des troupes STATIONNÉES dans le village actif — jamais celles
+   parties en mission (m.troops, décompté du village dès le départ, voir doMission) ni celles encore
+   en formation (v.trainQueue). Aucun remboursement de ressources : à la différence de l'annulation
+   d'une construction en file (doBuildCancel), la troupe existe déjà bel et bien, donc la licencier
+   ne "rend" rien — sert simplement à libérer de la population (ex. avant d'entraîner autre chose)
+   sans attendre qu'elle meure au combat. */
+function doDisbandTroops(db, username, key, count){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  count = Math.floor(count);
+  if(!count || count<=0) return { error: "Quantité invalide." };
+  const t = TROOPS[key];
+  if(!t) return { error: "Troupe inconnue." };
+  const have = v.troops[key]||0;
+  if(count > have) return { error: "Vous n'avez que "+have+" "+t.name+"(s) dans ce village." };
+  v.troops[key] = have-count;
+  return { ok: true };
+}
+
 function popUsed(v){
   let used=0;
   for(const k of TROOP_ORDER) used += (v.troops[k]||0)*TROOPS[k].pop;
@@ -637,6 +656,12 @@ function resolveAttack(db, m){
     nobleSurvivalChancePct = Math.round(survivalChance*100);
   }
 
+  // Anéantissement total (m.troops ne contient plus que les SURVIVANTS à ce stade) : s'il n'en
+  // reste aucun, il n'y a personne pour "rentrer" — voir la fin de la fonction, où la mission est
+  // bouclée immédiatement dans ce cas plutôt que de laisser runTick() la garder en phase de retour
+  // (marqueur de carte qui rebrousse chemin, mention "(retour)") pendant tout le trajet pour rien.
+  const totalAttackerSurvivors = Object.values(m.troops).reduce((s,n)=>s+(n||0), 0);
+
   let wallDamage=0, storageDamageFrac=0, loyaltyReduced=0, conquered=false;
   if(winner==="attacker"){
     const ramSurvivors=m.troops.ram||0;
@@ -757,6 +782,12 @@ function resolveAttack(db, m){
       wallDamage, targetWallLevelAfter, storageDamageFrac
     });
   }
+
+  // Aucun survivant : pas de trajet retour (voir totalAttackerSurvivors ci-dessus). completeMission
+  // n'a ici rien à restituer au village d'origine (0 troupe, et le butin est de toute façon déjà à 0
+  // puisqu'il dépend de la capacité de transport des SURVIVANTS) : elle ne fait donc que marquer la
+  // mission terminée, ce qui la fait disparaître de la carte dès ce tick au lieu d'attendre returnAt.
+  if(totalAttackerSurvivors<=0) completeMission(db, m);
 }
 
 function resolveRaid(db, m){
@@ -1735,7 +1766,7 @@ function buildSnapshot(db, username){
 module.exports = {
   now, villageByUser, homeVillageOf, myVillages, doSwitchVillage,
   villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doBuildCancel, doTrain, doMission, doRename, runTick, buildSnapshot,
+  doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doRename, runTick, buildSnapshot,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
