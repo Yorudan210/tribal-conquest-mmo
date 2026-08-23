@@ -99,6 +99,8 @@
   .res .val{font-weight:bold; font-size:14px;}
   .res .rate{font-size:10px; color:var(--text-dim);}
   .res.warn .val{color:var(--red);}
+  .res.bonus{background:rgba(193,121,62,.16); box-shadow:inset 0 0 0 1px rgba(193,121,62,.5);}
+  .res.bonus .rate{color:var(--gold);}
   .res-box .res-group{display:grid; grid-template-columns:1fr 1fr; gap:8px 6px;}
   .res-box .res{align-items:flex-start; min-width:0; width:100%; padding:6px 8px;}
   .res-box .res .val{font-size:13px; white-space:nowrap;}
@@ -242,9 +244,14 @@
   #mapInfluence{position:absolute; left:0; top:0; pointer-events:none;}
   .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
   .villagePin .dot{
-    width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    position:relative; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:15px; border:2px solid #1a140d; box-shadow:0 2px 5px rgba(0,0,0,.6);
     transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .resbonus-badge{
+    position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%;
+    background:var(--gold); border:1px solid #1a140d; font-size:9px; line-height:1;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.6);
   }
   .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
   .villagePin.weak .dot{background:#4d7a37;}
@@ -1379,6 +1386,7 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"⛏️", title:"Gisements riches", body:"Environ 1 village barbare sur 8 recèle un gisement riche en une ressource tirée au hasard (repérable sur la carte). Une fois conquis, il produit +10% de cette ressource — un bonus propre à ce village précis, jamais partagé avec vos autres villages." },
   { tag:"Nouveau", icon:"🎖️", title:"Les Succès remplacent les Objectifs", body:"9 catégories reprises du jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, attaques remportées, soutien, échanges au Marché, murailles démolies, adversaires distincts), chacune avec 4 paliers Bois / Bronze / Argent / Or débloqués automatiquement." },
   { tag:"Nouveau", icon:"🏪", title:"Le Marché", body:"Proposez des échanges de ressources et acceptez les offres publiées par les autres joueurs." },
   { tag:"Amélioration", icon:"🗺️", title:"Carte du monde vivante", body:"Les attaques et reconnaissances en approche des autres joueurs s'affichent désormais sur la carte." },
@@ -1684,6 +1692,21 @@ function startRenameVillage(){
   input.addEventListener("blur", commit);
 }
 
+/* Gisement riche (voir resourceBonus, gameLogic.js/store.js) : +10% de production sur UNE ressource
+   tirée au hasard, propre à ce village barbare précis, conservé après conquête. N'affecte jamais les
+   autres villages du même joueur. resProdRate() ne fait qu'ANTICIPER côté client ce que le serveur
+   calcule réellement (comme prodPerHour seul seul l'était déjà avant l'ajout des gisements) : cette
+   estimation n'inclut toujours pas les autres multiplicateurs serveur (vitesse, guilde, évènements). */
+function villageResourceBonus(r){
+  const v=state.village;
+  return (v.resourceBonus && v.resourceBonus.res===r) ? v.resourceBonus : null;
+}
+function resProdRate(r){
+  const v=state.village;
+  const bonus=villageResourceBonus(r);
+  return prodPerHour(r, v.buildings[r]) * (bonus ? (1+bonus.pct) : 1);
+}
+
 /* Met à jour uniquement les chiffres de la barre du haut (ressources, population, nom),
    sans reconstruire les boutons — appelé à chaque sondage périodique pour ne pas interrompre
    une saisie de renommage en cours. */
@@ -1697,7 +1720,8 @@ function updateTopBarStats(){
     if(!box||!val||!rate) continue;
     box.classList.toggle("warn", v.resources[r]>=cap-1);
     val.innerHTML = `${RES_ICON[r]} ${fmt(v.resources[r])}<span style="color:var(--text-dim);font-weight:normal;">/${fmt(cap)}</span>`;
-    rate.textContent = `+${fmt(prodPerHour(r,v.buildings[r]))}/h`;
+    const bonus=villageResourceBonus(r);
+    rate.textContent = `+${fmt(resProdRate(r))}/h${bonus?' ⭐':''}`;
   }
   const popEl=document.getElementById("popVal");
   if(popEl) popEl.textContent = `👥 ${pop}/${popMax}`;
@@ -1733,11 +1757,14 @@ function renderSidebar(){
     <div class="box res-box">
       <h3>💰 Ressources</h3>
       <div class="res-group">
-        ${["wood","clay","iron"].map(r=>`
-          <div class="res ${v.resources[r]>=cap-1?'warn':''}" id="resBox_${r}">
+        ${["wood","clay","iron"].map(r=>{
+          const bonus=villageResourceBonus(r);
+          return `
+          <div class="res ${v.resources[r]>=cap-1?'warn':''} ${bonus?'bonus':''}" id="resBox_${r}" ${bonus?`title="Gisement riche : +${Math.round(bonus.pct*100)}% de production de ${RES_NAME[r].toLowerCase()} dans ce village."`:''}>
             <div class="val" id="resVal_${r}">${RES_ICON[r]} ${fmt(v.resources[r])}<span style="color:var(--text-dim);font-weight:normal;">/${fmt(cap)}</span></div>
-            <div class="rate" id="resRate_${r}">+${fmt(prodPerHour(r,v.buildings[r]))}/h</div>
-          </div>`).join("")}
+            <div class="rate" id="resRate_${r}">+${fmt(resProdRate(r))}/h${bonus?' ⭐':''}</div>
+          </div>`;
+        }).join("")}
         <div class="res"><div class="val" id="popVal">👥 ${pop}/${popMax}</div><div class="rate">population</div></div>
       </div>
     </div>`;
@@ -2267,6 +2294,7 @@ function renderVillageActionModal(){
             <button id="btnCloseVillageAction" title="Fermer" style="padding:4px 8px;">✖</button>
           </div>
           <p class="muted small">Votre village (${v.x}|${v.y}). Impossible de s'attaquer soi-même.</p>
+          ${v.resourceBonus?`<p class="small" style="color:var(--gold); background:rgba(193,121,62,.16); border:1px solid rgba(193,121,62,.5); border-radius:8px; padding:6px 10px;">${RES_ICON[v.resourceBonus.res]} Gisement riche : +${Math.round(v.resourceBonus.pct*100)}% de production de ${RES_NAME[v.resourceBonus.res].toLowerCase()} dans ce village précis.</p>`:""}
         </div>
       </div>`;
     wireVillageActionModal();
@@ -2288,6 +2316,7 @@ function renderVillageActionModal(){
           </div>
           <div class="small muted" style="margin:2px 0 10px;">${t.x}|${t.y} · à ${dist.toFixed(1)} champs <span class="tag weak">Conquis</span></div>
           <p class="muted small">Ce village vous appartient : vous pouvez l'améliorer et y entraîner des troupes comme votre premier village (ressources et troupes qui lui sont propres).</p>
+          ${t.resourceBonus?`<p class="small" style="color:var(--gold); background:rgba(193,121,62,.16); border:1px solid rgba(193,121,62,.5); border-radius:8px; padding:6px 10px;">${RES_ICON[t.resourceBonus.res]} Gisement riche : +${Math.round(t.resourceBonus.pct*100)}% de production de ${RES_NAME[t.resourceBonus.res].toLowerCase()} dans ce village précis.</p>`:""}
           ${isActive
             ? `<p class="sub small"><span class="tag strong">Village actif</span> — c'est celui que vous gérez actuellement (onglets Bâtiments/Caserne).</p>`
             : `<button data-manage-village="${t.id}" class="primary">🏗️ Gérer ce village</button>`}
@@ -2342,6 +2371,7 @@ function renderVillageActionModal(){
           ${ownerTag}
         </div>
         <div class="sub small" style="margin-bottom:8px;">${intelLine}${t.wallLevel>0?(' · Muraille niv.'+t.wallLevel):''}</div>
+        ${t.resourceBonus?`<p class="small" style="color:var(--gold); background:rgba(193,121,62,.16); border:1px solid rgba(193,121,62,.5); border-radius:8px; padding:6px 10px; margin:0 0 8px;">${RES_ICON[t.resourceBonus.res]} Gisement riche : ce village produit +${Math.round(t.resourceBonus.pct*100)}% de ${RES_NAME[t.resourceBonus.res].toLowerCase()}${t.isPlayer?'':' une fois conquis'} — le bonus reste propre à ce village.</p>`:""}
         ${diplomacyWarning}
         <div class="send-form open">
           <div class="inputs">${troopInputs}</div>
@@ -2495,16 +2525,20 @@ function renderMap(){
     const rel = !mine && t.isPlayer ? guildRelationFor(t.guildId) : null;
     const cls = mine ? "player" : (rel ? rel.cls : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]));
     const icon = mine ? "🚩" : (t.isPlayer ? "👤" : (t.wallLevel>0?'🏯':'🏚️'));
-    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'');
+    const bonusTxt = t.resourceBonus ? (" · gisement riche : +"+Math.round(t.resourceBonus.pct*100)+"% "+RES_NAME[t.resourceBonus.res].toLowerCase()) : "";
+    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt;
+    const badge = t.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[t.resourceBonus.res]}</span>` : "";
     return `<div class="villagePin ${cls} ${sel?'selected':''}" data-village-pin="${t.id}" style="left:${left}px; top:${top}px;" title="${title}">
-      <div class="dot">${icon}</div>
+      <div class="dot">${icon}${badge}</div>
       ${ppf>=20?`<div class="plabel">${t.x}|${t.y}</div>`:''}
     </div>`;
   }).join("");
   const playerLeft=(v.x-minX)*ppf, playerTop=(v.y-minY)*ppf;
   const playerSel = ui.selectedVillage==="home";
-  const playerPin = `<div class="villagePin player ${playerSel?'selected':''}" data-village-pin="home" style="left:${playerLeft}px; top:${playerTop}px;" title="${v.name} (${v.x}|${v.y})">
-    <div class="dot">🏰</div>
+  const playerBonusTxt = v.resourceBonus ? (" · gisement riche : +"+Math.round(v.resourceBonus.pct*100)+"% "+RES_NAME[v.resourceBonus.res].toLowerCase()) : "";
+  const playerBadge = v.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[v.resourceBonus.res]}</span>` : "";
+  const playerPin = `<div class="villagePin player ${playerSel?'selected':''}" data-village-pin="home" style="left:${playerLeft}px; top:${playerTop}px;" title="${v.name} (${v.x}|${v.y})${playerBonusTxt}">
+    <div class="dot">🏰${playerBadge}</div>
     ${ppf>=20?`<div class="plabel">${v.name}</div>`:''}
   </div>`;
 
@@ -3460,6 +3494,8 @@ function renderHelp(){
   <p>Contrairement à un jeu solo, le serveur ne révèle jamais les troupes ni les ressources d'un village qui n'est pas le vôtre : vous devez d'abord y envoyer une <b>reconnaissance</b> (au moins un Éclaireur) pour en apprendre le contenu. Ce renseignement reste affiché tant que vous n'avez pas refait de reconnaissance plus récente — il peut donc devenir obsolète si le village a changé entre-temps. Le niveau de muraille, lui, est toujours visible.</p>
   <h3>Sièges et conquête</h3>
   <p>Le <b>Bélier</b> et la <b>Catapulte</b> sont des unités de siège : envoyées dans une attaque victorieuse contre un village barbare, elles endommagent respectivement sa muraille et sa capacité de stockage (l'entrepôt d'un vrai joueur ne peut pas être endommagé ainsi). Construisez une <b>Académie</b> (dès Hôtel de ville niveau 20 — coûteuse et longue, elle ne peut être bâtie qu'une seule fois) pour former des <b>Nobles</b> : chaque noble survivant à une attaque victorieuse contre un village barbare réduit sa loyauté d'environ 20 à 35% et est alors consommé ; à 0% le village est conquis et devient vôtre. La conquête d'un village appartenant à un autre joueur n'est pas possible dans cette version.</p>
+  <h3>Gisements riches</h3>
+  <p>Environ 1 village barbare sur 8 recèle un <b>gisement riche</b> en une ressource tirée au hasard (bois, argile ou fer), repérable sur la Carte par un petit badge ${RES_ICON.iron} sur son pin (survolez ou touchez le pin pour voir laquelle). Une fois ce village conquis par un Noble, il produit <b>+10%</b> de cette ressource — un bonus propre à ce village précis, qui ne s'applique jamais à vos autres villages.</p>
   <h3>Un monde vivant, avec de vrais joueurs</h3>
   <p>Les villages barbares se développent tout seuls avec le temps (nouvelles troupes, muraille renforcée, réserves agrandies), surtout les plus éloignés du centre, et peuvent riposter par un raid si vous les attaquez trop souvent. Les autres joueurs, eux, agissent quand ils le souhaitent : soyez prêt à défendre votre village (troupes en garnison, muraille) à tout moment, même hors ligne — l'économie et les combats continuent en votre absence, le monde tourne en temps réel 24h/24.</p>
   <h3>Succès et Classement</h3>
