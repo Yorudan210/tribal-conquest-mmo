@@ -11,6 +11,19 @@ const WORLD = { minX: 0, maxX: 200, minY: 0, maxY: 200 };
 const BARBARIAN_COUNT = 220;
 const VILLAGE_NAMES = ["Village abandonné","Campement barbare","Hameau isolé","Ferme fortifiée","Avant-poste","Colonie sauvage","Repaire de pillards","Bourgade en ruine","Camp retranché","Ruines habitées"];
 
+// Village barbare "à bonus" : environ 1 village barbare sur 8 dispose d'un gisement particulièrement
+// riche en une ressource tirée au hasard, qui augmente sa production de +10% UNE FOIS CE VILLAGE
+// CONQUIS PAR UN NOBLE. Le bonus reste attaché à ce village précis (voir runTick, gameLogic.js) : il
+// ne s'applique jamais aux autres villages du joueur qui le conquiert, même une fois converti en
+// village de joueur (le champ resourceBonus survit à la conversion barbare -> joueur, voir resolveAttack).
+const RESOURCE_BONUS_CHANCE = 0.12;
+const RESOURCE_BONUS_PCT = 0.10;
+function rollResourceBonus(){
+  if(Math.random()>=RESOURCE_BONUS_CHANCE) return null;
+  const res = ["wood","clay","iron"][Math.floor(Math.random()*3)];
+  return { res, pct: RESOURCE_BONUS_PCT };
+}
+
 let db = null;
 
 function emptyDb(){
@@ -68,6 +81,12 @@ function migrateDb(){
   }
   for(const id in db.villages){
     const v = db.villages[id];
+    // Bonus de ressource (voir rollResourceBonus ci-dessus) : absent des mondes générés avant
+    // l'introduction de la fonctionnalité. Pour les villages barbares déjà existants, on tire le
+    // bonus rétroactivement (comme s'ils avaient été générés avec dès le début) ; pour les villages
+    // de joueurs déjà conquis, on se contente de poser le champ à null plutôt que d'accorder un
+    // bonus rétroactif surprise sur un village déjà en jeu.
+    if(v.resourceBonus===undefined) v.resourceBonus = v.owner==="barbarian" ? rollResourceBonus() : null;
     if(v.owner!=="barbarian" && !v.support) v.support = [];
     // Répare les villages conquis par un Noble avant le correctif qui convertit correctement
     // un village barbare en village de joueur : sans "buildings", runTick() plante à chaque tick.
@@ -213,7 +232,7 @@ function generateBarbarians(count){
       },
       resCap: Math.round(600+tier*500),
       troops, wallLevel: Math.round(Math.random()*tier), hideLevel: 0,
-      loyalty: 100, aggro: 0
+      loyalty: 100, aggro: 0, resourceBonus: rollResourceBonus()
     };
   }
 }

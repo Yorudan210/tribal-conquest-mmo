@@ -831,7 +831,10 @@ function runTick(db){
     const guildProdBoostMult = guildBoostMultiplier(guild, "production");
     const eventProdMult = serverEventMultiplier(db, "production");
     for(const r of ["wood","clay","iron"]){
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult;
+      // Bonus de gisement (voir rollResourceBonus, store.js) : +10% UNIQUEMENT sur la ressource
+      // concernée et UNIQUEMENT dans ce village précis — jamais propagé aux autres villages du joueur.
+      const villageResBonusMult = (v.resourceBonus && v.resourceBonus.res===r) ? (1+v.resourceBonus.pct) : 1;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult*villageResBonusMult;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -1608,7 +1611,10 @@ function publicVillageView(v, db){
     id: v.id, x: v.x, y: v.y, name: v.name,
     owner: v.owner, isPlayer: v.owner!=="barbarian",
     tier: v.tier, wallLevel: villageWall(v),
-    guildId: ownerUser ? (ownerUser.guildId||null) : null
+    guildId: ownerUser ? (ownerUser.guildId||null) : null,
+    // Visible sur la carte pour tout le monde (comme le niveau de muraille) : un village barbare
+    // à gisement riche est une cible de conquête intéressante à repérer avant même de l'attaquer.
+    resourceBonus: v.resourceBonus || null
   };
 }
 
