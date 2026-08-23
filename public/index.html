@@ -202,6 +202,7 @@
   .troop-row:hover{background:rgba(0,0,0,.14);}
   .troop-row:last-child{border-bottom:none;}
   .troop-row .tname{font-weight:bold; color:var(--gold); width:110px;}
+  .disband-row{display:flex; align-items:center; gap:6px; padding-left:8px; margin-left:4px; border-left:1px dashed var(--border);}
   .stats-mini{font-size:10px; color:var(--text-dim);}
   table{width:100%; border-collapse:collapse; font-size:12px;}
   th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
@@ -954,7 +955,7 @@ const TUTORIAL_STEPS = [
   {icon:"🗺️", title:"La carte",
    body:"Explorez la carte pour repérer des villages barbares : envoyez une reconnaissance pour les espionner, ou une attaque pour piller leurs ressources. Attention : un village attaqué peut riposter !"},
   {icon:"🎖️", title:"Succès et classement",
-   body:"L'onglet Succès suit votre progression par paliers (Bois/Bronze/Argent/Or), comme sur le jeu officiel, et l'onglet Classement affiche les meilleurs joueurs du monde. Bonne conquête !"}
+   body:"Le sous-onglet Succès (dans Informations) suit votre progression par paliers (Bois/Bronze/Argent/Or), comme sur le jeu officiel, et l'onglet Classement affiche les meilleurs joueurs du monde. Bonne conquête !"}
 ];
 
 function renderTutorial(){
@@ -1059,6 +1060,7 @@ let username = null;
 let authToken = null;
 let serverTimeOffset = 0;    // estimateNow() = Date.now()/1000 + serverTimeOffset
 let activeTab = "buildings";
+let infoSubTab = "help";     // sous-onglet actif dans l'onglet "Informations" (Aide/Succès/Admin/Mises à jour)
 let ui = { openReport:new Set(), selectedBuilding:"hq", selectedVillage:null };
 let mapView = null;          // {cx, cy, ppf} — affichage de la carte : purement client, ne vient pas du serveur
 let mapDragging = false;     // true pendant un glissé de la carte : bloque les re-rendus périodiques
@@ -1228,7 +1230,7 @@ async function refreshAdminData(){
     adminPlayers = data.players;
     adminMissions = data.missions;
     adminSpeed = data.speedMultiplier||1;
-    if(activeTab==="admin") renderActiveTabContent();
+    if(activeTab==="information" && infoSubTab==="admin") renderActiveTabContent();
   }catch(err){ toast("⚠️ "+err.message); }
 }
 
@@ -1270,6 +1272,16 @@ function queueTrain(key, count){
   if(!count || count<=0) return;
   const t=TROOPS[key];
   doAction(()=>apiCall("/api/train","POST",{key, count}), count+" "+t.name+"(s) mis en formation.", "trainQueued");
+}
+
+function disbandTroops(key, count){
+  count=Math.floor(count);
+  if(!count || count<=0) return;
+  const t=TROOPS[key];
+  const have=state.village.troops[key]||0;
+  if(count>have){ toast("Vous n'avez que "+have+" "+t.name+"(s) dans ce village."); return; }
+  if(!confirm("Licencier "+count+" "+t.name+"(s) ? Ces troupes seront définitivement détruites, sans remboursement.")) return;
+  doAction(()=>apiCall("/api/troops/disband","POST",{key, count}), count+" "+t.name+"(s) licencié(s).", null);
 }
 
 function sendMission(villageId, kind){
@@ -1386,6 +1398,9 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"ℹ️", title:"Onglet Informations", body:"Aide, Succès, Admin et Mises à jour sont désormais regroupés dans un seul onglet Informations, pour désencombrer la navigation de gauche." },
+  { tag:"Nouveau", icon:"🗑️", title:"Licencier des troupes", body:"Dans la Caserne, chaque type de troupe présent au village peut être licencié (détruit définitivement, sans remboursement) directement depuis l'interface." },
+  { tag:"Correction", icon:"🏳️", title:"Anéantissement total en attaque", body:"Quand une attaque ne laisse plus aucun survivant, la mission ne montre plus de trajet retour fictif : plus de bulle qui rebrousse chemin sur la carte pour des troupes qui n'existent plus." },
   { tag:"Nouveau", icon:"⛏️", title:"Gisements riches", body:"Environ 1 village barbare sur 8 recèle un gisement riche en une ressource tirée au hasard (repérable sur la carte). Une fois conquis, il produit +10% de cette ressource — un bonus propre à ce village précis, jamais partagé avec vos autres villages." },
   { tag:"Nouveau", icon:"🎖️", title:"Les Succès remplacent les Objectifs", body:"9 catégories reprises du jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, attaques remportées, soutien, échanges au Marché, murailles démolies, adversaires distincts), chacune avec 4 paliers Bois / Bronze / Argent / Or débloqués automatiquement." },
   { tag:"Nouveau", icon:"🏪", title:"Le Marché", body:"Proposez des échanges de ressources et acceptez les offres publiées par les autres joueurs." },
@@ -1406,17 +1421,29 @@ const CHANGELOG_ENTRIES = [
   { tag:"Lancement", icon:"🚩", title:"Lancement du monde", body:"Première mise en ligne de Conquête Tribale !" }
 ];
 
-function renderChangelogPanel(){
-  return `<div style="max-height:360px; overflow-y:auto; text-align:left; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
-    ${CHANGELOG_ENTRIES.map(e=>`
+function changelogCardsHtml(){
+  return CHANGELOG_ENTRIES.map(e=>`
       <div class="card" style="padding:10px 12px;">
         <div class="card-head" style="margin-bottom:4px;">
           <div class="icon-mini shop-icon" style="width:30px; height:30px; font-size:15px;">${e.icon}</div>
           <h4 style="margin:0;">${e.title}<span class="small muted" style="font-weight:normal;">${e.tag}</span></h4>
         </div>
         <div class="desc small">${e.body}</div>
-      </div>`).join("")}
+      </div>`).join("");
+}
+/* Écran de connexion (hors session) : hauteur fixe avec défilement interne, pour tenir dans la
+   carte de connexion sans l'agrandir démesurément. */
+function renderChangelogPanel(){
+  return `<div style="max-height:360px; overflow-y:auto; text-align:left; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+    ${changelogCardsHtml()}
   </div>`;
+}
+/* En jeu (onglet Informations) : page normale sans hauteur fixe, la page défile comme les autres
+   onglets — mêmes cartes que sur l'écran de connexion, pour ne pas dupliquer le contenu. */
+function renderChangelogIngame(){
+  return `<h2>🗞️ Mises à jour</h2>
+    <p class="muted small">Historique des dernières nouveautés de Conquête Tribale, de la plus récente à la plus ancienne.</p>
+    <div style="display:flex; flex-direction:column; gap:8px;">${changelogCardsHtml()}</div>`;
 }
 
 function renderAuthScreen(mode, errorMsg){
@@ -1730,9 +1757,9 @@ function updateTopBarStats(){
 }
 
 function renderTabs(){
-  const achievementPoints=(state.achievements||[]).reduce((s,a)=>s+a.points,0);
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["achievements","🎖️ Succès ("+achievementPoints+" pts)"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["help","❓ Aide"]];
-  if(state.isAdmin) tabs.push(["admin","🛠️ Admin"]);
+  // Aide, Succès, Admin et Mises à jour sont regroupés dans l'onglet "Informations" (sous-onglets,
+  // voir renderInformation) plutôt que d'occuper chacun une place dans la navigation de gauche.
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["information","ℹ️ Informations"]];
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
   nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{
@@ -1944,14 +1971,12 @@ function renderActiveTabContent(){
   const main=document.getElementById("tabContent");
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
   else if(activeTab==="barracks") main.innerHTML=renderBarracks();
-  else if(activeTab==="achievements") main.innerHTML=renderAchievements();
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
   else if(activeTab==="guild") main.innerHTML=renderGuild();
   else if(activeTab==="market") main.innerHTML=renderMarket();
-  else if(activeTab==="admin" && state.isAdmin) main.innerHTML=renderAdmin();
-  else main.innerHTML=renderHelp();
+  else main.innerHTML=renderInformation(); // "information" et tout état inconnu retombent ici (comme "help" avant)
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); attachMapHandlers(); }
   if(activeTab==="guild"){
@@ -1959,7 +1984,7 @@ function renderActiveTabContent(){
     if(state.guild && state.guild.isLeader && !guildDirectory) refreshGuildDirectory();
   }
   if(activeTab==="market") attachMarketHandlers();
-  if(activeTab==="admin" && state.isAdmin){
+  if(activeTab==="information" && infoSubTab==="admin" && state.isAdmin){
     attachAdminHandlers();
     if(!adminPlayers) refreshAdminData();
   }
@@ -2200,6 +2225,7 @@ function renderBarracks(){
       ${locked
         ? `<span class="req-note">Nécessite : ${lockedEntries.map(([rk,rv])=>(BUILDINGS[rk]?BUILDINGS[rk].name:rk)+" niv. "+rv).join(", ")}</span>`
         : `<input type="number" min="0" value="0" id="trainCount_${k}"><button data-train="${k}">Entraîner</button>${t.note?`<div class="unit-note">${t.note}</div>`:''}${capNote}`}
+      ${home>0 ? `<div class="disband-row"><input type="number" min="0" max="${home}" value="0" id="disbandCount_${k}"><button data-disband="${k}" class="danger" title="Licencier définitivement, sans remboursement">🗑️ Licencier</button></div>` : ""}
     </div>`;
   }).join("");
   return `<h2>Caserne (niv. ${v.buildings.barracks})</h2>
@@ -3482,6 +3508,27 @@ function attachAdminHandlers(){
   };
 }
 
+/* Onglet "Informations" : regroupe Aide, Succès, Admin (si administrateur) et Mises à jour derrière
+   une petite navigation secondaire (infoSubTab), plutôt que de leur laisser chacun une place dans la
+   navigation principale de gauche — ce sont des pages consultées ponctuellement, pas des outils de
+   jeu courants comme Bâtiments/Caserne/Carte. */
+function renderInformation(){
+  const achievementPoints=(state.achievements||[]).reduce((s,a)=>s+a.points,0);
+  const subTabs=[["help","❓ Aide"],["achievements","🎖️ Succès ("+achievementPoints+" pts)"]];
+  if(state.isAdmin) subTabs.push(["admin","🛠️ Admin"]);
+  subTabs.push(["changelog","🗞️ Mises à jour"]);
+  if(!subTabs.some(([k])=>k===infoSubTab)) infoSubTab="help"; // ex. droits admin perdus entre-temps
+  const nav = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+    ${subTabs.map(([k,label])=>`<button data-info-subtab="${k}" class="${infoSubTab===k?'primary':''}">${label}</button>`).join("")}
+  </div>`;
+  let content;
+  if(infoSubTab==="achievements") content=renderAchievements();
+  else if(infoSubTab==="admin" && state.isAdmin) content=renderAdmin();
+  else if(infoSubTab==="changelog") content=renderChangelogIngame();
+  else content=renderHelp();
+  return `${nav}${content}`;
+}
+
 function renderHelp(){
   return `<h2>Aide &amp; règles du jeu</h2>
   <div class="flex-between" style="margin-bottom:10px;">
@@ -3499,7 +3546,9 @@ function renderHelp(){
   <h3>Un monde vivant, avec de vrais joueurs</h3>
   <p>Les villages barbares se développent tout seuls avec le temps (nouvelles troupes, muraille renforcée, réserves agrandies), surtout les plus éloignés du centre, et peuvent riposter par un raid si vous les attaquez trop souvent. Les autres joueurs, eux, agissent quand ils le souhaitent : soyez prêt à défendre votre village (troupes en garnison, muraille) à tout moment, même hors ligne — l'économie et les combats continuent en votre absence, le monde tourne en temps réel 24h/24.</p>
   <h3>Succès et Classement</h3>
-  <p>L'onglet <b>Succès</b> reprend les mêmes catégories que le jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, soutien, échanges au Marché, murailles démolies, nombre d'adversaires distincts attaqués...), chacune avec 4 paliers — Bois, Bronze, Argent, Or — qui se débloquent automatiquement au fil de votre progression, sans réclamation ni récompense en jeu : c'est purement indicatif. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
+  <p>Le sous-onglet <b>Succès</b> (dans Informations, à côté d'Aide) reprend les mêmes catégories que le jeu officiel (points, conquêtes, pillage, troupes ennemies détruites, soutien, échanges au Marché, murailles démolies, nombre d'adversaires distincts attaqués...), chacune avec 4 paliers — Bois, Bronze, Argent, Or — qui se débloquent automatiquement au fil de votre progression, sans réclamation ni récompense en jeu : c'est purement indicatif. L'onglet <b>Classement</b> affiche les meilleurs joueurs du monde par nombre de points.</p>
+  <h3>Licencier des troupes</h3>
+  <p>Dans l'onglet <b>Caserne</b>, chaque type de troupe présent dans le village affiche un encart « 🗑️ Licencier » : indiquez un nombre et validez pour détruire définitivement ces troupes (aucun remboursement de ressources). Seules les troupes actuellement stationnées dans le village peuvent être licenciées — impossible pour celles en formation ou déjà parties en mission.</p>
   <h3>Compte et progression</h3>
   <p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>
   ${state.isAdmin ? "" : `
@@ -3523,6 +3572,15 @@ function attachTabHandlers(){
     const k=b.dataset.train;
     const inp=document.getElementById("trainCount_"+k);
     queueTrain(k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-disband]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.disband;
+    const inp=document.getElementById("disbandCount_"+k);
+    disbandTroops(k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-info-subtab]").forEach(b=>b.onclick=()=>{
+    infoSubTab=b.dataset.infoSubtab;
+    renderActiveTabContent();
   });
   const replayBtn=document.getElementById("btnReplayTutorial");
   if(replayBtn) replayBtn.onclick=showTutorial;
