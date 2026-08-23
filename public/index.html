@@ -315,6 +315,9 @@
   .report .title .actions{display:flex; align-items:center; gap:8px; font-weight:normal;}
   .report-del{background:none; border:none; cursor:pointer; font-size:13px; opacity:.55; padding:2px 5px; border-radius:4px; line-height:1;}
   .report-del:hover{opacity:1; background:rgba(255,255,255,.08);}
+  .combat-chart{display:flex; flex-direction:column; gap:12px; margin:4px 0 8px;}
+  .chart-block{background:rgba(0,0,0,.16); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px;}
+  .chart-title{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); margin-bottom:6px; font-weight:bold;}
   .report-filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
   .filter-btn{background:var(--panel2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; padding:4px 12px; font-size:11px; cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;}
   .filter-btn:hover{color:var(--text);}
@@ -1061,6 +1064,7 @@ let authToken = null;
 let serverTimeOffset = 0;    // estimateNow() = Date.now()/1000 + serverTimeOffset
 let activeTab = "buildings";
 let infoSubTab = "help";     // sous-onglet actif dans l'onglet "Informations" (Aide/Succès/Admin/Mises à jour)
+let guildSubTab = "overview"; // sous-onglet actif dans l'onglet "Guilde" (Aperçu/Boutique/Diplomatie)
 let ui = { openReport:new Set(), selectedBuilding:"hq", selectedVillage:null };
 let mapView = null;          // {cx, cy, ppf} — affichage de la carte : purement client, ne vient pas du serveur
 let mapDragging = false;     // true pendant un glissé de la carte : bloque les re-rendus périodiques
@@ -1398,6 +1402,8 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Amélioration", icon:"📊", title:"Rapports de combat en graphiques", body:"Les rapports d'attaque et de défense affichent désormais des graphiques (comparaison des puissances, composition détaillée de l'armée) au lieu d'un simple texte compact." },
+  { tag:"Amélioration", icon:"👥", title:"Guilde : Boutique et Diplomatie en onglets", body:"La Boutique de guilde et la Diplomatie ont chacune leur propre sous-onglet dans l'onglet Guilde, séparées de l'Aperçu (membres, Hall, dons)." },
   { tag:"Nouveau", icon:"🗑️", title:"Suppression de joueur (Admin)", body:"Le panneau Admin permet désormais de supprimer un compte joueur définitivement (compte, guilde, offres au marché, rapports…). Son ou ses village(s) ne sont jamais effacés de la carte : ils redeviennent des villages barbares." },
   { tag:"Nouveau", icon:"ℹ️", title:"Onglet Informations", body:"Aide, Succès, Admin et Mises à jour sont désormais regroupés dans un seul onglet Informations, pour désencombrer la navigation de gauche." },
   { tag:"Nouveau", icon:"🗑️", title:"Licencier des troupes", body:"Dans la Caserne, chaque type de troupe présent au village peut être licencié (détruit définitivement, sans remboursement) directement depuis l'interface." },
@@ -1529,7 +1535,7 @@ function logout(silent){
   stopPolling();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
-  guildDirectory=null; guildDiplomacyForm=null;
+  guildDirectory=null; guildDiplomacyForm=null; guildSubTab="overview";
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("gameRoot").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
@@ -1982,7 +1988,7 @@ function renderActiveTabContent(){
   if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); attachMapHandlers(); }
   if(activeTab==="guild"){
     attachGuildHandlers();
-    if(state.guild && state.guild.isLeader && !guildDirectory) refreshGuildDirectory();
+    if(state.guild && state.guild.isLeader && guildSubTab==="diplomacy" && !guildDirectory) refreshGuildDirectory();
   }
   if(activeTab==="market") attachMarketHandlers();
   if(activeTab==="information" && infoSubTab==="admin" && state.isAdmin){
@@ -2748,6 +2754,90 @@ function reportActions(r){
   return `<span class="actions"><span class="small muted">${fmtTime(Math.max(0,estimateNow()-r.time))}</span><button class="report-del" data-delete-report="${r.id}" title="Supprimer ce rapport">🗑️</button></span>`;
 }
 
+/* ===================== Graphiques de combat (rapports "attack"/"defense") =====================
+   Avant : les rapports de combat n'étaient que du texte compact (une ligne par info). Remplacé par
+   trois petits graphiques SVG en ligne (sans dépendance externe, cohérents avec le thème du jeu) :
+   comparaison des puissances, composition détaillée de l'armée attaquante (envoyés/survivants/
+   perdus, connue en intégralité côté serveur — voir resolveAttack), et pertes du camp défenseur
+   (connues seulement en nombre, jamais l'effectif total défenseur, qui reste secret). Les deux
+   rapports "attack" et "defense" partagent exactement les mêmes champs de combat (voir
+   gameLogic.js/resolveAttack et resolveRaid), donc une seule implémentation sert aux deux — ainsi
+   qu'aux raids de pillards, qui produisent eux aussi un rapport de kind "defense". */
+const COMBAT_CHART_COLOR = { attack:"#c15b46", defense:"#5b93b0", survive:"#6bab5e", loss:"#c15b46" };
+
+function combatPowerChartSvg(r){
+  const W=460, barX=96, barW=270, barH=16, rowGap=36;
+  const maxPower = Math.max(r.attackPower||0, r.effAttack||0, r.defensePower||0, 1);
+  const scale = v => Math.max(0, Math.min(barW, (v/maxPower)*barW));
+  const attackWon = r.winner==="attacker";
+  const effX = barX + scale(r.effAttack);
+  const luckPct = Math.round((r.luck||0)*100);
+  const luckLabel = (luckPct>=0?"+":"")+luckPct+"% chance";
+  const H = rowGap*2+14;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:460px; height:auto; display:block;" role="img" aria-label="Comparaison de la puissance d'attaque et de défense">
+    <text x="0" y="13" font-size="12" fill="${COMBAT_CHART_COLOR.attack}" font-weight="bold">⚔️ Attaque${attackWon?' 🏆':''}</text>
+    <rect x="${barX}" y="3" width="${barW}" height="${barH}" rx="4" fill="#000" opacity="0.2"></rect>
+    <rect x="${barX}" y="3" width="${scale(r.attackPower)}" height="${barH}" rx="4" fill="${COMBAT_CHART_COLOR.attack}" opacity="0.55"></rect>
+    <line x1="${effX}" y1="0" x2="${effX}" y2="${3+barH+4}" stroke="#f2e6c8" stroke-width="2"></line>
+    <text x="${Math.max(20,Math.min(W-20,effX))}" y="${3+barH+15}" font-size="9" fill="#f2e6c8" text-anchor="middle">${luckLabel}</text>
+    <text x="${barX+barW+8}" y="15" font-size="11" fill="#f2e6c8">${fmt(r.attackPower)}</text>
+    <text x="0" y="${rowGap+13}" font-size="12" fill="${COMBAT_CHART_COLOR.defense}" font-weight="bold">🛡️ Défense${!attackWon?' 🏆':''}</text>
+    <rect x="${barX}" y="${rowGap+3}" width="${barW}" height="${barH}" rx="4" fill="#000" opacity="0.2"></rect>
+    <rect x="${barX}" y="${rowGap+3}" width="${scale(r.defensePower)}" height="${barH}" rx="4" fill="${COMBAT_CHART_COLOR.defense}"></rect>
+    <text x="${barX+barW+8}" y="${rowGap+15}" font-size="11" fill="#f2e6c8">${fmt(r.defensePower)}</text>
+  </svg>`;
+}
+
+function combatTroopsChartSvg(r){
+  const rows = TROOP_ORDER.filter(k=>(r.troopsSent&&r.troopsSent[k]>0));
+  if(!rows.length) return "";
+  const W=460, barX=92, barW=230, barH=14, rowH=22;
+  const maxSent = Math.max(1, ...rows.map(k=>r.troopsSent[k]||0));
+  const scale = v => Math.max(0, Math.min(barW, (v/maxSent)*barW));
+  const H = rows.length*rowH+4;
+  const bars = rows.map((k,i)=>{
+    const sent=r.troopsSent[k]||0;
+    const survived=(r.attackerSurvivors&&r.attackerSurvivors[k])||0;
+    const survivedW=scale(survived);
+    const lostW=Math.max(0, scale(sent)-survivedW);
+    const y=i*rowH;
+    return `<text x="0" y="${y+11}" font-size="10" fill="#f2e6c8">${TROOPS[k].name}</text>
+      <rect x="${barX}" y="${y+1}" width="${scale(sent)}" height="${barH}" rx="3" fill="#000" opacity="0.2"></rect>
+      <rect x="${barX}" y="${y+1}" width="${survivedW}" height="${barH}" rx="3" fill="${COMBAT_CHART_COLOR.survive}"></rect>
+      <rect x="${barX+survivedW}" y="${y+1}" width="${lostW}" height="${barH}" fill="${COMBAT_CHART_COLOR.loss}"></rect>
+      <text x="${barX+barW+8}" y="${y+11}" font-size="9" fill="#bfa878">${fmt(sent)} env. · ${fmt(survived)} vivants</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:460px; height:auto; display:block;" role="img" aria-label="Composition de l'armée attaquante : envoyés, survivants et perdus par type de troupe">${bars}</svg>`;
+}
+
+function combatDefenderLossesChartSvg(r){
+  const rows = TROOP_ORDER.filter(k=>(r.defenderLosses&&r.defenderLosses[k]>0));
+  if(!rows.length) return "";
+  const W=460, barX=92, barW=230, barH=14, rowH=22;
+  const maxLoss = Math.max(1, ...rows.map(k=>r.defenderLosses[k]||0));
+  const scale = v => Math.max(0, Math.min(barW, (v/maxLoss)*barW));
+  const H = rows.length*rowH+4;
+  const bars = rows.map((k,i)=>{
+    const lost=r.defenderLosses[k]||0;
+    const y=i*rowH;
+    return `<text x="0" y="${y+11}" font-size="10" fill="#f2e6c8">${TROOPS[k].name}</text>
+      <rect x="${barX}" y="${y+1}" width="${barW}" height="${barH}" rx="3" fill="#000" opacity="0.2"></rect>
+      <rect x="${barX}" y="${y+1}" width="${scale(lost)}" height="${barH}" rx="3" fill="${COMBAT_CHART_COLOR.loss}"></rect>
+      <text x="${barX+barW+8}" y="${y+11}" font-size="9" fill="#bfa878">-${fmt(lost)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:460px; height:auto; display:block;" role="img" aria-label="Pertes subies par le camp défenseur, par type de troupe">${bars}</svg>`;
+}
+
+function combatChartsHtml(r, defenderLossesTitle){
+  const troopsChart = combatTroopsChartSvg(r);
+  const defLossesChart = combatDefenderLossesChartSvg(r);
+  return `<div class="combat-chart">
+    <div class="chart-block"><div class="chart-title">Puissance de combat${r.attackShare?(' — répartition infanterie '+r.attackShare.inf+'% / cavalerie '+r.attackShare.cav+'% / archers '+r.attackShare.arch+'%'):''}</div>${combatPowerChartSvg(r)}</div>
+    ${troopsChart?`<div class="chart-block"><div class="chart-title">Armée attaquante</div>${troopsChart}</div>`:''}
+    ${defLossesChart?`<div class="chart-block"><div class="chart-title">${defenderLossesTitle||"Pertes côté défense"}</div>${defLossesChart}</div>`:''}
+  </div>`;
+}
+
 function renderReports(){
   const filterBar = renderReportFilters();
   if(!state.reports.length) return `<h2>Rapports</h2>${filterBar}<p class="muted">Aucun rapport pour l'instant.</p>`;
@@ -2764,23 +2854,15 @@ function renderReports(){
     if(r.kind==="attack"){
       const win=r.winner==="attacker";
       const titleLabel = r.conquered ? "👑 Village conquis" : (win?'🏆 Victoire':'💀 Défaite');
-      const fmtTroopBreakdown = (sent, lost, survivors) => TROOP_ORDER
-        .filter(k=>(sent&&sent[k]>0) || (survivors&&survivors[k]>0))
-        .map(k=>`${TROOPS[k].name} : envoyés ${sent&&sent[k]||0}, survivants ${survivors&&survivors[k]||0}${(lost&&lost[k])?(', perdus '+lost[k]):''}`)
-        .join("<br>") || "aucune";
       return `<div class="report ${win?'win':'lose'}">
         <div class="title" data-toggle="${r.id}"><span>${titleLabel} contre ${r.target} (${r.coord})${r.targetIsPlayer?(' — joueur '+r.targetOwner):''}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
-          Puissance d'attaque : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)${r.attackShare?` — répartition infanterie ${r.attackShare.inf}% / cavalerie ${r.attackShare.cav}% / archers ${r.attackShare.arch}%`:""}<br>
-          Puissance de défense : ${r.defensePower}<br>
-          Pertes attaquant : ${r.attackerLossPct!=null?r.attackerLossPct+"% — ":""}${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
-          Pertes défenseur : ${r.defenderLossPct!=null?r.defenderLossPct+"% — ":""}${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
-          ${r.troopsSent?`<div class="small muted" style="margin:6px 0;">${fmtTroopBreakdown(r.troopsSent, r.attackerLosses, r.attackerSurvivors)}</div>`:""}
-          ${r.nobleSent?`Noble(s) envoyé(s) : ${r.nobleSent}, ayant survécu au combat : ${r.nobleSurvived}${r.nobleSurvivalChancePct!=null?(' (chance de survie '+r.nobleSurvivalChancePct+'%)'):''}${r.conquered?' — a pris possession du village !':(r.nobleSurvived>0?' — consommé (pas de retour).':'')}<br>`:""}
-          ${win?`Butin : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}<br>`:""}
-          ${r.wallDamage?`Muraille adverse endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}<br>`:""}
-          ${r.storageDamageFrac?`Entrepôt adverse endommagé : -${Math.round(r.storageDamageFrac*100)}% de capacité<br>`:""}
-          ${r.loyaltyReduced?`Loyauté réduite de ${r.loyaltyReduced}% (reste ${Math.round(r.targetLoyalty)}%)${r.conquered?" — village conquis !":""}<br>`:""}
+          ${combatChartsHtml(r, "Pertes infligées au défenseur")}
+          ${r.nobleSent?`<div class="small muted" style="margin-top:4px;">Noble(s) envoyé(s) : ${r.nobleSent}, ayant survécu au combat : ${r.nobleSurvived}${r.nobleSurvivalChancePct!=null?(' (chance de survie '+r.nobleSurvivalChancePct+'%)'):''}${r.conquered?' — a pris possession du village !':(r.nobleSurvived>0?' — consommé (pas de retour).':'')}</div>`:""}
+          ${win?`<div class="small muted" style="margin-top:4px;">Butin : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}</div>`:""}
+          ${r.wallDamage?`<div class="small muted" style="margin-top:4px;">Muraille adverse endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}</div>`:""}
+          ${r.storageDamageFrac?`<div class="small muted" style="margin-top:4px;">Entrepôt adverse endommagé : -${Math.round(r.storageDamageFrac*100)}% de capacité</div>`:""}
+          ${r.loyaltyReduced?`<div class="small muted" style="margin-top:4px;">Loyauté réduite de ${r.loyaltyReduced}% (reste ${Math.round(r.targetLoyalty)}%)${r.conquered?" — village conquis !":""}</div>`:""}
         </div>
       </div>`;
     } else if(r.kind==="defense"){
@@ -2788,13 +2870,9 @@ function renderReports(){
       return `<div class="report defense">
         <div class="title" data-toggle="${r.id}"><span>${win?'💀 Raid subi de ':'🛡️ Attaque repoussée de '}${r.source}</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
-          Puissance ennemie : ${r.attackPower} (effective ${r.effAttack}, chance ${(r.luck*100).toFixed(0)}%)${r.attackShare?` — répartition infanterie ${r.attackShare.inf}% / cavalerie ${r.attackShare.cav}% / archers ${r.attackShare.arch}%`:""}<br>
-          Votre puissance défensive : ${r.defensePower}<br>
-          ${r.troopsSent?`Troupes ennemies engagées : ${TROOP_ORDER.filter(k=>(r.troopsSent[k]||0)>0).map(k=>TROOPS[k].name+" "+r.troopsSent[k]).join(", ")||"inconnues"}<br>`:""}
-          ${r.attackerLosses?`Pertes infligées à l'ennemi : ${r.attackerLossPct!=null?r.attackerLossPct+"% — ":""}${Object.entries(r.attackerLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>`:""}
-          Vos pertes : ${r.defenderLossPct!=null?r.defenderLossPct+"% — ":""}${Object.entries(r.defenderLosses).filter(([,n])=>n>0).map(([k,n])=>TROOPS[k].name+" -"+n).join(", ")||"aucune"}<br>
-          ${r.wallDamage?`Votre muraille a été endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}<br>`:""}
-          ${win?`Ressources pillées : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}`:"Aucune perte de ressources."}
+          ${combatChartsHtml(r, "Vos pertes")}
+          ${r.wallDamage?`<div class="small muted" style="margin-top:4px;">Votre muraille a été endommagée : -${r.wallDamage} niveau(x)${r.targetWallLevelAfter!=null?(' (reste niveau '+r.targetWallLevelAfter+')'):''}</div>`:""}
+          <div class="small muted" style="margin-top:4px;">${win?`Ressources pillées : 🪵${r.loot.wood} 🧱${r.loot.clay} ⛏️${r.loot.iron}`:"Aucune perte de ressources."}</div>
         </div>
       </div>`;
     } else if(r.kind==="scout"){
@@ -3139,27 +3217,45 @@ function renderGuild(){
     </div>
     ${proposeBox}`;
 
-  return `<h2>👥 [${escapeHtml(g.tag)}] ${escapeHtml(g.name)}</h2>
-    <p class="muted small">Bonus de production actuel : <b>+${g.bonusPercent}%</b> pour tous les membres (basé sur ${fmt(g.totalDonated)} ressources données au total).</p>
+  // Boutique et Diplomatie séparées de l'Aperçu par des sous-onglets (même mécanisme que
+  // infoSubTab pour l'onglet Informations) : chacune a son propre contenu (souvent long, formulaires
+  // compris), les regrouper toutes sur une seule page rendait l'onglet Guilde difficile à parcourir.
+  const guildSubTabs = [["overview","🏰 Aperçu"], ["shop","🛒 Boutique"], ["diplomacy","🕊️ Diplomatie"]];
+  if(!guildSubTabs.some(([k])=>k===guildSubTab)) guildSubTab = "overview";
+  const subNav = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+    ${guildSubTabs.map(([k,label])=>`<button data-guild-subtab="${k}" class="${guildSubTab===k?'primary':''}">${label}</button>`).join("")}
+  </div>`;
+
+  let subContent;
+  if(guildSubTab==="shop") subContent = shopBox;
+  else if(guildSubTab==="diplomacy") subContent = diplomacyBox;
+  else subContent = `
     <div class="box">
       <h3>👥 Membres (${g.members.length})</h3>
       <table><thead><tr><th>Pseudo</th><th></th></tr></thead><tbody>${membersRows}</tbody></table>
     </div>
     ${inviteBox}
-    ${diplomacyBox}
     ${hallCard}
     ${donateBox}
     ${donationHistoryBox}
-    ${shopBox}
     <div class="box">
       <button id="btnGuildLeave">🚪 Quitter la guilde</button>
       ${g.isLeader?`<button id="btnGuildDisband" style="margin-left:8px;">💥 Dissoudre la guilde</button>`:''}
     </div>`;
+
+  return `<h2>👥 [${escapeHtml(g.tag)}] ${escapeHtml(g.name)}</h2>
+    <p class="muted small">Bonus de production actuel : <b>+${g.bonusPercent}%</b> pour tous les membres (basé sur ${fmt(g.totalDonated)} ressources données au total).</p>
+    ${subNav}
+    ${subContent}`;
 }
 
 const GUILD_MAX_BONUS_PERCENT_CLIENT = 25;
 
 function attachGuildHandlers(){
+  document.querySelectorAll("[data-guild-subtab]").forEach(b=>b.onclick=()=>{
+    guildSubTab = b.dataset.guildSubtab;
+    renderActiveTabContent();
+  });
   const createForm=document.getElementById("guildCreateForm");
   if(createForm) createForm.onsubmit=(e)=>{
     e.preventDefault();
