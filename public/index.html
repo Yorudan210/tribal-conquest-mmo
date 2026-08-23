@@ -1398,6 +1398,7 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"🗑️", title:"Suppression de joueur (Admin)", body:"Le panneau Admin permet désormais de supprimer un compte joueur définitivement (compte, guilde, offres au marché, rapports…). Son ou ses village(s) ne sont jamais effacés de la carte : ils redeviennent des villages barbares." },
   { tag:"Nouveau", icon:"ℹ️", title:"Onglet Informations", body:"Aide, Succès, Admin et Mises à jour sont désormais regroupés dans un seul onglet Informations, pour désencombrer la navigation de gauche." },
   { tag:"Nouveau", icon:"🗑️", title:"Licencier des troupes", body:"Dans la Caserne, chaque type de troupe présent au village peut être licencié (détruit définitivement, sans remboursement) directement depuis l'interface." },
   { tag:"Correction", icon:"🏳️", title:"Anéantissement total en attaque", body:"Quand une attaque ne laisse plus aucun survivant, la mission ne montre plus de trajet retour fictif : plus de bulle qui rebrousse chemin sur la carte pour des troupes qui n'existent plus." },
@@ -3361,7 +3362,10 @@ function renderAdminEditor(p){
   return `
     <div class="flex-between" style="margin-bottom:10px;">
       <h3 style="margin:0;">✏️ ${escapeHtml(p.username)} ${p.isAdmin?'<span class="tag strong">ADMIN</span>':''}</h3>
-      <button id="btnToggleAdmin" data-user="${escapeHtml(p.username)}" data-flag="${p.isAdmin?0:1}">${p.isAdmin?'Retirer les droits admin':'Promouvoir administrateur'}</button>
+      <div style="display:flex; gap:6px;">
+        <button id="btnToggleAdmin" data-user="${escapeHtml(p.username)}" data-flag="${p.isAdmin?0:1}">${p.isAdmin?'Retirer les droits admin':'Promouvoir administrateur'}</button>
+        <button id="btnDeletePlayer" data-user="${escapeHtml(p.username)}" class="danger" title="Supprime le compte définitivement. Ses villages redeviennent barbares (jamais supprimés de la carte).">🗑️ Supprimer le joueur</button>
+      </div>
     </div>
     <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
       <button id="btnFinishBuild" data-user="${escapeHtml(p.username)}">✅ Terminer la construction en cours</button>
@@ -3466,6 +3470,14 @@ function attachAdminHandlers(){
   document.querySelectorAll("[data-finish-mission]").forEach(b=>b.onclick=()=>{
     adminAction(()=>apiCall("/api/admin/finish-mission","POST",{missionId:b.dataset.finishMission}), "Mission résolue instantanément.");
   });
+  const deletePlayerBtn=document.getElementById("btnDeletePlayer");
+  if(deletePlayerBtn) deletePlayerBtn.onclick=()=>{
+    const u=deletePlayerBtn.dataset.user;
+    if(u===username){ toast("⚠️ Vous ne pouvez pas supprimer votre propre compte."); return; }
+    if(!confirm("Supprimer définitivement le compte « "+u+" » ? Cette action est irréversible : son compte, ses rapports, son adhésion à sa guilde et ses offres au marché seront supprimés, et son ou ses village(s) redeviendront des villages barbares.")) return;
+    adminSelected=null;
+    adminAction(()=>apiCall("/api/admin/delete-player","POST",{username:u}), "🗑️ Compte « "+u+" » supprimé.");
+  };
   const finishBuildBtn=document.getElementById("btnFinishBuild");
   if(finishBuildBtn) finishBuildBtn.onclick=()=>{
     adminAction(()=>apiCall("/api/admin/finish-build","POST",{username:finishBuildBtn.dataset.user}), "Construction(s) terminée(s) instantanément.");
