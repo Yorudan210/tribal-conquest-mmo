@@ -1424,6 +1424,77 @@ function adminSetAdmin(db, targetUsername, flag){
   return { ok:true };
 }
 
+/* Supprime un joueur DÉFINITIVEMENT : compte, adhésion/direction de guilde, offres au marché,
+   missions en cours qu'il a lui-même lancées, soutiens envoyés ailleurs et rapports. Ses villages
+   ne sont jamais supprimés (id/emplacement conservés, pour ne jamais casser une mission déjà en
+   route qui les cible ou un soutien d'un autre joueur qui y est stationné) : ils redeviennent des
+   villages barbares, comme un village abandonné dans le vrai jeu. Le chat, les annonces et la
+   diplomatie de guilde ne sont pas réécrits : c'est un historique, comme pour un départ de guilde
+   classique (voir doGuildLeave/doGuildDisband). */
+function adminDeletePlayer(db, targetUsername, actingUsername){
+  const u = db.users[targetUsername];
+  if(!u) return { error: "Joueur introuvable." };
+  if(targetUsername===actingUsername) return { error: "Vous ne pouvez pas supprimer votre propre compte." };
+
+  // 1) Quitte sa guilde comme un départ volontaire : transmission de la direction au membre le
+  //    plus ancien restant, ou dissolution si c'était le dernier membre (voir doGuildLeave).
+  const guild = guildOf(db, targetUsername);
+  if(guild){
+    guild.members = guild.members.filter(m=>m!==targetUsername);
+    if(guild.leader===targetUsername){
+      if(guild.members.length) guild.leader = guild.members[0];
+      else delete db.guilds[guild.id];
+    }
+  }
+
+  // 2) Retire ses offres du marché (aucun remboursement à faire : son village va de toute façon
+  //    redevenir barbare juste après).
+  db.market = (db.market||[]).filter(o=>o.seller!==targetUsername);
+
+  // 3) Annule ses missions en cours (attaques/reco/soutiens qu'IL a lui-même envoyées) : leur
+  //    village d'origine va devenir barbare, les laisser se résoudre plus tard ne ferait que
+  //    gaspiller troupes et rapports dans le vide (villageByUser renverrait null pour ce compte
+  //    supprimé, voir completeMission).
+  db.missions = (db.missions||[]).filter(m=>m.attackerUsername!==targetUsername);
+
+  // 4) Chacun de ses villages (village d'origine + toute conquête) : rend d'abord instantanément
+  //    à leur village d'origine les renforts que D'AUTRES joueurs y avaient stationnés (le village
+  //    hôte va disparaître en tant que village de joueur), puis reconvertit le village en village
+  //    barbare — même id/emplacement, jamais supprimé (voir commentaire de fonction ci-dessus).
+  const owned = myVillages(db, targetUsername);
+  for(const v of owned){
+    for(const s of (v.support||[])){
+      const homeV = db.villages[s.fromVillageId];
+      if(homeV) for(const k in s.troops) homeV.troops[k] = (homeV.troops[k]||0)+(s.troops[k]||0);
+    }
+    const tier = clamp(Math.round((v.buildings?v.buildings.hq||1:1)/2), 0, 4);
+    v.tier = tier;
+    v.troops = { spear:v.troops.spear||0, sword:v.troops.sword||0, archer:v.troops.archer||0,
+      scout:0, light:0, ram:0, catapult:0, noble:0 };
+    v.resCap = Math.round(600+tier*500);
+    v.wallLevel = v.buildings ? (v.buildings.wall||0) : 0;
+    v.hideLevel = v.buildings ? (v.buildings.hide||0) : 0;
+    for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]||0, 0, v.resCap);
+    v.loyalty = 100;
+    v.aggro = {};
+    v.owner = "barbarian"; // en dernier : myVillages()/les lignes ci-dessus lisent encore l'ancien propriétaire
+    delete v.buildings; delete v.buildQueue; delete v.trainQueue; delete v.support; delete v.conqueredCount; delete v.createdAt;
+  }
+
+  // 5) Retire les soutiens qu'il avait lui-même envoyés dans des villages appartenant à D'AUTRES
+  //    joueurs (plus personne pour les rappeler chez lui : ils sont donc simplement perdus).
+  for(const id in db.villages){
+    const dv = db.villages[id];
+    if(dv.support && dv.support.length) dv.support = dv.support.filter(s=>s.from!==targetUsername);
+  }
+
+  // 6) Rapports puis compte lui-même.
+  delete db.reports[targetUsername];
+  delete db.users[targetUsername];
+
+  return { ok:true };
+}
+
 function adminUpdateVillage(db, targetUsername, patch){
   const v = homeVillageOf(db, targetUsername);
   if(!v) return { error:"Village introuvable pour "+targetUsername+"." };
@@ -1768,6 +1839,7 @@ module.exports = {
   villageWall, villageHide, villageResCap, popUsed,
   doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doRename, runTick, buildSnapshot,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
+  adminDeletePlayer,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
   adminListMissions, adminFinishMission,
