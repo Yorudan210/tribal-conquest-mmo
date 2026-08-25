@@ -33,17 +33,23 @@
      serveur (application des effets) et client (affichage du catalogue et des coûts). */
   const GUILD_BOOSTS = [
     { key:"prod20", name:"Élan économique", icon:"📈",
-      desc:"+20% de production de ressources pour toute la guilde pendant 1h.",
+      desc:"+20% de ressources produites par heure (bois, argile, fer confondus) pour toute la guilde pendant 1h.",
       cost:{wood:3000,clay:3000,iron:3000}, durationSec:3600, type:"production", multiplier:1.20 },
     { key:"prod50", name:"Âge d'or", icon:"✨",
-      desc:"+50% de production de ressources pour toute la guilde pendant 30 min.",
+      desc:"+50% de ressources produites par heure (bois, argile, fer confondus) pour toute la guilde pendant 30 min.",
       cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"production", multiplier:1.50 },
     { key:"speed20", name:"Effort de guerre", icon:"⚙️",
-      desc:"+20% de vitesse de construction et d'entraînement pour toute la guilde pendant 1h.",
+      desc:"+20% de vitesse de construction des bâtiments pour toute la guilde pendant 1h.",
       cost:{wood:3000,clay:3000,iron:3000}, durationSec:3600, type:"speed", multiplier:1.20 },
     { key:"speed50", name:"Mobilisation générale", icon:"🚀",
-      desc:"+50% de vitesse de construction et d'entraînement pour toute la guilde pendant 30 min.",
-      cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"speed", multiplier:1.50 }
+      desc:"+50% de vitesse de construction des bâtiments pour toute la guilde pendant 30 min.",
+      cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"speed", multiplier:1.50 },
+    { key:"train20", name:"Instructeurs d'élite", icon:"🎯",
+      desc:"+20% de vitesse d'entraînement des troupes pour toute la guilde pendant 1h.",
+      cost:{wood:3000,clay:3000,iron:3000}, durationSec:3600, type:"train", multiplier:1.20 },
+    { key:"train50", name:"Conscription forcée", icon:"🥁",
+      desc:"+50% de vitesse d'entraînement des troupes pour toute la guilde pendant 30 min.",
+      cost:{wood:8000,clay:8000,iron:8000}, durationSec:1800, type:"train", multiplier:1.50 }
   ];
 
   /* Évènements de serveur : déclenchés depuis le panneau Admin, ils s'appliquent à TOUS les joueurs
@@ -105,8 +111,8 @@
     scout: {name:"Éclaireur", cost:{wood:50,clay:50,iron:20}, pop:2, atk:0,  defInf:2,  defCav:1,  defArch:2, speed:9,  carry:0,  baseTime:16, requires:{barracks:1}},
     light: {name:"Cavalerie légère", cost:{wood:125,clay:100,iron:250}, pop:4, atk:130, defInf:30, defCav:40, defArch:30, speed:10, carry:80, baseTime:45, requires:{barracks:3}},
     ram:   {name:"Bélier", cost:{wood:300,clay:200,iron:200}, pop:5, atk:2, defInf:20, defCav:50, defArch:20, speed:30, carry:0, baseTime:50, requires:{barracks:6}},
-    catapult:{name:"Catapulte", cost:{wood:350,clay:300,iron:350}, pop:8, atk:100, defInf:100, defCav:50, defArch:100, speed:30, carry:0, baseTime:70, requires:{barracks:10}},
-    noble: {name:"Noble", cost:{wood:5500,clay:5500,iron:6500}, pop:10, atk:30, defInf:100, defCav:50, defArch:100, speed:35, carry:0, baseTime:180, requires:{barracks:8, academy:1}}
+    catapult:{name:"Catapulte", cost:{wood:320,clay:400,iron:100}, pop:8, atk:100, defInf:100, defCav:50, defArch:100, speed:30, carry:0, baseTime:70, requires:{barracks:10}},
+    noble: {name:"Noble", cost:{wood:16000,clay:16000,iron:20000}, pop:30, atk:30, defInf:100, defCav:50, defArch:100, speed:35, carry:0, baseTime:540, requires:{barracks:8, academy:1}}
   };
   const TROOP_ORDER = ["spear","sword","archer","scout","light","ram","catapult","noble"];
   const INFANTRY = ["spear","sword","ram","catapult","noble"];
@@ -136,14 +142,18 @@
   }
   function storageCap(level){ return Math.round(1000*Math.pow(1.2, Math.max(level,0)-1)); }
   function farmCap(level){ return Math.round(200*Math.pow(1.172, Math.max(level,0)-1)); }
+  // Même mécanisme de réduction que buildTime() (décroissance exponentielle selon le niveau du
+  // bâtiment qui accélère l'action — ici la Caserne, comme le Hôtel de ville pour les constructions),
+  // pour rester cohérent avec le reste du moteur de jeu.
+  const TRAIN_TIME_FACTOR = 1.04;
   function trainTime(key, barracksLevel){
     const t=TROOPS[key].baseTime;
-    return Math.max(3, Math.round(t/(1+(barracksLevel||0)*0.05)));
+    return Math.max(3, Math.round(t/Math.pow(TRAIN_TIME_FACTOR, barracksLevel||0)));
   }
 
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
     ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS,
-    clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR
+    clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR
   };
 });
