@@ -153,21 +153,23 @@ async function handleApi(req, res, pathname, url){
   }
   if(pathname==="/api/build" && req.method==="POST"){
     const body = await readBody(req);
-    const result = game.doBuild(db, username, body.key);
+    // villageId (optionnel) : construit dans un village précis du joueur sans le rendre actif — voir
+    // le panneau "Empire" (sous-onglet Construction). Omis, comportement inchangé (village actif).
+    const result = game.doBuild(db, username, body.key, body.villageId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
   if(pathname==="/api/train" && req.method==="POST"){
     const body = await readBody(req);
-    const result = game.doTrain(db, username, body.key, body.count);
+    const result = game.doTrain(db, username, body.key, body.count, body.villageId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
   if(pathname==="/api/troops/disband" && req.method==="POST"){
     const body = await readBody(req);
-    const result = game.doDisbandTroops(db, username, body.key, body.count);
+    const result = game.doDisbandTroops(db, username, body.key, body.count, body.villageId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
@@ -175,6 +177,13 @@ async function handleApi(req, res, pathname, url){
   if(pathname==="/api/mission" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doMission(db, username, body.targetId, body.kind, body.troops||{});
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/mission/cancel" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doCancelMission(db, username, body.missionId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
@@ -216,7 +225,7 @@ async function handleApi(req, res, pathname, url){
   }
   if(pathname==="/api/build/cancel" && req.method==="POST"){
     const body = await readBody(req);
-    const result = game.doBuildCancel(db, username, body.index);
+    const result = game.doBuildCancel(db, username, body.index, body.villageId);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
@@ -244,8 +253,11 @@ async function handleApi(req, res, pathname, url){
   }
   if(pathname==="/api/village/transfer" && req.method==="POST"){
     const body = await readBody(req);
-    const source = game.villageByUser(db, username);
-    if(!source) return sendJson(res, 400, { error:"Village introuvable." });
+    // sourceVillageId (optionnel) : permet au panneau "Empire" (sous-onglet Envoi de ressources) de
+    // choisir N'IMPORTE LEQUEL de ses villages comme source, pas seulement l'actif. Omis, comportement
+    // inchangé (source = village actif, comme depuis l'écran Bâtiments normal).
+    const source = body.sourceVillageId ? game.villageOwnedByUser(db, username, body.sourceVillageId) : game.villageByUser(db, username);
+    if(!source) return sendJson(res, 400, { error:"Village source introuvable." });
     const result = game.doTransferResourcesBetweenVillages(db, username, source.id, body.targetVillageId, body.wood, body.clay, body.iron);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();

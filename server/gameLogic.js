@@ -105,6 +105,16 @@ function villageByUser(db, username){
   return v;
 }
 
+/* Résout un village précis appartenant au joueur (par id), pour les actions "à distance" du panneau
+   Empire (gérer un village qui n'est pas l'actif sans avoir à basculer dessus d'abord — voir
+   myVillagesDetailed, doBuild, doBuildCancel, doTrain, doDisbandTroops). Retourne null si le village
+   n'existe pas ou n'appartient pas à ce joueur, jamais le village actif d'un autre en remplacement. */
+function villageOwnedByUser(db, username, villageId){
+  const v = db.villages[String(villageId)];
+  if(!v || v.owner!==username) return null;
+  return v;
+}
+
 /* Village d'origine (capitale) d'un joueur, indépendamment du village actuellement actif dans
    l'interface : utilisé pour les actions qui doivent viser un point stable et prévisible (recevoir
    un don, être la cible d'une riposte barbare, ou pour l'administration). */
@@ -118,6 +128,24 @@ function homeVillageOf(db, username){
    barbare conquis) : la liste affichée par le sélecteur de village côté client. */
 function myVillages(db, username){
   return Object.values(db.villages).filter(v=>v.owner===username);
+}
+
+/* Vue détaillée de TOUS les villages d'un joueur (ressources+plafond, bâtiments, troupes, files de
+   construction/entraînement complètes) — contrairement à myVillagesList (calculé dans buildSnapshot),
+   qui ne sert qu'au sélecteur de village actif et ne contient qu'un résumé léger (id/nom/coord/HdV).
+   Sert au panneau "Empire" (gestion groupée multi-villages, visible côté client à partir de 2
+   villages) : permet de consulter et d'agir sur un village qui n'est PAS l'actif, sans avoir à y
+   basculer d'abord (voir aussi le paramètre villageId optionnel de doBuild/doTrain/etc.). */
+function myVillagesDetailed(db, username){
+  const homeId = db.users[username] ? db.users[username].villageId : null;
+  return myVillages(db, username).map(v=>({
+    id: v.id, name: v.name, x: v.x, y: v.y, isHome: v.id===homeId,
+    resources: {...v.resources}, resCap: storageCap(v.buildings.warehouse),
+    buildings: {...v.buildings}, buildQueue: v.buildQueue.map(o=>({...o})),
+    troops: {...v.troops}, trainQueue: v.trainQueue.map(o=>({...o})),
+    pop: popUsed(v), popMax: farmCap(v.buildings.farm),
+    conqueredCount: v.conqueredCount||0
+  })).sort((a,b)=>(b.isHome-a.isHome) || a.name.localeCompare(b.name));
 }
 
 /* Accumule dans "acc" les niveaux de construction et les conquêtes d'UN village. Factorisé pour
@@ -175,8 +203,12 @@ function doSwitchVillage(db, username, villageId){
 /*  Actions joueur                                                         */
 /* ---------------------------------------------------------------------- */
 
-function doBuild(db, username, key){
-  const v = villageByUser(db, username);
+/* villageId (optionnel) : cible un village précis du joueur SANS le rendre actif — sert au panneau
+   "Empire" (gestion groupée, sous-onglet Construction), qui permet de lancer une construction dans
+   n'importe lequel de ses villages sans avoir à y basculer d'abord. Omis (undefined), le comportement
+   est inchangé : cible le village actuellement actif, comme depuis l'écran Bâtiments normal. */
+function doBuild(db, username, key, villageId){
+  const v = villageId ? villageOwnedByUser(db, username, villageId) : villageByUser(db, username);
   if(!v) return { error: "Village introuvable." };
   const b = BUILDINGS[key];
   if(!b) return { error: "Bâtiment inconnu." };
@@ -212,8 +244,8 @@ function doBuild(db, username, key){
    Si c'est le premier de la file (en cours), le suivant démarre immédiatement ; les éléments
    après l'annulation sont réenchaînés correctement (sans jamais toucher au minutage de l'élément
    toujours en tête s'il n'est pas celui annulé). */
-function doBuildCancel(db, username, index){
-  const v = villageByUser(db, username);
+function doBuildCancel(db, username, index, villageId){
+  const v = villageId ? villageOwnedByUser(db, username, villageId) : villageByUser(db, username);
   if(!v) return { error: "Village introuvable." };
   index = Math.floor(Number(index));
   if(!Number.isInteger(index) || index<0 || index>=v.buildQueue.length) return { error: "Élément de file introuvable." };
@@ -233,8 +265,8 @@ function doBuildCancel(db, username, index){
   return { ok: true };
 }
 
-function doTrain(db, username, key, count){
-  const v = villageByUser(db, username);
+function doTrain(db, username, key, count, villageId){
+  const v = villageId ? villageOwnedByUser(db, username, villageId) : villageByUser(db, username);
   if(!v) return { error: "Village introuvable." };
   count = Math.floor(count);
   if(!count || count<=0) return { error: "Quantité invalide." };
@@ -268,8 +300,8 @@ function doTrain(db, username, key, count){
    d'une construction en file (doBuildCancel), la troupe existe déjà bel et bien, donc la licencier
    ne "rend" rien — sert simplement à libérer de la population (ex. avant d'entraîner autre chose)
    sans attendre qu'elle meure au combat. */
-function doDisbandTroops(db, username, key, count){
-  const v = villageByUser(db, username);
+function doDisbandTroops(db, username, key, count, villageId){
+  const v = villageId ? villageOwnedByUser(db, username, villageId) : villageByUser(db, username);
   if(!v) return { error: "Village introuvable." };
   count = Math.floor(count);
   if(!count || count<=0) return { error: "Quantité invalide." };
@@ -379,6 +411,38 @@ function doRecallSupport(db, username, supportId){
     kind:"supportReturn", attackerUsername: username, sourceVillageId: hostVillage.id, targetId: homeVillage.id,
     troops: {...entry.troops}, departAt: t, arriveAt: t+travel, travel, resolveDone:true, returnAt: t+travel, completed:false
   });
+  return { ok:true };
+}
+
+/* Annule une attaque ou une reconnaissance encore EN ROUTE vers sa cible (avant résolution du combat
+   ou de la reconnaissance) : les troupes font demi-tour immédiatement plutôt que d'atteindre le
+   village visé. Comme pour le rappel de soutien (doRecallSupport), aucune restriction de délai n'est
+   imposée (simplification volontaire, cohérente avec le reste du jeu) : on peut annuler à tout moment
+   avant l'arrivée. Le trajet retour dure exactement le temps déjà parcouru à l'aller (symétrique,
+   vitesse inchangée) — annuler tout de suite ramène donc les troupes presque aussitôt, alors
+   qu'annuler juste avant l'impact prend presque autant de temps que d'avoir laissé la mission
+   arriver puis revenir. Contrairement à un combat normal, aucune perte n'est subie et le village
+   ciblé n'est jamais informé (rien à repérer, ni pillage ni reconnaissance n'a eu lieu). */
+function doCancelMission(db, username, missionId){
+  const m = db.missions.find(x=>x.id===String(missionId));
+  if(!m) return { error: "Mission introuvable (déjà arrivée ou déjà annulée ?)." };
+  if(m.attackerUsername!==username) return { error: "Vous ne pouvez annuler que vos propres missions." };
+  if(m.kind!=="attack" && m.kind!=="scout") return { error: "Seules les attaques et reconnaissances en route peuvent être annulées." };
+  if(m.resolveDone) return { error: "Cette mission est déjà arrivée, impossible de l'annuler." };
+  // L'attaque n'ayant jamais réellement eu lieu, on annule aussi le point d'agressivité qu'elle avait
+  // enregistré contre un village barbare (voir doMission) : sinon une attaque annulée augmenterait
+  // quand même la chance de riposte, comme si le combat s'était vraiment produit.
+  if(m.kind==="attack"){
+    const target = db.villages[m.targetId];
+    if(target && target.owner==="barbarian" && target.aggro && target.aggro[username]>0){
+      target.aggro[username] = Math.max(0, target.aggro[username]-1);
+    }
+  }
+  const t = now();
+  const elapsed = Math.max(0, t-m.departAt);
+  m.resolveDone = true;
+  m.cancelled = true;
+  m.returnAt = t+elapsed;
   return { ok:true };
 }
 
@@ -1926,6 +1990,29 @@ function buildSnapshot(db, username){
   if(!v) return null;
   const myMissions = db.missions.filter(m=>m.attackerUsername===username || (m.kind==="raid" && db.villages[m.targetId] && db.villages[m.targetId].owner===username));
 
+  // Attaques/reconnaissances ennemies actuellement en approche vers l'UN de mes villages (bug/besoin
+  // corrigé : jusqu'ici, seules les ripostes barbares ("raid") apparaissaient dans "missions entrantes"
+  // — une vraie attaque lancée par un autre joueur restait invisible jusqu'au rapport de combat après
+  // coup). Contrairement à worldMissions (anonymisé, pour l'affichage générique sur la carte), on
+  // révèle ici l'identité de l'attaquant et son village d'origine : c'est votre propre village qui est
+  // menacé, l'information est déjà celle qui figurera de toute façon dans le rapport de défense une
+  // fois le combat résolu. La composition des troupes attaquantes, elle, reste masquée jusqu'à
+  // l'impact (aucune reconnaissance n'a eu lieu sur l'armée en approche).
+  const incomingAttacks = db.missions
+    .filter(m => (m.kind==="attack" || m.kind==="scout") && !m.resolveDone && m.attackerUsername!==username
+      && db.villages[m.targetId] && db.villages[m.targetId].owner===username)
+    .map(m => {
+      const source = db.villages[m.sourceVillageId];
+      const target = db.villages[m.targetId];
+      return {
+        id:m.id, kind:m.kind, attackerUsername:m.attackerUsername,
+        sourceVillageId:m.sourceVillageId, sourceName: source?source.name:null, sourceCoord: source?(source.x+"|"+source.y):null,
+        targetVillageId:m.targetId, targetName: target?target.name:null, targetCoord: target?(target.x+"|"+target.y):null,
+        departAt:m.departAt, arriveAt:m.arriveAt, travel:m.travel
+      };
+    })
+    .sort((a,b)=>a.arriveAt-b.arriveAt);
+
   // Missions "monde" : attaques et reconnaissances actuellement en approche (trajet aller
   // uniquement, pas le retour) lancées par D'AUTRES joueurs — sert uniquement à afficher un
   // marqueur générique en mouvement sur la carte (position + type), pour qu'on voie qu'"il se
@@ -1988,10 +2075,15 @@ function buildSnapshot(db, username){
     serverTime: now(),
     village: v,
     missions: myMissions,
+    incomingAttacks,
     worldMissions,
     reports: (db.reports[username]||[]).slice(0,60),
     villages,
     myVillages: myVillagesList,
+    // Vue complète (ressources, bâtiments, troupes, files) de CHACUN de mes villages — pas seulement
+    // le village actif — pour le panneau "Empire" (gestion multi-villages, visible à partir de 2
+    // villages). myVillagesList ci-dessus reste inchangée (résumé léger pour le sélecteur actif).
+    myVillagesDetailed: myVillagesDetailed(db, username),
     achievements,
     leaderboard,
     isAdmin: isAdminUser(db, username),
@@ -2007,9 +2099,9 @@ function buildSnapshot(db, username){
 }
 
 module.exports = {
-  now, villageByUser, homeVillageOf, myVillages, doSwitchVillage,
+  now, villageByUser, villageOwnedByUser, homeVillageOf, myVillages, myVillagesDetailed, doSwitchVillage,
   villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doRename, runTick, buildSnapshot,
+  doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doCancelMission, doRename, runTick, buildSnapshot,
   completeMission,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminDeletePlayer,
