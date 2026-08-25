@@ -1402,6 +1402,7 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Amélioration", icon:"🏆", title:"Classement : guilde à la place des conquêtes", body:"La colonne Conquêtes du Classement est remplacée par la guilde de chaque joueur (les conquêtes continuent de compter dans le calcul des points)." },
   { tag:"Amélioration", icon:"📊", title:"Rapports de combat en graphiques", body:"Les rapports d'attaque et de défense affichent désormais des graphiques (comparaison des puissances, composition détaillée de l'armée) au lieu d'un simple texte compact." },
   { tag:"Amélioration", icon:"👥", title:"Guilde : Boutique et Diplomatie en onglets", body:"La Boutique de guilde et la Diplomatie ont chacune leur propre sous-onglet dans l'onglet Guilde, séparées de l'Aperçu (membres, Hall, dons)." },
   { tag:"Nouveau", icon:"🗑️", title:"Suppression de joueur (Admin)", body:"Le panneau Admin permet désormais de supprimer un compte joueur définitivement (compte, guilde, offres au marché, rapports…). Son ou ses village(s) ne sont jamais effacés de la carte : ils redeviennent des villages barbares." },
@@ -2247,13 +2248,13 @@ function renderLeaderboard(){
       <td class="player-link" data-open-profile="${escapeHtml(p.username)}">${escapeHtml(p.username)}${p.username===username?' (vous)':''}</td>
       <td>${p.villageCount}</td>
       <td>${p.buildingLevels}</td>
-      <td>${p.conquered}</td>
+      <td>${p.guild?`[${escapeHtml(p.guild.tag)}] ${escapeHtml(p.guild.name)}`:'<span class="muted">—</span>'}</td>
       <td>${p.points}</td>
     </tr>`).join("");
   return `<h2>🏆 Classement</h2>
     <p class="muted small">Les meilleurs joueurs du monde, classés par points (somme des niveaux de TOUTES les constructions sur TOUS les villages possédés ×10 + conquêtes réalisées ×50).</p>
     <div class="box"><table style="width:100%; border-collapse:collapse;">
-      <thead><tr><th>#</th><th>Joueur</th><th>Villages</th><th>Niveau total des constructions</th><th>Conquêtes</th><th>Points</th></tr></thead>
+      <thead><tr><th>#</th><th>Joueur</th><th>Villages</th><th>Niveau total des constructions</th><th>Guilde</th><th>Points</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="muted">Aucun joueur pour l’instant.</td></tr>'}</tbody>
     </table></div>`;
 }
