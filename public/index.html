@@ -1149,6 +1149,10 @@ let adminMissions = null;    // liste des missions en cours (panneau Admin), cha
 let adminPlayerFilter = "";  // filtre de recherche (panneau Admin, liste des joueurs)
 let adminSpeed = 1;          // multiplicateur de vitesse global du monde, connu de tous (renvoyé dans chaque instantané)
 let adminSelected = null;    // pseudo actuellement sélectionné dans l'éditeur du panneau Admin
+let adminVillages = null;    // liste de TOUS les villages du monde (panneau Admin, section "Villages"), chargée à la demande
+let adminVillageFilter = ""; // filtre de recherche (panneau Admin, liste des villages)
+let adminSelectedVillageId = null; // id du village actuellement sélectionné dans l'éditeur "Villages" du panneau Admin
+let adminBulkScope = "all";  // portée des actions groupées : "all" | "players" | "barbarians"
 let guildDirectory = null;   // annuaire des autres guildes (onglet Guilde, diplomatie), chargé à la demande
 let guildDiplomacyForm = null; // {guildId, type} — sélection en cours dans le formulaire "Proposer une relation"
 // Sur petit écran, le panneau de chat ouvert occupe une bonne partie de l'écran et bloque le reste
@@ -1290,6 +1294,7 @@ async function adminAction(promiseFn, successMsg){
     const data = await promiseFn();
     if(data.snapshot) applySnapshot(data.snapshot);
     if(data.players) adminPlayers = data.players;
+    if(data.villages) adminVillages = data.villages;
     if(data.missions) adminMissions = data.missions;
     if(data.speedMultiplier!=null) adminSpeed = data.speedMultiplier;
     if(successMsg) toast(successMsg);
@@ -1301,10 +1306,14 @@ async function adminAction(promiseFn, successMsg){
 
 async function refreshAdminData(){
   try{
-    const data = await apiCall("/api/admin/players","GET");
-    adminPlayers = data.players;
-    adminMissions = data.missions;
-    adminSpeed = data.speedMultiplier||1;
+    const [playersData, villagesData] = await Promise.all([
+      apiCall("/api/admin/players","GET"),
+      apiCall("/api/admin/villages","GET")
+    ]);
+    adminPlayers = playersData.players;
+    adminMissions = playersData.missions;
+    adminSpeed = playersData.speedMultiplier||1;
+    adminVillages = villagesData.villages;
     if(activeTab==="information" && infoSubTab==="admin") renderActiveTabContent();
   }catch(err){ toast("⚠️ "+err.message); }
 }
@@ -1473,6 +1482,8 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Correction", icon:"🏰", title:"Retour des troupes au bon village", body:"Les troupes revenant d'une attaque, d'une reconnaissance ou d'un rappel de soutien rentrent désormais TOUJOURS dans le village qui les a réellement envoyées, même si vous avez changé de village actif entre-temps." },
+  { tag:"Nouveau", icon:"🛠️", title:"Panneau Admin : gestion de tous les villages", body:"Le panneau d'administration permet désormais d'agir sur TOUS les villages du monde en une fois (ressources, bâtiments, troupes, files d'attente), avec un choix de portée (tous / joueurs / barbares), ainsi que de sélectionner et éditer individuellement n'importe quel village d'un joueur — y compris ses conquêtes, pas seulement son village d'origine." },
   { tag:"Équilibrage", icon:"⚔️", title:"Troupes recalibrées + temps d'entraînement", body:"Coût du Bélier/Catapulte ajusté sur les valeurs officielles, coût et population du Noble revus à la hausse (valeur intermédiaire, toujours bien en-deçà du jeu officiel). Le temps d'entraînement diminue désormais de façon exponentielle avec le niveau de la Caserne, sur le même principe que le temps de construction." },
   { tag:"Amélioration", icon:"📈", title:"Boost de production clarifié", body:"Le boost de guilde \"Production\" affiche désormais clairement qu'il augmente les ressources produites PAR HEURE." },
   { tag:"Nouveau", icon:"🎯", title:"Boost de guilde : vitesse d'entraînement", body:"Deux nouveaux bonus de boutique de guilde accélèrent uniquement l'entraînement des troupes, indépendamment de la vitesse de construction (qui reste un bonus séparé)." },
@@ -1614,6 +1625,7 @@ function logout(silent){
   stopPolling();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
+  adminVillages=null; adminSelectedVillageId=null; adminVillageFilter=""; adminBulkScope="all";
   guildDirectory=null; guildDiplomacyForm=null; guildSubTab="overview";
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("gameRoot").style.display="none";
@@ -3576,6 +3588,8 @@ function renderAdmin(){
     </div>
   </div>
 
+  ${renderAdminBulkVillagesBox()}
+
   <div class="box" style="margin-bottom:14px;">
     <h3>🎉 Évènements du serveur</h3>
     <p class="small muted">Lance un évènement temporaire visible par tous les joueurs (bannière + annonce automatique dans leurs rapports). Un seul évènement actif à la fois par type d'effet : en relancer un remplace celui en cours.</p>
@@ -3630,6 +3644,125 @@ function renderAdmin(){
   </div>
 
   ${selP ? `<div class="box">${renderAdminEditor(selP)}</div>` : `<p class="muted small">Sélectionnez un joueur ci-dessus pour l'éditer.</p>`}
+
+  ${renderAdminVillagesTable()}
+  `;
+}
+
+/* Section "gestion groupée" du panneau Admin : applique une action à TOUS les villages d'une
+   portée choisie (tous / joueurs seulement / barbares seulement) en un seul clic — contrairement
+   au reste du panneau qui n'agit que sur le village d'origine d'UN seul joueur à la fois. Les
+   champs de bâtiments/troupes sont volontairement laissés VIDES par défaut (pas de valeur "0"
+   pré-remplie comme dans l'éditeur d'un village précis) : un champ vide = "ne pas toucher à ce
+   bâtiment/cette troupe précis", ce qui permet de ne changer qu'un seul champ sur des centaines de
+   villages sans écraser le reste à zéro. */
+function renderAdminBulkVillagesBox(){
+  const buildingInputs = BUILD_ORDER.map(k=>`<div class="troop-row"><span class="tname">${BUILDINGS[k].name}</span><input type="number" id="adminBulkBuild_${k}" min="0" max="${BUILDINGS[k].max}" placeholder="—"></div>`).join("");
+  const troopInputs = TROOP_ORDER.map(k=>`<div class="troop-row"><span class="tname">${TROOPS[k].name}</span><input type="number" id="adminBulkTroop_${k}" min="0" placeholder="—"></div>`).join("");
+  return `<div class="box" style="margin-bottom:14px;">
+    <h3>🌍 Gestion groupée de tous les villages</h3>
+    <p class="small muted">Applique une action à plusieurs villages à la fois. Choisissez d'abord la portée ci-dessous ; pour les bâtiments et les troupes, ne remplissez que les champs que vous voulez réellement changer — un champ laissé vide n'est pas touché.</p>
+    <div style="margin-bottom:12px;">
+      <label class="small muted" for="adminBulkScope">Portée de l'action</label><br>
+      <select id="adminBulkScope">
+        <option value="all" ${adminBulkScope==="all"?"selected":""}>🌐 Tous les villages (joueurs + barbares)</option>
+        <option value="players" ${adminBulkScope==="players"?"selected":""}>👥 Villages de joueurs uniquement (origine + conquêtes)</option>
+        <option value="barbarians" ${adminBulkScope==="barbarians"?"selected":""}>🏚️ Villages barbares uniquement</option>
+      </select>
+    </div>
+
+    <h4>Ressources</h4>
+    <p class="small muted" style="margin-top:0;">Ajoute ces montants au stock actuel de chaque village de la portée (pas de plafond d'entrepôt).</p>
+    <div class="inputs" style="display:flex; gap:14px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminBulkGive_${r}" min="0" placeholder="0"></div>`).join("")}
+      <button id="btnBulkGive" class="primary">➕ Donner à la portée sélectionnée</button>
+    </div>
+
+    <h4>Bâtiments <span class="small muted" style="font-weight:normal;">(niveau exact — ignoré pour les villages barbares, qui n'en ont pas)</span></h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">${buildingInputs}</div>
+    <button id="btnBulkSetBuildings" class="primary" style="margin-bottom:14px;">Appliquer les bâtiments remplis à la portée</button>
+
+    <h4>Troupes <span class="small muted" style="font-weight:normal;">(nombre exact)</span></h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">${troopInputs}</div>
+    <button id="btnBulkSetTroops" class="primary" style="margin-bottom:14px;">Appliquer les troupes remplies à la portée</button>
+
+    <h4>Files d'attente</h4>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button id="btnBulkFinishBuild">✅ Terminer toutes les constructions en cours (portée)</button>
+      <button id="btnBulkFinishTrain">✅ Terminer tous les entraînements en cours (portée)</button>
+    </div>
+  </div>`;
+}
+
+/* Section "sélection individuelle" : liste CHAQUE village du monde (contrairement au tableau des
+   joueurs ci-dessus, qui n'affiche que le village d'ORIGINE de chacun) — permet de retrouver et
+   éditer directement une conquête précise d'un joueur, ou même un village barbare. */
+function renderAdminVillagesTable(){
+  const vfilter = adminVillageFilter.trim().toLowerCase();
+  const filteredVillages = (adminVillages||[]).filter(v=>!vfilter
+    || v.name.toLowerCase().includes(vfilter)
+    || (v.x+"|"+v.y).includes(vfilter)
+    || (v.owner||"").toLowerCase().includes(vfilter));
+  const rows = filteredVillages.map(v=>{
+    const sel = adminSelectedVillageId===v.id;
+    return `<tr class="${sel?'admin-selected':''}" data-admin-select-village="${v.id}">
+      <td>${escapeHtml(v.name)}</td>
+      <td>${v.x}|${v.y}</td>
+      <td>${v.isPlayer?escapeHtml(v.owner):'🏚️ barbare'}</td>
+      <td>${v.hq!=null?v.hq:'—'}</td>
+      <td>🪵${fmt(v.resources.wood)} 🧱${fmt(v.resources.clay)} ⛏️${fmt(v.resources.iron)}</td>
+      <td>${v.buildQueueLen}/${v.trainQueueLen}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">${(adminVillages||[]).length?'Aucun village ne correspond à la recherche.':'Chargement…'}</td></tr>`;
+  const selV = (adminVillages||[]).find(v=>v.id===adminSelectedVillageId);
+  return `<div class="box" style="margin-bottom:14px;">
+    <div class="flex-between">
+      <h3 style="margin:0;">🏘️ Tous les villages (${filteredVillages.length}${filteredVillages.length!==(adminVillages||[]).length?(' / '+(adminVillages||[]).length):''})</h3>
+      <input type="text" id="adminVillageFilter" placeholder="🔎 Filtrer par nom, coord. ou propriétaire…" value="${escapeHtml(adminVillageFilter)}" style="max-width:260px;">
+    </div>
+    <p class="small muted">Cliquez sur un village pour l'éditer individuellement, y compris une conquête d'un joueur qui n'est pas son village d'origine.</p>
+    <div style="max-height:280px; overflow:auto;">
+      <table><thead><tr><th>Village</th><th>Coord.</th><th>Propriétaire</th><th>HdV</th><th>Ressources</th><th>Files (constr./entr.)</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </div>
+  ${selV ? `<div class="box">${renderAdminVillageEditor(selV)}</div>` : `<p class="muted small">Sélectionnez un village ci-dessus pour l'éditer.</p>`}`;
+}
+
+function renderAdminVillageEditor(v){
+  const buildingsSection = v.buildings ? `
+    <h4>Bâtiments</h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">
+      ${BUILD_ORDER.map(k=>`<div class="troop-row"><span class="tname">${BUILDINGS[k].name}</span><input type="number" id="adminVBuild_${k}" min="0" max="${BUILDINGS[k].max}" value="${v.buildings[k]||0}"></div>`).join("")}
+    </div>
+    <button id="btnVSetBuildings" data-village="${v.id}" class="primary" style="margin-bottom:14px;">Enregistrer les bâtiments</button>
+  ` : `<p class="small muted">Village barbare : pas de bâtiments (niveau de muraille actuel : ${v.wallLevel||0}).</p>`;
+
+  const troopRows = TROOP_ORDER.map(k=>`<div class="troop-row"><span class="tname">${TROOPS[k].name}</span><input type="number" id="adminVTroop_${k}" min="0" value="${v.troops?v.troops[k]||0:0}"></div>`).join("");
+
+  return `
+    <div class="flex-between" style="margin-bottom:10px;">
+      <h3 style="margin:0;">✏️ ${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y}) — ${v.isPlayer?escapeHtml(v.owner):'🏚️ village barbare'}</span></h3>
+    </div>
+    ${v.isPlayer ? `<div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button id="btnVFinishBuild" data-village="${v.id}">✅ Terminer la construction en cours</button>
+      <button id="btnVFinishTrain" data-village="${v.id}">✅ Terminer l'entraînement en cours</button>
+    </div>` : ""}
+
+    <h4>Ressources</h4>
+    <div class="inputs" style="display:flex; gap:14px; margin-bottom:8px;">
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" id="adminVRes_${r}" min="0" value="${Math.round(v.resources?v.resources[r]||0:0)}"></div>`).join("")}
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button id="btnVSetResources" data-village="${v.id}" class="primary">Définir (valeur exacte)</button>
+      <button id="btnVGiveResources" data-village="${v.id}">➕ Donner (ajoute ces montants au stock actuel)</button>
+    </div>
+
+    ${buildingsSection}
+
+    <h4>Troupes</h4>
+    <div class="grid-buildings" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:8px;">${troopRows}</div>
+    <button id="btnVSetTroops" data-village="${v.id}" class="primary">Enregistrer les troupes</button>
   `;
 }
 
@@ -3805,6 +3938,97 @@ function attachAdminHandlers(){
     const troops={};
     TROOP_ORDER.forEach(k=>{ const el=document.getElementById("adminTroop_"+k); if(el) troops[k]=Number(el.value)||0; });
     adminAction(()=>apiCall("/api/admin/village","POST",{username:u, troops}), "Troupes mises à jour pour "+u+".");
+  };
+
+  /* ---- Section "Villages" : gestion groupée + sélection individuelle ---- */
+  const bulkScopeSel=document.getElementById("adminBulkScope");
+  if(bulkScopeSel) bulkScopeSel.onchange=()=>{ adminBulkScope = bulkScopeSel.value; };
+  const scopeLabel=()=>({all:"tous les villages", players:"les villages de joueurs", barbarians:"les villages barbares"}[document.getElementById("adminBulkScope").value] || "la portée sélectionnée");
+
+  const btnBulkGive=document.getElementById("btnBulkGive");
+  if(btnBulkGive) btnBulkGive.onclick=()=>{
+    const scope=document.getElementById("adminBulkScope").value;
+    const wood=Number(document.getElementById("adminBulkGive_wood").value)||0;
+    const clay=Number(document.getElementById("adminBulkGive_clay").value)||0;
+    const iron=Number(document.getElementById("adminBulkGive_iron").value)||0;
+    if(!wood && !clay && !iron){ toast("⚠️ Indiquez au moins une ressource à donner."); return; }
+    adminAction(()=>apiCall("/api/admin/villages/bulk-give","POST",{scope, wood, clay, iron}), "Ressources données à "+scopeLabel()+".");
+  };
+  const btnBulkSetBuildings=document.getElementById("btnBulkSetBuildings");
+  if(btnBulkSetBuildings) btnBulkSetBuildings.onclick=()=>{
+    const scope=document.getElementById("adminBulkScope").value;
+    const buildings={};
+    BUILD_ORDER.forEach(k=>{ const el=document.getElementById("adminBulkBuild_"+k); if(el && el.value!==""){ buildings[k]=Number(el.value)||0; } });
+    if(!Object.keys(buildings).length){ toast("⚠️ Remplissez au moins un niveau de bâtiment à appliquer."); return; }
+    adminAction(()=>apiCall("/api/admin/villages/bulk-update","POST",{scope, buildings}), "Bâtiments appliqués à "+scopeLabel()+".");
+  };
+  const btnBulkSetTroops=document.getElementById("btnBulkSetTroops");
+  if(btnBulkSetTroops) btnBulkSetTroops.onclick=()=>{
+    const scope=document.getElementById("adminBulkScope").value;
+    const troops={};
+    TROOP_ORDER.forEach(k=>{ const el=document.getElementById("adminBulkTroop_"+k); if(el && el.value!==""){ troops[k]=Number(el.value)||0; } });
+    if(!Object.keys(troops).length){ toast("⚠️ Remplissez au moins un nombre de troupes à appliquer."); return; }
+    adminAction(()=>apiCall("/api/admin/villages/bulk-update","POST",{scope, troops}), "Troupes appliquées à "+scopeLabel()+".");
+  };
+  const btnBulkFinishBuild=document.getElementById("btnBulkFinishBuild");
+  if(btnBulkFinishBuild) btnBulkFinishBuild.onclick=()=>{
+    const scope=document.getElementById("adminBulkScope").value;
+    adminAction(()=>apiCall("/api/admin/villages/bulk-finish-build","POST",{scope}), "Constructions terminées pour "+scopeLabel()+".");
+  };
+  const btnBulkFinishTrain=document.getElementById("btnBulkFinishTrain");
+  if(btnBulkFinishTrain) btnBulkFinishTrain.onclick=()=>{
+    const scope=document.getElementById("adminBulkScope").value;
+    adminAction(()=>apiCall("/api/admin/villages/bulk-finish-train","POST",{scope}), "Entraînements terminés pour "+scopeLabel()+".");
+  };
+
+  document.querySelectorAll("[data-admin-select-village]").forEach(tr=>tr.onclick=()=>{
+    adminSelectedVillageId = tr.dataset.adminSelectVillage;
+    renderActiveTabContent();
+  });
+  const villageFilterInput=document.getElementById("adminVillageFilter");
+  if(villageFilterInput) villageFilterInput.oninput=()=>{
+    adminVillageFilter = villageFilterInput.value;
+    rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
+  };
+  const btnVSetResources=document.getElementById("btnVSetResources");
+  if(btnVSetResources) btnVSetResources.onclick=()=>{
+    const id=btnVSetResources.dataset.village;
+    const resources={
+      wood:Number(document.getElementById("adminVRes_wood").value)||0,
+      clay:Number(document.getElementById("adminVRes_clay").value)||0,
+      iron:Number(document.getElementById("adminVRes_iron").value)||0
+    };
+    adminAction(()=>apiCall("/api/admin/villages/update","POST",{villageId:id, resources}), "Ressources mises à jour pour ce village.");
+  };
+  const btnVGiveResources=document.getElementById("btnVGiveResources");
+  if(btnVGiveResources) btnVGiveResources.onclick=()=>{
+    const id=btnVGiveResources.dataset.village;
+    const wood=Number(document.getElementById("adminVRes_wood").value)||0;
+    const clay=Number(document.getElementById("adminVRes_clay").value)||0;
+    const iron=Number(document.getElementById("adminVRes_iron").value)||0;
+    adminAction(()=>apiCall("/api/admin/villages/give","POST",{villageId:id, wood, clay, iron}), "Ressources données à ce village.");
+  };
+  const btnVSetBuildings=document.getElementById("btnVSetBuildings");
+  if(btnVSetBuildings) btnVSetBuildings.onclick=()=>{
+    const id=btnVSetBuildings.dataset.village;
+    const buildings={};
+    BUILD_ORDER.forEach(k=>{ const el=document.getElementById("adminVBuild_"+k); if(el) buildings[k]=Number(el.value)||0; });
+    adminAction(()=>apiCall("/api/admin/villages/update","POST",{villageId:id, buildings}), "Bâtiments mis à jour pour ce village.");
+  };
+  const btnVSetTroops=document.getElementById("btnVSetTroops");
+  if(btnVSetTroops) btnVSetTroops.onclick=()=>{
+    const id=btnVSetTroops.dataset.village;
+    const troops={};
+    TROOP_ORDER.forEach(k=>{ const el=document.getElementById("adminVTroop_"+k); if(el) troops[k]=Number(el.value)||0; });
+    adminAction(()=>apiCall("/api/admin/villages/update","POST",{villageId:id, troops}), "Troupes mises à jour pour ce village.");
+  };
+  const btnVFinishBuild=document.getElementById("btnVFinishBuild");
+  if(btnVFinishBuild) btnVFinishBuild.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/villages/finish-build","POST",{villageId:btnVFinishBuild.dataset.village}), "Construction(s) terminée(s) pour ce village.");
+  };
+  const btnVFinishTrain=document.getElementById("btnVFinishTrain");
+  if(btnVFinishTrain) btnVFinishTrain.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/villages/finish-train","POST",{villageId:btnVFinishTrain.dataset.village}), "Entraînement(s) terminé(s) pour ce village.");
   };
 }
 
