@@ -1136,6 +1136,8 @@ let serverTimeOffset = 0;    // estimateNow() = Date.now()/1000 + serverTimeOffs
 let activeTab = "buildings";
 let infoSubTab = "help";     // sous-onglet actif dans l'onglet "Informations" (Aide/Succès/Admin/Mises à jour)
 let guildSubTab = "overview"; // sous-onglet actif dans l'onglet "Guilde" (Aperçu/Boutique/Diplomatie)
+let empireSubTab = "apercu"; // sous-onglet actif dans l'onglet "Empire" (gestion multi-villages, dès 2 villages)
+let empireSelectedVillageId = null; // village actuellement déplié dans les sous-onglets Construction/Troupes de l'onglet Empire
 let ui = { openReport:new Set(), selectedBuilding:"hq", selectedVillage:null };
 let mapView = null;          // {cx, cy, ppf} — affichage de la carte : purement client, ne vient pas du serveur
 let mapDragging = false;     // true pendant un glissé de la carte : bloque les re-rendus périodiques
@@ -1482,6 +1484,9 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"🏰", title:"Panneau Empire : gestion de tous vos villages", body:"Dès que vous possédez 2 villages ou plus, un nouvel onglet « 🏰 Empire » apparaît : Aperçu (tableau de tous vos villages), Notifications (constructions, entraînements et attaques entrantes de tout votre empire triés par ordre d'arrivée), Construction et Troupes (agissez sur n'importe lequel de vos villages sans y basculer), et Envoi de ressources (transfert entre deux villages au choix, pas seulement depuis l'actif)." },
+  { tag:"Nouveau", icon:"⚔️", title:"Attaques ennemies visibles avant l'impact", body:"Une attaque ou reconnaissance lancée par un autre joueur contre l'un de vos villages apparaît désormais dans vos Missions en cours (et dans les Notifications de l'onglet Empire) dès son départ, avec l'assaillant, son village d'origine et le temps restant avant l'arrivée — jusqu'ici, seules les ripostes de villages barbares étaient visibles avant coup." },
+  { tag:"Nouveau", icon:"✖️", title:"Annulation d'une attaque ou reconnaissance", body:"Une attaque ou une reconnaissance encore en route peut désormais être annulée (bouton ✖ dans Missions en cours) : vos troupes font demi-tour immédiatement et rentrent sans combattre, sans perte." },
   { tag:"Correction", icon:"🏰", title:"Retour des troupes au bon village", body:"Les troupes revenant d'une attaque, d'une reconnaissance ou d'un rappel de soutien rentrent désormais TOUJOURS dans le village qui les a réellement envoyées, même si vous avez changé de village actif entre-temps." },
   { tag:"Nouveau", icon:"🛠️", title:"Panneau Admin : gestion de tous les villages", body:"Le panneau d'administration permet désormais d'agir sur TOUS les villages du monde en une fois (ressources, bâtiments, troupes, files d'attente), avec un choix de portée (tous / joueurs / barbares), ainsi que de sélectionner et éditer individuellement n'importe quel village d'un joueur — y compris ses conquêtes, pas seulement son village d'origine." },
   { tag:"Équilibrage", icon:"⚔️", title:"Troupes recalibrées + temps d'entraînement", body:"Coût du Bélier/Catapulte ajusté sur les valeurs officielles, coût et population du Noble revus à la hausse (valeur intermédiaire, toujours bien en-deçà du jeu officiel). Le temps d'entraînement diminue désormais de façon exponentielle avec le niveau de la Caserne, sur le même principe que le temps de construction." },
@@ -1627,6 +1632,7 @@ function logout(silent){
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
   adminVillages=null; adminSelectedVillageId=null; adminVillageFilter=""; adminBulkScope="all";
   guildDirectory=null; guildDiplomacyForm=null; guildSubTab="overview";
+  empireSubTab="apercu"; empireSelectedVillageId=null;
   localStorage.removeItem("ct_token"); localStorage.removeItem("ct_username");
   document.getElementById("gameRoot").style.display="none";
   document.getElementById("tutorialModal").innerHTML="";
@@ -1857,7 +1863,11 @@ function updateTopBarStats(){
 function renderTabs(){
   // Aide, Succès, Admin et Mises à jour sont regroupés dans l'onglet "Informations" (sous-onglets,
   // voir renderInformation) plutôt que d'occuper chacun une place dans la navigation de gauche.
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"],["information","ℹ️ Informations"]];
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"]];
+  // Panneau "Empire" (gestion groupée de tous ses villages, comme le propose Tribal Wars) : n'apparaît
+  // qu'à partir de 2 villages possédés — inutile (et vide) avec un seul village.
+  if(state.myVillages && state.myVillages.length>=2) tabs.push(["empire","🏰 Empire ("+state.myVillages.length+")"]);
+  tabs.push(["information","ℹ️ Informations"]);
   const nav=document.getElementById("tabs");
   nav.innerHTML = tabs.map(([k,label])=>`<button data-tab="${k}" class="${activeTab===k?'active':''}">${label}</button>`).join("");
   nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{
@@ -1911,18 +1921,36 @@ function renderSidebar(){
 
   const missions=activeMissions.map(m=>{
     const target=state.villages.find(v=>v.id===m.targetId);
+    const source=state.villages.find(v=>v.id===m.sourceVillageId);
     const label = MISSION_LABEL[m.kind]||m.kind;
-    let phase, remain;
-    if(m.kind==="supportReturn"){ phase="revient vers"; remain=m.returnAt-now; }
-    else if(!m.resolveDone){ phase="en route vers"; remain=m.arriveAt-now; }
-    else { phase="retour de"; remain=m.returnAt-now; }
-    return `<div class="mission-item"><div class="flex-between"><span>${label} ${phase} ${target?target.name:'?'}</span><span>${fmtTime(remain)}</span></div></div>`;
+    let phase, remain, destName;
+    // Une mission annulée (voir cancelMission / doCancelMission) reste kind "attack"/"scout" mais
+    // repart vers son village D'ORIGINE, pas la cible initiale — d'où un libellé et une destination
+    // différents des autres phases de retour (ex. après un combat réellement résolu).
+    if(m.cancelled){ phase="annulée, retour vers"; remain=m.returnAt-now; destName=source?source.name:'?'; }
+    else if(m.kind==="supportReturn"){ phase="revient vers"; remain=m.returnAt-now; destName=target?target.name:'?'; }
+    else if(!m.resolveDone){ phase="en route vers"; remain=m.arriveAt-now; destName=target?target.name:'?'; }
+    else { phase="retour de"; remain=m.returnAt-now; destName=target?target.name:'?'; }
+    const canCancel = (m.kind==="attack"||m.kind==="scout") && !m.resolveDone;
+    return `<div class="mission-item"><div class="flex-between"><span>${label} ${phase} ${escapeHtml(destName)}</span><span>${fmtTime(remain)}${canCancel?` <a href="#" data-cancel-mission="${m.id}" title="Annuler : les troupes font demi-tour immédiatement." style="margin-left:6px;">✖</a>`:''}</span></div></div>`;
   }).join("") || `<div class="muted small">Aucune troupe en mission.</div>`;
 
   const enemyBox = incomingRaids.length ? `
     <div class="box" style="border-color:#8a3226;"><h3>🚨 Attaques entrantes</h3>${incomingRaids.map(m=>{
       const remain=m.arriveAt-now;
       return `<div class="mission-item"><div class="flex-between"><span>${m.raidSourceName||'Village barbare'} approche</span><span>${fmtTime(remain)}</span></div></div>`;
+    }).join("")}</div>` : '';
+
+  // Attaques/reconnaissances lancées par D'AUTRES JOUEURS et actuellement en approche vers l'un de mes
+  // villages (voir incomingAttacks, buildSnapshot côté serveur) : jusqu'ici seules les ripostes
+  // barbares (ci-dessus) étaient visibles avant impact, une vraie attaque adverse restait invisible
+  // tant que le rapport de combat n'arrivait pas (bug/besoin corrigé).
+  const incomingPlayerAttacks = state.incomingAttacks||[];
+  const playerAttackBox = incomingPlayerAttacks.length ? `
+    <div class="box" style="border-color:#8a3226;"><h3>⚔️ Attaques ennemies entrantes</h3>${incomingPlayerAttacks.map(m=>{
+      const remain=m.arriveAt-now;
+      const label = m.kind==="scout" ? "🔭 Reconnaissance" : "⚔️ Attaque";
+      return `<div class="mission-item"><div class="flex-between"><span>${label} de <b>${escapeHtml(m.attackerUsername)}</b> vers ${escapeHtml(m.targetName||'?')}</span><span>${fmtTime(remain)}</span></div><div class="small muted">Depuis ${escapeHtml(m.sourceName||'?')} (${m.sourceCoord||'?'})</div></div>`;
     }).join("")}</div>` : '';
 
   const incomingSupport = state.village.support||[];
@@ -1956,6 +1984,7 @@ function renderSidebar(){
     <div class="box"><h3>⚔️ File d'entraînement</h3>${tq}</div>
     <div class="box"><h3>🚩 Missions en cours</h3>${missions}</div>
     ${enemyBox}
+    ${playerAttackBox}
     ${supportInBox}
     ${supportOutBox}
   `;
@@ -1964,6 +1993,11 @@ function renderSidebar(){
     e.preventDefault();
     const index=Number(el.dataset.cancelBuild);
     doAction(()=>apiCall("/api/build/cancel","POST",{index}), "Construction annulée, ressources remboursées.", null);
+  });
+  side.querySelectorAll("[data-cancel-mission]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    const missionId=el.dataset.cancelMission;
+    doAction(()=>apiCall("/api/mission/cancel","POST",{missionId}), "✖ Mission annulée, les troupes rentrent.", null);
   });
   side.querySelectorAll("[data-recall-support]").forEach(el=>el.onclick=(e)=>{
     e.preventDefault();
@@ -2067,6 +2101,9 @@ function renderActiveTabContent(){
   // (toutes les 2,5s) remplace #mapCanvas en plein milieu du drag et le bloque (bug corrigé).
   if(activeTab==="map" && mapDragging) return;
   const main=document.getElementById("tabContent");
+  // Repli si l'onglet Empire était actif mais qu'on n'a plus 2 villages (conquête perdue entre-temps) :
+  // évite un onglet actif fantôme, absent de la navigation, qui resterait affiché vide.
+  if(activeTab==="empire" && (!state.myVillages || state.myVillages.length<2)) activeTab="buildings";
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
   else if(activeTab==="barracks") main.innerHTML=renderBarracks();
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
@@ -2074,6 +2111,7 @@ function renderActiveTabContent(){
   else if(activeTab==="reports") main.innerHTML=renderReports();
   else if(activeTab==="guild") main.innerHTML=renderGuild();
   else if(activeTab==="market") main.innerHTML=renderMarket();
+  else if(activeTab==="empire") main.innerHTML=renderEmpire();
   else main.innerHTML=renderInformation(); // "information" et tout état inconnu retombent ici (comme "help" avant)
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); drawMapAttackLines(); attachMapHandlers(); }
@@ -2082,6 +2120,7 @@ function renderActiveTabContent(){
     if(state.guild && state.guild.isLeader && guildSubTab==="diplomacy" && !guildDirectory) refreshGuildDirectory();
   }
   if(activeTab==="market") attachMarketHandlers();
+  if(activeTab==="empire") attachEmpireHandlers();
   if(activeTab==="information" && infoSubTab==="admin" && state.isAdmin){
     attachAdminHandlers();
     if(!adminPlayers) refreshAdminData();
@@ -2276,6 +2315,310 @@ function sendVillageTransfer(){
     "🚚 Ressources transférées"+(target?(" vers "+target.name):"")+".",
     null
   );
+}
+
+/* ============================= EMPIRE (gestion multi-villages, dès 2 villages) ============================= */
+/* Panneau "Empire" : reprend les écrans multi-villages de Tribal Wars (Aperçu / Notifications /
+   Construction / Troupes / Envoi de ressources) — permet de consulter et d'agir sur N'IMPORTE LEQUEL
+   de ses villages sans avoir à y basculer d'abord (contrairement aux écrans Bâtiments/Caserne normaux,
+   qui ne concernent que le village actif). S'appuie sur state.myVillagesDetailed (vue complète de
+   chaque village, envoyée par le serveur — voir buildSnapshot/myVillagesDetailed côté serveur) et sur
+   les routes existantes (/api/build, /api/train, /api/build/cancel, /api/troops/disband,
+   /api/village/transfer), toutes désormais capables de cibler un villageId précis plutôt que le seul
+   village actif. N'apparaît dans la navigation (renderTabs) qu'à partir de 2 villages possédées. */
+
+function empireBuildQueueHead(v){
+  if(!v.buildQueue.length) return `<span class="muted">File vide</span>`;
+  const item=v.buildQueue[0];
+  const b=BUILDINGS[item.key];
+  const remain=Math.max(0, item.startAt+item.duration-estimateNow());
+  return `${b.name} → niv.${item.level} <span class="muted">(${fmtTime(remain)})</span>`+(v.buildQueue.length>1?` <span class="muted">+${v.buildQueue.length-1}</span>`:'');
+}
+function empireTrainQueueHead(v){
+  if(!v.trainQueue.length) return `<span class="muted">File vide</span>`;
+  const o=v.trainQueue[0];
+  const remain=Math.max(0, o.unitStartAt+o.unitDuration-estimateNow());
+  return `${TROOPS[o.troop].name} ×${o.count} <span class="muted">(${fmtTime(remain)}/unité)</span>`+(v.trainQueue.length>1?` <span class="muted">+${v.trainQueue.length-1}</span>`:'');
+}
+
+function renderEmpire(){
+  const villages = state.myVillagesDetailed||[];
+  const subTabs=[["apercu","📊 Aperçu"],["notifications","🔔 Notifications"],["construction","🏗️ Construction"],["troupes","⚔️ Troupes"],["resources","📦 Envoi de ressources"]];
+  if(!subTabs.some(([k])=>k===empireSubTab)) empireSubTab="apercu";
+  const nav = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+    ${subTabs.map(([k,label])=>`<button data-empire-subtab="${k}" class="${empireSubTab===k?'primary':''}">${label}</button>`).join("")}
+  </div>`;
+  let content;
+  if(empireSubTab==="notifications") content=renderEmpireNotifications(villages);
+  else if(empireSubTab==="construction") content=renderEmpireConstruction(villages);
+  else if(empireSubTab==="troupes") content=renderEmpireTroops(villages);
+  else if(empireSubTab==="resources") content=renderEmpireResources(villages);
+  else content=renderEmpireOverview(villages);
+  return `<h2>🏰 Gestion de l'empire</h2>
+  <p class="muted small">Vue d'ensemble et gestion groupée de vos ${villages.length} villages, sans avoir à basculer sur chacun d'eux.</p>
+  ${nav}${content}`;
+}
+
+function renderEmpireOverview(villages){
+  const rows = villages.map(v=>{
+    const buildLevels = BUILD_ORDER.reduce((s,k)=>s+(v.buildings[k]||0),0);
+    const outMissions = state.missions.filter(m=>m.sourceVillageId===v.id && m.attackerUsername===username && !m.completed).length;
+    const inThreats = (state.incomingAttacks||[]).filter(m=>m.targetVillageId===v.id).length
+      + state.missions.filter(m=>m.kind==="raid" && !m.resolveDone && m.targetId===v.id).length;
+    return `<tr data-empire-goto-village="${v.id}" style="cursor:pointer;">
+      <td>${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)}<div class="small muted">${v.x}|${v.y}</div></td>
+      <td>${v.buildings.hq||0}</td>
+      <td class="small">${buildLevels}</td>
+      <td class="small">${RES_ICON.wood} ${fmt(v.resources.wood)} · ${RES_ICON.clay} ${fmt(v.resources.clay)} · ${RES_ICON.iron} ${fmt(v.resources.iron)}<div class="muted">/ ${fmt(v.resCap)}</div></td>
+      <td class="small">${v.pop}/${v.popMax}</td>
+      <td class="small">${empireBuildQueueHead(v)}</td>
+      <td class="small">${empireTrainQueueHead(v)}</td>
+      <td class="small">${outMissions?`${outMissions} envoyée(s)<br>`:''}${inThreats?`<span style="color:#e05a4a;">⚠️ ${inThreats} entrante(s)</span>`:(outMissions?'':'<span class="muted">—</span>')}</td>
+    </tr>`;
+  }).join("");
+  return `<p class="small muted">Cliquez sur un village pour y basculer directement (onglet Bâtiments).</p>
+  <div style="overflow:auto;">
+    <table><thead><tr><th>Village</th><th>HdV</th><th>Niveaux cumulés</th><th>Ressources</th><th>Pop.</th><th>Construction</th><th>Entraînement</th><th>Missions</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+function renderEmpireNotifications(villages){
+  const now=estimateNow();
+  const items=[];
+  for(const v of villages){
+    for(const item of v.buildQueue){
+      const b=BUILDINGS[item.key];
+      items.push({ time:item.startAt+item.duration, icon:"🏗️", text:`${b.name} → niv. ${item.level} — ${v.name}` });
+    }
+    for(const o of v.trainQueue){
+      items.push({ time:o.unitStartAt+o.unitDuration, icon:"⚔️", text:`${TROOPS[o.troop].name} — ${v.name} (encore ${o.count} unité(s) dans cette file)` });
+    }
+  }
+  for(const m of (state.incomingAttacks||[])){
+    const label = m.kind==="scout" ? "🔭 Reconnaissance" : "⚔️ Attaque";
+    items.push({ time:m.arriveAt, icon:"🚨", text:`${label} de ${m.attackerUsername} vers ${m.targetName||'?'}`, danger:true });
+  }
+  for(const m of state.missions.filter(mm=>mm.kind==="raid" && !mm.resolveDone)){
+    items.push({ time:m.arriveAt, icon:"🚨", text:`Riposte de ${m.raidSourceName||'village barbare'} approche`, danger:true });
+  }
+  items.sort((a,b)=>a.time-b.time);
+  const rows = items.map(it=>`<div class="mission-item"><div class="flex-between"><span>${it.icon} ${escapeHtml(it.text)}</span><span${it.danger?' style="color:#e05a4a;"':''}>${fmtTime(Math.max(0,it.time-now))}</span></div></div>`).join("")
+    || `<div class="muted small">Rien à signaler pour l'instant.</div>`;
+  return `<div class="box"><h3 style="margin-top:0;">🔔 Notifications — tout votre empire</h3>
+    <p class="small muted">Constructions et entraînements en cours, et attaques entrantes, sur TOUS vos villages, triés par ordre d'arrivée.</p>
+    ${rows}</div>`;
+}
+
+function renderEmpireConstruction(villages){
+  const rows = villages.map(v=>{
+    const sel = empireSelectedVillageId===v.id;
+    return `<tr class="${sel?'admin-selected':''}" data-empire-select-village="${v.id}" style="cursor:pointer;">
+      <td>${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)}</td>
+      <td>${v.x}|${v.y}</td>
+      <td>${v.buildings.hq||0}</td>
+      <td class="small">${empireBuildQueueHead(v)}</td>
+      <td>${v.buildQueue.length}/6</td>
+    </tr>`;
+  }).join("");
+  const selV = villages.find(v=>v.id===empireSelectedVillageId) || villages.find(v=>v.id===state.village.id) || villages[0];
+  return `<div class="box" style="margin-bottom:14px;">
+    <h3 style="margin-top:0;">🏗️ Construction — tous vos villages</h3>
+    <p class="small muted">Cliquez sur un village pour lancer une construction directement, sans y basculer.</p>
+    <div style="max-height:220px; overflow:auto;">
+      <table><thead><tr><th>Village</th><th>Coord.</th><th>HdV</th><th>File en cours</th><th>Occupation</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </div>
+  ${selV ? renderEmpireConstructionEditor(selV) : ''}`;
+}
+
+function renderEmpireConstructionEditor(v){
+  const bq = v.buildQueue.map((item,i)=>{
+    const b=BUILDINGS[item.key];
+    const timeLeft=Math.max(0, item.startAt+item.duration-estimateNow());
+    const pct=100*(1-timeLeft/item.duration);
+    return `<div class="queue-item"><div class="flex-between"><span>${b.name} → niv. ${item.level}</span><span>${fmtTime(timeLeft)} <a href="#" data-empire-cancel-build="${i}" data-village="${v.id}" title="Annuler (remboursé)" style="margin-left:6px;">✖</a></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+  }).join("") || `<div class="muted small">File vide.</div>`;
+
+  const cards = BUILD_ORDER.filter(k=>k!=="hq").map(key=>{
+    const b=BUILDINGS[key], lvl=v.buildings[key]||0, atMax=lvl>=b.max;
+    const queuedCount = v.buildQueue.filter(q=>q.key===key).length;
+    const nextLevel=lvl+queuedCount+1, maxed=nextLevel>b.max;
+    const cost = maxed?null:buildCost(key,nextLevel);
+    const time = maxed?null:(buildTime(key,nextLevel,v.buildings.hq||0)/(adminSpeed||1));
+    const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
+    const affordable = cost && v.resources.wood>=cost.wood && v.resources.clay>=cost.clay && v.resources.iron>=cost.iron;
+    const isEmpty = lvl<=0;
+    const queueFull = v.buildQueue.length>=6;
+    return `<div class="card">
+      <div class="card-head"><h4>${b.name}<span class="small muted" style="font-weight:normal;">niveau ${lvl}${atMax?' (max)':''}</span></h4></div>
+      ${maxed ? `<p class="muted small">${atMax?'Niveau maximum atteint.':'Toutes les améliorations jusqu\'au niveau maximum sont déjà en file.'}</p>` : `
+        <div class="cost">
+          <span class="${v.resources.wood<cost.wood?'short':''}">🪵 ${fmt(cost.wood)}</span>
+          <span class="${v.resources.clay<cost.clay?'short':''}">🧱 ${fmt(cost.clay)}</span>
+          <span class="${v.resources.iron<cost.iron?'short':''}">⛏️ ${fmt(cost.iron)}</span>
+          <span>⏱ ${fmtTime(time)}</span>
+        </div>
+        ${lockedReq?`<div class="req-note">Nécessite : ${Object.entries(b.requires).map(([rk,rv])=>BUILDINGS[rk].name+" niv. "+rv).join(", ")}</div>`:''}
+        ${queuedCount?`<div class="unit-note">${queuedCount} déjà en file d'attente</div>`:''}
+        <button data-empire-build="${key}" data-village="${v.id}" class="primary" ${(!affordable||lockedReq||queueFull)?'disabled':''}>${isEmpty?'Construire':'Améliorer'} → niveau ${nextLevel}</button>
+      `}
+    </div>`;
+  }).join("");
+
+  return `<div class="box">
+    <h3 style="margin-top:0;">✏️ ${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y})</span></h3>
+    <h4>File de construction</h4>
+    ${bq}
+    <h4>Bâtiments</h4>
+    <div class="grid-buildings">${cards}</div>
+  </div>`;
+}
+
+function renderEmpireTroops(villages){
+  const rows = villages.map(v=>{
+    const sel = empireSelectedVillageId===v.id;
+    const totalTroops = TROOP_ORDER.reduce((s,k)=>s+(v.troops[k]||0),0);
+    return `<tr class="${sel?'admin-selected':''}" data-empire-select-village="${v.id}" style="cursor:pointer;">
+      <td>${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)}</td>
+      <td>${v.x}|${v.y}</td>
+      <td>${v.pop}/${v.popMax}</td>
+      <td class="small">${empireTrainQueueHead(v)}</td>
+      <td>${totalTroops}</td>
+    </tr>`;
+  }).join("");
+  const selV = villages.find(v=>v.id===empireSelectedVillageId) || villages.find(v=>v.id===state.village.id) || villages[0];
+  return `<div class="box" style="margin-bottom:14px;">
+    <h3 style="margin-top:0;">⚔️ Troupes — tous vos villages</h3>
+    <p class="small muted">Cliquez sur un village pour entraîner ou licencier des troupes directement, sans y basculer.</p>
+    <div style="max-height:220px; overflow:auto;">
+      <table><thead><tr><th>Village</th><th>Coord.</th><th>Pop.</th><th>File en cours</th><th>Troupes (total)</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </div>
+  ${selV ? renderEmpireTroopsEditor(selV) : ''}`;
+}
+
+function renderEmpireTroopsEditor(v){
+  if((v.buildings.barracks||0)<1){
+    return `<div class="box"><h3 style="margin-top:0;">✏️ ${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y})</span></h3><p class="muted small">Ce village n'a pas encore de Caserne : construisez-en une (sous-onglet Construction) pour pouvoir y entraîner des troupes.</p></div>`;
+  }
+  const rows=TROOP_ORDER.map(k=>{
+    const t=TROOPS[k];
+    const lockedEntries=Object.entries(t.requires).filter(([rk,rv])=>(v.buildings[rk]||0)<rv);
+    const locked=lockedEntries.length>0;
+    const home=v.troops[k]||0;
+    let nobleNote="";
+    if(k==="noble"){
+      const alive=(v.troops.noble||0)+v.trainQueue.filter(o=>o.troop==="noble").reduce((s,o)=>s+o.count,0);
+      nobleNote = `<div class="unit-note">Nobles vivants : ${alive} / ${NOBLE_CAP_PER_VILLAGE} dans ce village (1 seul noble peut partir par attaque)</div>`;
+    }
+    return `<div class="troop-row">
+      <div class="tname">${t.name}</div>
+      <div class="stats-mini">⚔️${t.atk} 🛡️${t.defInf}/${t.defCav}/${t.defArch} 🎒${t.carry} 🐎${t.speed}</div>
+      <div class="small">Stock : ${home}</div>
+      <div class="cost small">🪵${fmt(t.cost.wood)} 🧱${fmt(t.cost.clay)} ⛏️${fmt(t.cost.iron)} 👥${t.pop}</div>
+      ${locked
+        ? `<span class="req-note">Nécessite : ${lockedEntries.map(([rk,rv])=>(BUILDINGS[rk]?BUILDINGS[rk].name:rk)+" niv. "+rv).join(", ")}</span>`
+        : `<input type="number" min="0" value="0" id="empireTrainCount_${v.id}_${k}"><button data-empire-train="${k}" data-village="${v.id}">Entraîner</button>${t.note?`<div class="unit-note">${t.note}</div>`:''}${nobleNote}`}
+      ${home>0 ? `<div class="disband-row"><input type="number" min="0" max="${home}" value="0" id="empireDisbandCount_${v.id}_${k}"><button data-empire-disband="${k}" data-village="${v.id}" class="danger" title="Licencier définitivement, sans remboursement">🗑️ Licencier</button></div>` : ""}
+    </div>`;
+  }).join("");
+  return `<div class="box">
+    <h3 style="margin-top:0;">✏️ ${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y})</span> — Caserne niv. ${v.buildings.barracks}</h3>
+    ${rows}
+  </div>`;
+}
+
+function renderEmpireResources(villages){
+  if(villages.length<2) return `<p class="muted small">Il vous faut au moins 2 villages pour transférer des ressources entre eux.</p>`;
+  const activeId = state.village.id;
+  const defaultTargetId = (villages.find(v=>v.id!==activeId)||villages[0]).id;
+  const sourceOptions = villages.map(v=>`<option value="${v.id}" ${v.id===activeId?'selected':''}>${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} (${v.x}|${v.y}) — 🪵${fmt(v.resources.wood)} 🧱${fmt(v.resources.clay)} ⛏️${fmt(v.resources.iron)}</option>`).join("");
+  const targetOptions = villages.map(v=>`<option value="${v.id}" ${v.id===defaultTargetId?'selected':''}>${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} (${v.x}|${v.y})</option>`).join("");
+  return `<div class="box">
+    <h3 style="margin-top:0;">📦 Envoi de ressources entre vos villages</h3>
+    <p class="small muted">Transfert instantané (aucun trajet, aucun marchand) : choisissez le village source et le village de destination parmi TOUS les vôtres, sans avoir à basculer dessus au préalable. Plafonné par la capacité d'entrepôt du village de destination.</p>
+    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <div><label class="small muted" for="empireTransferSource">Depuis</label><br><select id="empireTransferSource">${sourceOptions}</select></div>
+      <div><label class="small muted" for="empireTransferTarget">Vers</label><br><select id="empireTransferTarget">${targetOptions}</select></div>
+    </div>
+    <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" value="0" id="empireTransfer_${r}"></div>`).join("")}
+    </div>
+    <button id="btnEmpireTransfer" class="primary">🚚 Transférer</button>
+  </div>`;
+}
+
+function empireQueueBuild(villageId, key){
+  doAction(()=>apiCall("/api/build","POST",{key, villageId}), "🏗️ Construction lancée.", null);
+}
+function empireCancelBuild(villageId, index){
+  doAction(()=>apiCall("/api/build/cancel","POST",{index, villageId}), "Construction annulée, ressources remboursées.", null);
+}
+function empireQueueTrain(villageId, key, count){
+  doAction(()=>apiCall("/api/train","POST",{key, count, villageId}), "⚔️ Entraînement lancé.", null);
+}
+function empireDisbandTroops(villageId, key, count){
+  doAction(()=>apiCall("/api/troops/disband","POST",{key, count, villageId}), "🗑️ Troupes licenciées.", null);
+}
+function empireSendResources(){
+  const srcSel=document.getElementById("empireTransferSource");
+  const tgtSel=document.getElementById("empireTransferTarget");
+  if(!srcSel || !tgtSel || !srcSel.value || !tgtSel.value){ toast("Choisissez un village source et un village de destination."); return; }
+  if(srcSel.value===tgtSel.value){ toast("Choisissez deux villages différents."); return; }
+  const villages = state.myVillagesDetailed||[];
+  const source = villages.find(v=>v.id===srcSel.value);
+  const target = (state.myVillages||[]).find(mv=>mv.id===tgtSel.value);
+  const amt={};
+  let any=false;
+  for(const r of ["wood","clay","iron"]){
+    const el=document.getElementById("empireTransfer_"+r);
+    if(!el) continue;
+    let n=Math.floor(Number(el.value)||0);
+    n=Math.max(0, Math.min(n, source?Math.floor(source.resources[r]||0):0));
+    if(n>0){ amt[r]=n; any=true; }
+  }
+  if(!any){ toast("Indiquez au moins une ressource à transférer."); return; }
+  doAction(
+    ()=>apiCall("/api/village/transfer","POST",{sourceVillageId:srcSel.value, targetVillageId:tgtSel.value, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
+    "🚚 Ressources transférées"+(source&&target?(" de "+source.name+" vers "+target.name):"")+".",
+    null
+  );
+}
+
+function attachEmpireHandlers(){
+  document.querySelectorAll("[data-empire-subtab]").forEach(b=>b.onclick=()=>{
+    empireSubTab=b.dataset.empireSubtab;
+    renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-empire-goto-village]").forEach(el=>el.onclick=()=>{
+    switchVillage(el.dataset.empireGotoVillage, true);
+  });
+  document.querySelectorAll("[data-empire-select-village]").forEach(el=>el.onclick=()=>{
+    empireSelectedVillageId = el.dataset.empireSelectVillage;
+    renderActiveTabContent();
+  });
+  document.querySelectorAll("[data-empire-build]").forEach(b=>b.onclick=()=>{
+    empireQueueBuild(b.dataset.village, b.dataset.empireBuild);
+  });
+  document.querySelectorAll("[data-empire-cancel-build]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    empireCancelBuild(el.dataset.village, Number(el.dataset.empireCancelBuild));
+  });
+  document.querySelectorAll("[data-empire-train]").forEach(b=>b.onclick=()=>{
+    const villageId=b.dataset.village, k=b.dataset.empireTrain;
+    const inp=document.getElementById("empireTrainCount_"+villageId+"_"+k);
+    empireQueueTrain(villageId, k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-empire-disband]").forEach(b=>b.onclick=()=>{
+    const villageId=b.dataset.village, k=b.dataset.empireDisband;
+    const inp=document.getElementById("empireDisbandCount_"+villageId+"_"+k);
+    empireDisbandTroops(villageId, k, Number(inp.value));
+  });
+  const transferBtn=document.getElementById("btnEmpireTransfer");
+  if(transferBtn) transferBtn.onclick=empireSendResources;
 }
 
 function renderBuildMenuCard(key){
