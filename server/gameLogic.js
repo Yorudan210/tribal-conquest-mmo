@@ -1772,7 +1772,9 @@ function buildSnapshot(db, username){
   const leaderboard = Object.keys(db.users).map(uname=>{
     const s = allScores[uname];
     if(!s || !s.villageCount) return null; // joueur sans village (ne devrait pas arriver)
-    return { username: uname, villageCount: s.villageCount, buildingLevels: s.buildingLevels, conquered: s.conquered, points: s.points };
+    const guild = guildOf(db, uname);
+    return { username: uname, villageCount: s.villageCount, buildingLevels: s.buildingLevels, conquered: s.conquered, points: s.points,
+      guild: guild ? { tag: guild.tag, name: guild.name } : null };
   }).filter(Boolean).sort((a,b)=>b.points-a.points).slice(0,20);
 
   // Renforts envoyés par ce joueur, où qu'ils soient stationnés (pour l'écran "mes soutiens" avec rappel).
