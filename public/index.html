@@ -1167,7 +1167,7 @@ const REPORT_FILTERS = [
   {key:"all", label:"Tous"},
   {key:"attack", label:"⚔️ Attaques envoyées"},
   {key:"defense", label:"🛡️ Attaques subies"},
-  {key:"scout", label:"🔭 Reconnaissances"},
+  {key:"scout", label:"🔭 Reconnaissances", kinds:["scout","scoutDefense"]},
   {key:"raid", label:"⚠️ Raids de pillards"},
   {key:"support", label:"🤝 Soutien", kinds:["supportIn","supportOut"]},
   {key:"gift", label:"🎁 Dons", kinds:["giftIn","giftOut"]},
@@ -1484,6 +1484,7 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Nouveau", icon:"🔭", title:"Contre-espionnage des reconnaissances", body:"Une reconnaissance ne réussit désormais que si le nombre d'Éclaireurs envoyés dépasse strictement celui présent en défense (village + renforts) ; sinon, tous les Éclaireurs envoyés sont repérés et éliminés sans aucun renseignement obtenu, et le propriétaire du village est prévenu de la tentative repoussée (une reconnaissance réussie, elle, reste totalement furtive)." },
   { tag:"Nouveau", icon:"🏰", title:"Panneau Empire : gestion de tous vos villages", body:"Dès que vous possédez 2 villages ou plus, un nouvel onglet « 🏰 Empire » apparaît : Aperçu (tableau de tous vos villages), Notifications (constructions, entraînements et attaques entrantes de tout votre empire triés par ordre d'arrivée), Construction et Troupes (agissez sur n'importe lequel de vos villages sans y basculer), et Envoi de ressources (transfert entre deux villages au choix, pas seulement depuis l'actif)." },
   { tag:"Nouveau", icon:"⚔️", title:"Attaques ennemies visibles avant l'impact", body:"Une attaque ou reconnaissance lancée par un autre joueur contre l'un de vos villages apparaît désormais dans vos Missions en cours (et dans les Notifications de l'onglet Empire) dès son départ, avec l'assaillant, son village d'origine et le temps restant avant l'arrivée — jusqu'ici, seules les ripostes de villages barbares étaient visibles avant coup." },
   { tag:"Nouveau", icon:"✖️", title:"Annulation d'une attaque ou reconnaissance", body:"Une attaque ou une reconnaissance encore en route peut désormais être annulée (bouton ✖ dans Missions en cours) : vos troupes font demi-tour immédiatement et rentrent sans combattre, sans perte." },
@@ -3423,12 +3424,29 @@ function renderReports(){
         </div>
       </div>`;
     } else if(r.kind==="scout"){
+      if(r.lost){
+        // Reconnaissance perdue : soit le village a disparu entre-temps, soit un contre-espionnage
+        // a repéré et éliminé nos éclaireurs (voir resolveScout côté serveur) — aucun renseignement.
+        return `<div class="report scout lose">
+          <div class="title" data-toggle="${r.id}"><span>🔭 Reconnaissance échouée${r.target?(' contre '+r.target+' ('+r.coord+')'):''}</span>${reportActions(r)}</div>
+          <div class="details ${open?'open':''}">
+            ${r.counterSpied?`Contre-espionnage : ${r.defenderScouts} éclaireur(s) en défense contre ${r.attackerScouts} envoyé(s). Aucun renseignement obtenu.`:escapeHtml(r.text||'Le village ciblé n\'existe plus.')}
+          </div>
+        </div>`;
+      }
       return `<div class="report scout">
         <div class="title" data-toggle="${r.id}"><span>🔭 Reconnaissance de ${r.target} (${r.coord})</span>${reportActions(r)}</div>
         <div class="details ${open?'open':''}">
           Ressources : 🪵${fmt(r.resources.wood)} 🧱${fmt(r.resources.clay)} ⛏️${fmt(r.resources.iron)}<br>
           Troupes : ${TROOP_ORDER.map(k=>TROOPS[k].name+" "+(r.troops[k]||0)).join(", ")}<br>
           Muraille niveau ${r.wallLevel}${r.loyalty!=null?(' · Loyauté '+Math.round(r.loyalty)+'%'):''}
+        </div>
+      </div>`;
+    } else if(r.kind==="scoutDefense"){
+      return `<div class="report scout win">
+        <div class="title" data-toggle="${r.id}"><span>🛡️ Reconnaissance ennemie repoussée (${escapeHtml(r.attacker)})</span>${reportActions(r)}</div>
+        <div class="details ${open?'open':''}">
+          Vos ${r.defenderScouts} éclaireur(s) ont repéré et éliminé les ${r.attackerScouts} éclaireur(s) envoyé(s) par ${escapeHtml(r.attacker)} : aucun renseignement n'a été obtenu sur votre village.
         </div>
       </div>`;
     } else if(r.kind==="raid"){
@@ -4406,6 +4424,7 @@ function renderHelp(){
   <p>Améliorez vos bâtiments dans l'onglet <b>Bâtiments</b> pour augmenter la production de ressources, la capacité de stockage et la population disponible. Construisez une <b>Caserne</b> pour entraîner des troupes dans l'onglet du même nom. Utilisez la <b>Carte</b> pour envoyer vos troupes reconnaître ou attaquer des villages — qu'ils soient barbares ou détenus par un autre joueur — afin de piller leurs ressources ; les rapports de bataille apparaissent dans l'onglet <b>Rapports</b>.</p>
   <h3>Reconnaissance et renseignement</h3>
   <p>Contrairement à un jeu solo, le serveur ne révèle jamais les troupes ni les ressources d'un village qui n'est pas le vôtre : vous devez d'abord y envoyer une <b>reconnaissance</b> (au moins un Éclaireur) pour en apprendre le contenu. Ce renseignement reste affiché tant que vous n'avez pas refait de reconnaissance plus récente — il peut donc devenir obsolète si le village a changé entre-temps. Le niveau de muraille, lui, est toujours visible.</p>
+  <p><b>Contre-espionnage :</b> une reconnaissance ne réussit que si le nombre d'Éclaireurs envoyés dépasse strictement le nombre d'Éclaireurs présents en défense dans le village visé (troupes du village + renforts alliés stationnés confondus). En cas d'égalité ou d'infériorité, tous les Éclaireurs envoyés sont repérés et éliminés, sans aucun renseignement obtenu. Une reconnaissance réussie reste totalement furtive (la victime n'est jamais prévenue) ; une reconnaissance repoussée, elle, prévient son propriétaire.</p>
   <h3>Sièges et conquête</h3>
   <p>Le <b>Bélier</b> et la <b>Catapulte</b> sont des unités de siège : envoyées dans une attaque victorieuse contre un village barbare, elles endommagent respectivement sa muraille et sa capacité de stockage (l'entrepôt d'un vrai joueur ne peut pas être endommagé ainsi). Construisez une <b>Académie</b> (dès Hôtel de ville niveau 20 — coûteuse et longue, elle ne peut être bâtie qu'une seule fois) pour former des <b>Nobles</b> : chaque noble survivant à une attaque victorieuse contre un village barbare réduit sa loyauté d'environ 20 à 35% et est alors consommé ; à 0% le village est conquis et devient vôtre. La conquête d'un village appartenant à un autre joueur n'est pas possible dans cette version.</p>
   <h3>Gisements riches</h3>
