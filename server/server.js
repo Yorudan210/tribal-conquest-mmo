@@ -471,6 +471,69 @@ async function handleApi(req, res, pathname, url){
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
     }
+
+    // ---- Panneau Admin : gestion de TOUS les villages (pas seulement le village d'origine de
+    // chaque joueur comme les routes /api/admin/village, /api/admin/give... ci-dessus) ----
+    if(pathname==="/api/admin/villages" && req.method==="GET"){
+      return sendJson(res, 200, { villages: game.adminListAllVillages(db) });
+    }
+    if(pathname==="/api/admin/villages/update" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminUpdateVillageById(db, String(body.villageId||""), { resources: body.resources, buildings: body.buildings, troops: body.troops });
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/give" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminGiveResourcesToVillageById(db, String(body.villageId||""), body.wood, body.clay, body.iron);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/finish-build" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminFinishBuildQueueForVillage(db, String(body.villageId||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/finish-train" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminFinishTrainQueueForVillage(db, String(body.villageId||""));
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/bulk-update" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminBulkUpdateVillages(db, String(body.scope||"all"), { resources: body.resources, buildings: body.buildings, troops: body.troops });
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, affected: result.affected, total: result.total, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/bulk-give" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminBulkGiveResourcesToVillages(db, String(body.scope||"all"), body.wood, body.clay, body.iron);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, affected: result.affected, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/bulk-finish-build" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminBulkFinishQueues(db, String(body.scope||"all"), "build");
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, affected: result.affected, total: result.total, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/villages/bulk-finish-train" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminBulkFinishQueues(db, String(body.scope||"all"), "train");
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, affected: result.affected, total: result.total, villages: game.adminListAllVillages(db), snapshot: game.buildSnapshot(db, username) });
+    }
+
     return sendJson(res, 404, { error:"Route Admin inconnue." });
   }
 

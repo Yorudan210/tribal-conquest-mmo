@@ -851,8 +851,17 @@ function resolveRaid(db, m){
   });
 }
 
+/* Les troupes qui reviennent d'une mission (attaque, reconnaissance, rappel de soutien) doivent
+   TOUJOURS rentrer dans le village qui les a réellement envoyées à l'origine — jamais dans le
+   village actuellement actif du joueur, qui a pu changer entre-temps si le trajet est long ou si
+   le joueur gère plusieurs villages (bug corrigé : les troupes revenaient auparavant dans le
+   village actif au moment du retour plutôt que dans leur village de départ). Même règle déjà
+   appliquée par resolveAttack pour attribuer le bonus d'empire au bon village. */
 function completeMission(db, m){
-  const v = m.kind==="raid" ? db.villages[m.sourceVillageId] : villageByUser(db, m.attackerUsername);
+  let v;
+  if(m.kind==="raid") v = db.villages[m.sourceVillageId];
+  else if(m.kind==="supportReturn") v = db.villages[m.targetId] || villageByUser(db, m.attackerUsername);
+  else v = db.villages[m.sourceVillageId] || villageByUser(db, m.attackerUsername);
   if(v){
     for(const k in m.troops){ if(m.troops[k]>0) v.troops[k]=(v.troops[k]||0)+m.troops[k]; }
     if(m.loot && v.owner!=="barbarian"){
@@ -1580,6 +1589,142 @@ function adminFinishTrainQueue(db, targetUsername){
   return { ok:true };
 }
 
+/* ---------------------------------------------------------------------- */
+/*  Administration : TOUS les villages (pas seulement le village d'origine  */
+/*  de chaque joueur comme adminUpdateVillage/adminGiveResources ci-dessus) */
+/* ---------------------------------------------------------------------- */
+
+/* Liste complète des villages du monde (joueurs ET barbares), pour le panneau d'administration
+   "Villages" : contrairement à adminListPlayers (un seul village — l'origine — par joueur), inclut
+   CHAQUE village individuellement, y compris les conquêtes d'un joueur qui possède plusieurs
+   villages. Les villages barbares n'ont pas de "buildings" (ils utilisent tier/resCap/wallLevel) :
+   ce champ est simplement absent (null) pour eux plutôt que synthétisé, pour rester honnête sur ce
+   qui existe réellement en base. */
+function adminListAllVillages(db){
+  return Object.keys(db.villages).map(id=>{
+    const v = db.villages[id];
+    const isPlayer = v.owner!=="barbarian";
+    return {
+      id: v.id, name: v.name, x: v.x, y: v.y, owner: v.owner, isPlayer,
+      hq: isPlayer && v.buildings ? (v.buildings.hq||0) : null,
+      wallLevel: villageWall(v),
+      resources: { ...v.resources },
+      buildings: isPlayer && v.buildings ? { ...v.buildings } : null,
+      troops: { ...v.troops },
+      buildQueueLen: isPlayer ? (v.buildQueue||[]).length : 0,
+      trainQueueLen: isPlayer ? (v.trainQueue||[]).length : 0
+    };
+  }).sort((a,b)=> (a.owner==="barbarian")-(b.owner==="barbarian") || a.name.localeCompare(b.name));
+}
+
+/* Villages concernés par une action groupée, selon la portée choisie côté panneau Admin :
+   "all" = tout le monde, "players" = uniquement les villages de joueurs (origine + conquêtes),
+   "barbarians" = uniquement les villages barbares. */
+function villagesInScope(db, scope){
+  const all = Object.values(db.villages);
+  if(scope==="players") return all.filter(v=>v.owner!=="barbarian");
+  if(scope==="barbarians") return all.filter(v=>v.owner==="barbarian");
+  return all;
+}
+
+/* Édite UN village précis, quel qu'il soit (village d'origine OU conquête d'un joueur, OU même un
+   village barbare) — contrairement à adminUpdateVillage qui ne cible que le village d'origine d'un
+   joueur. Le patch de bâtiments est silencieusement ignoré pour un village barbare (il n'a pas de
+   "buildings"), plutôt que de renvoyer une erreur : un admin qui édite un lot mixte de villages ne
+   doit pas être bloqué par les barbares du lot. */
+function adminUpdateVillageById(db, villageId, patch){
+  const v = db.villages[String(villageId)];
+  if(!v) return { error:"Village introuvable." };
+  if(patch.resources && typeof patch.resources==="object"){
+    for(const r of ["wood","clay","iron"]){
+      if(patch.resources[r]==null) continue;
+      const n = Number(patch.resources[r]);
+      if(!Number.isFinite(n) || n<0) return { error:"Valeur de ressource invalide." };
+      v.resources[r] = clamp(n, 0, 1e12);
+    }
+  }
+  if(patch.buildings && typeof patch.buildings==="object" && v.buildings){
+    for(const k in patch.buildings){
+      const b = BUILDINGS[k];
+      if(!b) continue;
+      const n = Math.round(Number(patch.buildings[k]));
+      if(!Number.isFinite(n) || n<0) return { error:"Niveau de bâtiment invalide." };
+      v.buildings[k] = clamp(n, 0, b.max);
+    }
+  }
+  if(patch.troops && typeof patch.troops==="object"){
+    for(const k in patch.troops){
+      if(!TROOPS[k]) continue;
+      const n = Math.round(Number(patch.troops[k]));
+      if(!Number.isFinite(n) || n<0) return { error:"Nombre de troupes invalide." };
+      v.troops[k] = n;
+    }
+  }
+  return { ok:true };
+}
+
+function adminGiveResourcesToVillageById(db, villageId, wood, clay, iron){
+  const v = db.villages[String(villageId)];
+  if(!v) return { error:"Village introuvable." };
+  const add = { wood:Number(wood)||0, clay:Number(clay)||0, iron:Number(iron)||0 };
+  // Comme adminGiveResources (village d'origine) : un ajout admin n'est pas plafonné par l'entrepôt,
+  // volontairement — c'est un outil de test/admin, pas une action de jeu normale.
+  for(const r of ["wood","clay","iron"]) v.resources[r] = clamp(v.resources[r]+add[r], 0, 1e12);
+  return { ok:true };
+}
+
+function adminFinishBuildQueueForVillage(db, villageId){
+  const v = db.villages[String(villageId)];
+  if(!v) return { error:"Village introuvable." };
+  if(!v.buildQueue || !v.buildQueue.length) return { error:"File de construction déjà vide." };
+  for(const item of v.buildQueue){
+    const b = BUILDINGS[item.key];
+    v.buildings[item.key] = Math.min(b?b.max:99, (v.buildings[item.key]||0)+1);
+  }
+  v.buildQueue = [];
+  return { ok:true };
+}
+
+function adminFinishTrainQueueForVillage(db, villageId){
+  const v = db.villages[String(villageId)];
+  if(!v) return { error:"Village introuvable." };
+  if(!v.trainQueue || !v.trainQueue.length) return { error:"File d'entraînement déjà vide." };
+  for(const order of v.trainQueue) v.troops[order.troop] = (v.troops[order.troop]||0)+order.count;
+  v.trainQueue = [];
+  return { ok:true };
+}
+
+/* Version "groupée" d'adminUpdateVillageById : applique le même patch (ressources DÉFINIES à une
+   valeur exacte, bâtiments, troupes) à TOUS les villages de la portée choisie en une seule fois.
+   Un champ absent du patch n'est simplement pas touché (voir la boucle "for...in" ci-dessous) —
+   c'est ce qui permet au panneau Admin de ne remplir que les champs qu'il veut réellement changer,
+   sans écraser le reste à zéro sur des centaines de villages différents. */
+function adminBulkUpdateVillages(db, scope, patch){
+  const targets = villagesInScope(db, scope);
+  let affected = 0;
+  for(const v of targets){
+    const r = adminUpdateVillageById(db, v.id, patch);
+    if(r.ok) affected++;
+  }
+  return { ok:true, affected, total: targets.length };
+}
+
+function adminBulkGiveResourcesToVillages(db, scope, wood, clay, iron){
+  const targets = villagesInScope(db, scope);
+  for(const v of targets) adminGiveResourcesToVillageById(db, v.id, wood, clay, iron);
+  return { ok:true, affected: targets.length };
+}
+
+function adminBulkFinishQueues(db, scope, which){
+  const targets = villagesInScope(db, scope).filter(v=>v.owner!=="barbarian");
+  let affected = 0;
+  for(const v of targets){
+    const r = which==="train" ? adminFinishTrainQueueForVillage(db, v.id) : adminFinishBuildQueueForVillage(db, v.id);
+    if(r.ok) affected++;
+  }
+  return { ok:true, affected, total: targets.length };
+}
+
 function adminSetSpeed(db, multiplier){
   const n = Number(multiplier);
   if(!Number.isFinite(n) || n<=0 || n>1000) return { error:"Multiplicateur invalide (doit être entre 0.01 et 1000)." };
@@ -1865,11 +2010,15 @@ module.exports = {
   now, villageByUser, homeVillageOf, myVillages, doSwitchVillage,
   villageWall, villageHide, villageResCap, popUsed,
   doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doRename, runTick, buildSnapshot,
+  completeMission,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminDeletePlayer,
   adminUpdateVillage, adminGiveResources, adminGiveResourcesToAll, adminFinishBuildQueue,
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
   adminListMissions, adminFinishMission,
+  adminListAllVillages, adminUpdateVillageById, adminGiveResourcesToVillageById,
+  adminFinishBuildQueueForVillage, adminFinishTrainQueueForVillage,
+  adminBulkUpdateVillages, adminBulkGiveResourcesToVillages, adminBulkFinishQueues,
   adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
   doSendSupport, doRecallSupport, doGiveResources, doTransferResourcesBetweenVillages,
   doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
