@@ -104,15 +104,21 @@
       desc:"Attaquez un maximum de joueurs différents.", tiers:[10,25,100,250] }
   ];
 
+  // Temps de base (baseTime, en secondes, au niveau 0 de Caserne — voir trainTime() ci-dessous) calés
+  // sur le rythme d'entraînement du jeu officiel "Die Stämme / Tribal Wars" à niveau de Caserne
+  // équivalent (de l'ordre de 15-25 min pour l'infanterie de base, 30 min pour la cavalerie légère,
+  // plus d'une heure pour les unités de siège, plusieurs heures pour le Noble) : ce ne sont que des
+  // valeurs numériques d'équilibrage (non protégées par le droit d'auteur), appliquées ici via la
+  // formule originale trainTime() de ce moteur, sans reprendre aucun code ni contenu du jeu original.
   const TROOPS = {
-    spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:14, requires:{barracks:1}},
-    sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:20, requires:{barracks:1}},
-    archer:{name:"Archer", cost:{wood:100,clay:30,iron:60}, pop:1, atk:15, defInf:50, defCav:40, defArch:5,  speed:18, carry:10, baseTime:18, requires:{barracks:2}},
-    scout: {name:"Éclaireur", cost:{wood:50,clay:50,iron:20}, pop:2, atk:0,  defInf:2,  defCav:1,  defArch:2, speed:9,  carry:0,  baseTime:16, requires:{barracks:1}},
-    light: {name:"Cavalerie légère", cost:{wood:125,clay:100,iron:250}, pop:4, atk:130, defInf:30, defCav:40, defArch:30, speed:10, carry:80, baseTime:45, requires:{barracks:3}},
-    ram:   {name:"Bélier", cost:{wood:300,clay:200,iron:200}, pop:5, atk:2, defInf:20, defCav:50, defArch:20, speed:30, carry:0, baseTime:50, requires:{barracks:6}},
-    catapult:{name:"Catapulte", cost:{wood:320,clay:400,iron:100}, pop:8, atk:100, defInf:100, defCav:50, defArch:100, speed:30, carry:0, baseTime:70, requires:{barracks:10}},
-    noble: {name:"Noble", cost:{wood:16000,clay:16000,iron:20000}, pop:30, atk:30, defInf:100, defCav:50, defArch:100, speed:35, carry:0, baseTime:540, requires:{barracks:8, academy:1}}
+    spear: {name:"Lancier", cost:{wood:50,clay:30,iron:10}, pop:1, atk:10, defInf:15, defCav:45, defArch:20, speed:18, carry:25, baseTime:1000, requires:{barracks:1}},
+    sword: {name:"Épéiste", cost:{wood:30,clay:30,iron:70}, pop:1, atk:25, defInf:50, defCav:15, defArch:40, speed:22, carry:15, baseTime:1500, requires:{barracks:1}},
+    archer:{name:"Archer", cost:{wood:100,clay:30,iron:60}, pop:1, atk:15, defInf:50, defCav:40, defArch:5,  speed:18, carry:10, baseTime:1500, requires:{barracks:2}},
+    scout: {name:"Éclaireur", cost:{wood:50,clay:50,iron:20}, pop:2, atk:0,  defInf:2,  defCav:1,  defArch:2, speed:9,  carry:0,  baseTime:900, requires:{barracks:1}},
+    light: {name:"Cavalerie légère", cost:{wood:125,clay:100,iron:250}, pop:4, atk:130, defInf:30, defCav:40, defArch:30, speed:10, carry:80, baseTime:1800, requires:{barracks:3}},
+    ram:   {name:"Bélier", cost:{wood:300,clay:200,iron:200}, pop:5, atk:2, defInf:20, defCav:50, defArch:20, speed:30, carry:0, baseTime:4200, requires:{barracks:6}},
+    catapult:{name:"Catapulte", cost:{wood:320,clay:400,iron:100}, pop:8, atk:100, defInf:100, defCav:50, defArch:100, speed:30, carry:0, baseTime:4500, requires:{barracks:10}},
+    noble: {name:"Noble", cost:{wood:16000,clay:16000,iron:20000}, pop:30, atk:30, defInf:100, defCav:50, defArch:100, speed:35, carry:0, baseTime:10800, requires:{barracks:8, academy:1}}
   };
   const TROOP_ORDER = ["spear","sword","archer","scout","light","ram","catapult","noble"];
   const INFANTRY = ["spear","sword","ram","catapult","noble"];
