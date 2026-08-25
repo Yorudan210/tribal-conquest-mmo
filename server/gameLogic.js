@@ -653,10 +653,31 @@ function applyDefenseLosses(v, lossFrac){
   return defenderLosses;
 }
 
+/* Contre-espionnage : une reconnaissance ne réussit que si le nombre d'éclaireurs ENVOYÉS dépasse
+   STRICTEMENT le nombre d'éclaireurs présents en défense (troupes du village + renforts alliés
+   stationnés confondus, comme pour un combat normal — voir combinedDefenseTroops). En cas d'égalité
+   ou d'infériorité, la totalité des éclaireurs envoyés est repérée et éliminée : aucun renseignement
+   n'est obtenu. Une reconnaissance RÉUSSIE reste totalement furtive (la victime n'est jamais informée
+   d'avoir été espionnée avec succès, comme dans le jeu officiel) ; une reconnaissance REPOUSSÉE, elle,
+   prévient la victime (ses éclaireurs ont bien repéré et neutralisé la tentative). */
 function resolveScout(db, m){
   const target = db.villages[m.targetId];
   m.resolveDone=true; m.returnAt=m.arriveAt+m.travel;
   if(!target){ pushReport(db, m.attackerUsername, {kind:"scout", time:now(), lost:true, text:"Le village ciblé n'existe plus."}); return; }
+  const attackerScouts = m.troops.scout||0;
+  const defenderScouts = combinedDefenseTroops(target).scout||0;
+  if(attackerScouts<=defenderScouts){
+    m.troops.scout = 0; // perdus : rien ne revient au village d'origine (voir completeMission)
+    pushReport(db, m.attackerUsername, {
+      kind:"scout", time:now(), lost:true, counterSpied:true,
+      target:target.name, coord:target.x+"|"+target.y, attackerScouts, defenderScouts,
+      text: "Vos "+attackerScouts+" éclaireur(s) ont été repérés et éliminés par les "+defenderScouts+" éclaireur(s) en défense : aucun renseignement obtenu."
+    });
+    if(target.owner!=="barbarian" && target.owner!==m.attackerUsername){
+      pushReport(db, target.owner, { kind:"scoutDefense", time:now(), attacker:m.attackerUsername, attackerScouts, defenderScouts });
+    }
+    return;
+  }
   pushReport(db, m.attackerUsername, {
     kind:"scout", time:now(), targetId: target.id, target:target.name, coord:target.x+"|"+target.y,
     resources:{...target.resources}, troops:{...target.troops}, wallLevel: villageWall(target),
