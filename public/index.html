@@ -243,6 +243,7 @@
   #mapCanvas.dragging{cursor:grabbing;}
   #mapWorld{position:absolute;}
   #mapInfluence{position:absolute; left:0; top:0; pointer-events:none;}
+  #mapAttackLines{position:absolute; left:0; top:0; pointer-events:none;}
   .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
   .villagePin .dot{
     position:relative; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
@@ -263,6 +264,9 @@
   .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
   .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
+  .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
+  .mapDecor{position:absolute; transform:translate(-50%,-100%); pointer-events:none; opacity:.88;}
+  .mapDecor svg{display:block; width:100%; height:100%; overflow:visible;}
   .villagePin .plabel{
     position:absolute; top:32px; font-size:9px; white-space:nowrap; background:rgba(20,16,10,.85);
     padding:2px 6px; border-radius:6px; color:var(--text); pointer-events:none;
@@ -873,6 +877,73 @@ function tinyHouseSvg(x,y,scale){
     <rect x="-4" y="-9" width="8" height="9" fill="#2a1c10"/>
   </g>`;
 }
+
+/* ------------------------- Icônes de village (carte) ------------------------- *
+ * Remplace l'ancien pictogramme emoji (🚩/👤/🏯/🏚️) par une petite scène de village
+ * originale, en réutilisant le même style de hutte que tinyHouseSvg ci-dessus, qui
+ * "évolue" visuellement : le nombre de huttes grandit avec le niveau (0=isolée,
+ * 1=hameau, 2=gros village), et une palissade pointillée apparaît dès qu'une
+ * muraille est construite (villageIconLevel ci-dessous détermine ces deux niveaux
+ * à partir des seules informations publiques déjà envoyées par le serveur — voir
+ * publicVillageView : jamais le niveau réel des bâtiments d'un village adverse). */
+function villageIconLevel(t, mine){
+  const wl = t.wallLevel||0;
+  if(mine || t.isPlayer) return wl>=10 ? 2 : (wl>=1 ? 1 : 0);
+  const tier = t.tier||0;
+  return tier<=1 ? 0 : (tier<=2 ? 1 : 2);
+}
+function villageMapIconSvg(kind, level, hasWall){
+  const barb = kind==="barbarian";
+  const wall = barb ? "#6b5a3f" : "#8a6a45";
+  const roof = barb ? "#4a3826" : "#6b3226";
+  const hut = (x,s)=>`<g transform="translate(${x},2) scale(${s})">
+    <rect x="-9" y="-14" width="18" height="14" fill="${wall}" stroke="#2a1c10" stroke-width="1.4"/>
+    <polygon points="-11,-14 0,-25 11,-14" fill="${roof}" stroke="#2a1c10" stroke-width="1.4"/>
+    <rect x="-3" y="-8" width="6" height="8" fill="#2a1c10"/>
+  </g>`;
+  const huts = level<=0 ? hut(0,1) : level===1 ? hut(-9,0.82)+hut(9,0.9) : hut(-14,0.78)+hut(0,0.95)+hut(14,0.78);
+  const palisade = hasWall ? `<path d="M -22 4 Q 0 12 22 4" fill="none" stroke="#5a4326" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>` : "";
+  const flag = kind==="mine"
+    ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>`
+    : kind==="player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : "";
+  return `<svg viewBox="-24 -30 48 36" preserveAspectRatio="xMidYMax meet">${palisade}${huts}${flag}</svg>`;
+}
+
+/* ------------------------- Décor de la carte du monde ------------------------- *
+ * Quelques arbres/collines/rochers/buissons dispersés sur la carte, purement
+ * cosmétiques (aucune information, aucune interaction). Placement pseudo-aléatoire
+ * mais STABLE (dérivé des coordonnées, pas de Math.random) pour ne pas "sauter"
+ * d'un rendu à l'autre — voir mapDecorHtml, appelé depuis renderMap(). */
+function mapPseudoRandom(x,y){
+  const s=Math.sin(x*12.9898+y*78.233)*43758.5453;
+  return s-Math.floor(s);
+}
+const MAP_DECOR_TYPES=["tree","hill","rock","bush"];
+function mapDecorSvg(type){
+  if(type==="tree") return `<svg viewBox="-14 -34 28 34"><rect x="-2" y="-6" width="4" height="10" fill="#4a331d"/><polygon points="0,-34 -11,-14 11,-14" fill="#2c4d25" stroke="#1c2e15" stroke-width="1"/><polygon points="0,-24 -9,-6 9,-6" fill="#3f6b34" stroke="#1c2e15" stroke-width="1"/></svg>`;
+  if(type==="hill") return `<svg viewBox="-18 -13 36 17"><ellipse cx="0" cy="2" rx="17" ry="9" fill="#5a6b3a" stroke="#3a4526" stroke-width="1"/><ellipse cx="-5" cy="-1" rx="9" ry="5" fill="#6d8047" opacity="0.65"/></svg>`;
+  if(type==="rock") return `<svg viewBox="-12 -13 24 17"><polygon points="-10,4 -6,-8 4,-9 10,2 6,4" fill="#8a8577" stroke="#4a463c" stroke-width="1"/><polygon points="-6,-8 -1,-4 4,-9" fill="#a29c8c" opacity="0.7"/></svg>`;
+  return `<svg viewBox="-12 -13 24 15"><ellipse cx="-4" cy="0" rx="7" ry="6" fill="#3f6b34" stroke="#1c2e15" stroke-width="1"/><ellipse cx="5" cy="1" rx="6" ry="5" fill="#4a7a3a" stroke="#1c2e15" stroke-width="1"/></svg>`; // bush
+}
+/* Un nombre FIXE d'éléments de décor est échantillonné (jamais une boucle sur toutes les cases du
+   monde, dont l'étendue n'est pas bornée) pour rester performant quelle que soit la taille de la
+   zone visible ; les cases déjà occupées par un village (occupied) sont simplement ignorées. */
+function mapDecorHtml(minX, maxX, minY, maxY, ppf, occupied){
+  const spanX=Math.max(1,maxX-minX), spanY=Math.max(1,maxY-minY);
+  const count=Math.min(60, Math.round(spanX*spanY*0.06));
+  let html="";
+  for(let i=0;i<count;i++){
+    const gx=Math.round(minX+mapPseudoRandom(i*7.13,3.31)*spanX);
+    const gy=Math.round(minY+mapPseudoRandom(i*3.71,11.9)*spanY);
+    if(occupied.has(gx+","+gy)) continue;
+    const typeIdx=Math.floor(mapPseudoRandom(gx*1.7+0.3, gy*2.3+0.7)*MAP_DECOR_TYPES.length);
+    const type=MAP_DECOR_TYPES[clamp(typeIdx,0,MAP_DECOR_TYPES.length-1)];
+    const size=ppf*(0.8+mapPseudoRandom(gx,gy)*0.4);
+    const left=(gx-minX)*ppf, top=(gy-minY)*ppf+ppf*0.4;
+    html += `<div class="mapDecor" style="left:${left}px; top:${top}px; width:${size}px; height:${size}px;">${mapDecorSvg(type)}</div>`;
+  }
+  return html;
+}
 /* La muraille s'agrandit visuellement avec son niveau (davantage de créneaux, tours plus hautes,
    tourelles supplémentaires avec bannières à partir du niveau 10). */
 function wallArt(level){
@@ -1402,6 +1473,12 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Équilibrage", icon:"⚔️", title:"Troupes recalibrées + temps d'entraînement", body:"Coût du Bélier/Catapulte ajusté sur les valeurs officielles, coût et population du Noble revus à la hausse (valeur intermédiaire, toujours bien en-deçà du jeu officiel). Le temps d'entraînement diminue désormais de façon exponentielle avec le niveau de la Caserne, sur le même principe que le temps de construction." },
+  { tag:"Amélioration", icon:"📈", title:"Boost de production clarifié", body:"Le boost de guilde \"Production\" affiche désormais clairement qu'il augmente les ressources produites PAR HEURE." },
+  { tag:"Nouveau", icon:"🎯", title:"Boost de guilde : vitesse d'entraînement", body:"Deux nouveaux bonus de boutique de guilde accélèrent uniquement l'entraînement des troupes, indépendamment de la vitesse de construction (qui reste un bonus séparé)." },
+  { tag:"Nouveau", icon:"✈️", title:"Trajectoire d'attaque sur la carte", body:"Une ligne pointillée relie désormais l'origine et la cible de chaque attaque en cours sur la Carte du monde." },
+  { tag:"Visuel", icon:"🏘️", title:"Villages évolutifs et décor de carte", body:"Les pictogrammes de village sur la carte sont remplacés par une petite scène de village originale qui s'agrandit avec son niveau, avec palissade dès qu'une muraille est construite. La carte affiche aussi des arbres, collines, rochers et buissons décoratifs." },
+  { tag:"Nouveau", icon:"🚚", title:"Transfert de ressources entre vos villages", body:"Envoyez instantanément des ressources d'un de vos villages vers un autre, depuis l'onglet Bâtiments (dès que vous possédez plusieurs villages)." },
   { tag:"Amélioration", icon:"🏆", title:"Classement épuré", body:"La colonne Niveau total des constructions est retirée du Classement (le détail reste calculé dans les points)." },
   { tag:"Amélioration", icon:"🏆", title:"Classement : guilde à la place des conquêtes", body:"La colonne Conquêtes du Classement est remplacée par la guilde de chaque joueur (les conquêtes continuent de compter dans le calcul des points)." },
   { tag:"Amélioration", icon:"📊", title:"Rapports de combat en graphiques", body:"Les rapports d'attaque et de défense affichent désormais des graphiques (comparaison des puissances, composition détaillée de l'armée) au lieu d'un simple texte compact." },
@@ -1987,7 +2064,7 @@ function renderActiveTabContent(){
   else if(activeTab==="market") main.innerHTML=renderMarket();
   else main.innerHTML=renderInformation(); // "information" et tout état inconnu retombent ici (comme "help" avant)
   attachTabHandlers();
-  if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); attachMapHandlers(); }
+  if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); drawMapAttackLines(); attachMapHandlers(); }
   if(activeTab==="guild"){
     attachGuildHandlers();
     if(state.guild && state.guild.isLeader && guildSubTab==="diplomacy" && !guildDirectory) refreshGuildDirectory();
@@ -2138,11 +2215,55 @@ function renderBuildings(){
       </div>
     </div>` : "";
 
+  const transferBox = renderVillageTransferBox();
+
   return `<h2>Votre village</h2>
     <p class="muted small">Cliquez sur un bâtiment du village pour voir ses détails et l'améliorer.</p>
     <div class="village-scene">${renderVillageScene()}</div>
     ${detail}
-    ${buildMenu}`;
+    ${buildMenu}
+    ${transferBox}`;
+}
+
+/* Transfert instantané de ressources entre deux villages du MÊME joueur (aucun marchand, aucun
+   délai de trajet — comme le don direct à un autre joueur, voir sendGift/doGiveResources, mais
+   sans passer par le compte d'un tiers). N'apparaît que si le joueur possède plus d'un village. */
+function renderVillageTransferBox(){
+  const others = (state.myVillages||[]).filter(mv=>!mv.isActive);
+  if(!others.length) return "";
+  const v=state.village;
+  const options = others.map(mv=>`<option value="${mv.id}">${mv.isHome?'🏠 ':'🚩 '}${escapeHtml(mv.name)} (${mv.x}|${mv.y})</option>`).join("");
+  return `<div class="box" style="margin-top:14px;">
+    <h3>🚚 Transfert entre vos villages</h3>
+    <p class="muted small">Envoyez instantanément des ressources de <b>${escapeHtml(v.name)}</b> vers un autre village vous appartenant (sans trajet, plafonné par l'entrepôt du village de destination).</p>
+    <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+      <select id="transferTargetVillage">${options}</select>
+      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" max="${Math.floor(v.resources[r])}" value="0" id="transfer_${r}"></div>`).join("")}
+    </div>
+    <button id="btnVillageTransfer">🚚 Transférer</button>
+  </div>`;
+}
+
+function sendVillageTransfer(){
+  const sel=document.getElementById("transferTargetVillage");
+  if(!sel || !sel.value){ toast("Choisissez un village de destination."); return; }
+  const targetVillageId=sel.value;
+  const target=(state.myVillages||[]).find(mv=>mv.id===targetVillageId);
+  const amt={};
+  let any=false;
+  for(const r of ["wood","clay","iron"]){
+    const el=document.getElementById("transfer_"+r);
+    if(!el) continue;
+    let n=Math.floor(Number(el.value)||0);
+    n=Math.max(0, Math.min(n, Math.floor(state.village.resources[r]||0)));
+    if(n>0){ amt[r]=n; any=true; }
+  }
+  if(!any){ toast("Indiquez au moins une ressource à transférer."); return; }
+  doAction(
+    ()=>apiCall("/api/village/transfer","POST",{targetVillageId, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
+    "🚚 Ressources transférées"+(target?(" vers "+target.name):"")+".",
+    null
+  );
 }
 
 function renderBuildMenuCard(key){
@@ -2558,7 +2679,8 @@ function renderMap(){
     const mine = t.owner===username;
     const rel = !mine && t.isPlayer ? guildRelationFor(t.guildId) : null;
     const cls = mine ? "player" : (rel ? rel.cls : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]));
-    const icon = mine ? "🚩" : (t.isPlayer ? "👤" : (t.wallLevel>0?'🏯':'🏚️'));
+    const iconKind = mine ? "mine" : (t.isPlayer ? "player" : "barbarian");
+    const icon = villageMapIconSvg(iconKind, villageIconLevel(t, mine), (t.wallLevel||0)>0);
     const bonusTxt = t.resourceBonus ? (" · gisement riche : +"+Math.round(t.resourceBonus.pct*100)+"% "+RES_NAME[t.resourceBonus.res].toLowerCase()) : "";
     const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt;
     const badge = t.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[t.resourceBonus.res]}</span>` : "";
@@ -2571,8 +2693,10 @@ function renderMap(){
   const playerSel = ui.selectedVillage==="home";
   const playerBonusTxt = v.resourceBonus ? (" · gisement riche : +"+Math.round(v.resourceBonus.pct*100)+"% "+RES_NAME[v.resourceBonus.res].toLowerCase()) : "";
   const playerBadge = v.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[v.resourceBonus.res]}</span>` : "";
+  const homeWallLvl = (v.buildings && v.buildings.wall)||0;
+  const homeIcon = villageMapIconSvg("mine", homeWallLvl>=10?2:1, homeWallLvl>0);
   const playerPin = `<div class="villagePin player ${playerSel?'selected':''}" data-village-pin="home" style="left:${playerLeft}px; top:${playerTop}px;" title="${v.name} (${v.x}|${v.y})${playerBonusTxt}">
-    <div class="dot">🏰${playerBadge}</div>
+    <div class="dot">${homeIcon}${playerBadge}</div>
     ${ppf>=20?`<div class="plabel">${v.name}</div>`:''}
   </div>`;
 
@@ -2594,15 +2718,18 @@ function renderMap(){
     background-size:${ppf}px ${ppf}px, ${ppf}px ${ppf}px, ${ppf*10}px ${ppf*10}px, ${ppf*10}px ${ppf*10}px;`;
 
   const influenceCanvas = `<canvas id="mapInfluence" width="${Math.round(worldW)}" height="${Math.round(worldH)}"></canvas>`;
+  const attackLinesCanvas = `<canvas id="mapAttackLines" width="${Math.round(worldW)}" height="${Math.round(worldH)}"></canvas>`;
+  const occupiedTiles = new Set(others.map(t=>t.x+","+t.y).concat([v.x+","+v.y]));
+  const decor = mapDecorHtml(minX, maxX, minY, maxY, ppf, occupiedTiles);
 
   return `<h2>Carte du monde</h2>
     <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur.</p>
     <p class="muted small">🗺️ Zones d'influence (purement visuelles, sans effet sur le jeu) : <span style="color:var(--gold);">■</span> vous · <span style="color:var(--green);">■</span> allié · <span style="color:var(--blue);">■</span> pacte · <span style="color:var(--red);">■</span> guerre · <span style="color:#9a7526;">■</span> autre joueur.</p>
-    <p class="muted small">⚔️/🔭 pleins et animés = vos propres troupes en mouvement. ⚔️/🔭 pointillés et discrets = attaque ou reconnaissance d'un <b>autre joueur</b> actuellement en approche (composition et identité de l'attaquant non révélées, comme partout ailleurs tant qu'aucune reconnaissance n'a réussi).</p>
+    <p class="muted small">⚔️/🔭 pleins et animés = vos propres troupes en mouvement. ⚔️/🔭 pointillés et discrets = attaque ou reconnaissance d'un <b>autre joueur</b> actuellement en approche (composition et identité de l'attaquant non révélées, comme partout ailleurs tant qu'aucune reconnaissance n'a réussi). Une ligne pointillée rouge relie l'origine et la cible de chaque attaque en cours.</p>
     ${renderMapToolbar()}
     <div id="mapCanvas">
       <div id="mapWorld" data-minx="${minX}" data-miny="${minY}" style="width:${worldW}px; height:${worldH}px;${gridBg}">
-        ${influenceCanvas}${pins}${playerPin}${markers}${foreignMarkers}
+        ${influenceCanvas}${attackLinesCanvas}${decor}${pins}${playerPin}${markers}${foreignMarkers}
       </div>
     </div>`;
 }
@@ -2665,6 +2792,70 @@ function drawMapInfluence(){
   }
   drawZone(v.x, v.y, ZONE_RGB.mine); // village actif : toujours "vous", même s'il a été conquis récemment
   ctx.globalCompositeOperation="source-over";
+}
+
+/* Extrémités (village source -> village cible, en coordonnées monde) du trajet complet d'une
+   attaque/raid du joueur actif, pour tracer la ligne pointillée qui cible le village attaqué (voir
+   drawMapAttackLines). Reprend la même logique source/cible que missionMarkerPos ci-dessus, mais
+   renvoie le segment entier plutôt que la position interpolée du marqueur le long de ce segment. */
+function missionLineEndpoints(m){
+  if(m.kind!=="attack" && m.kind!=="raid") return null;
+  const v=state.village;
+  if(m.kind==="raid"){
+    if(m.resolveDone) return null; // le retour des pillards ne concerne pas la carte du joueur visé
+    const t=state.villages.find(x=>x.id===m.sourceVillageId);
+    if(!t) return null;
+    return { x1:t.x, y1:t.y, x2:v.x, y2:v.y };
+  }
+  const t=state.villages.find(x=>x.id===m.targetId);
+  if(!t) return null;
+  return { x1:v.x, y1:v.y, x2:t.x, y2:t.y };
+}
+
+/* Idem missionLineEndpoints, mais pour une attaque "monde" lancée par un AUTRE joueur (voir
+   worldMissionMarkerPos) : uniquement les attaques (pas les reconnaissances, invisibles sur la
+   carte tant qu'elles n'ont pas été détectées) — composition et identité restent masquées, seule
+   la trajectoire (déjà publique via le marqueur pointillé existant) est soulignée. */
+function worldMissionLineEndpoints(m){
+  if(m.kind!=="attack") return null;
+  const from=findAnyVillage(m.sourceVillageId), to=findAnyVillage(m.targetId);
+  if(!from || !to) return null;
+  return { x1:from.x, y1:from.y, x2:to.x, y2:to.y };
+}
+
+/* Trace, sur le canvas #mapAttackLines, une ligne pointillée reliant l'origine et la cible de
+   chaque attaque/raid actuellement en cours (les nôtres et celles des autres joueurs visibles sur
+   la carte) — permet de repérer d'un coup d'œil quel village est visé, en plus du marqueur mobile
+   qui progresse déjà le long de ce trajet. Purement visuel, ne révèle aucune information qui ne
+   soit pas déjà publique via les marqueurs existants. */
+function drawMapAttackLines(){
+  const canvas=document.getElementById("mapAttackLines");
+  const world=document.getElementById("mapWorld");
+  if(!canvas||!world||!mapView) return;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const minX=Number(world.dataset.minx), minY=Number(world.dataset.miny);
+  const ppf=mapView.ppf;
+
+  const drawLine=(x1,y1,x2,y2,color)=>{
+    ctx.beginPath();
+    ctx.setLineDash([6,5]);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.5;
+    ctx.moveTo((x1-minX)*ppf,(y1-minY)*ppf);
+    ctx.lineTo((x2-minX)*ppf,(y2-minY)*ppf);
+    ctx.stroke();
+  };
+
+  for(const m of state.missions){
+    const seg=missionLineEndpoints(m);
+    if(seg) drawLine(seg.x1,seg.y1,seg.x2,seg.y2,"rgba(201,92,74,.75)");
+  }
+  for(const m of (state.worldMissions||[])){
+    const seg=worldMissionLineEndpoints(m);
+    if(seg) drawLine(seg.x1,seg.y1,seg.x2,seg.y2,"rgba(201,92,74,.35)");
+  }
+  ctx.setLineDash([]);
 }
 
 function attachMapHandlers(){
@@ -3677,6 +3868,8 @@ function attachTabHandlers(){
     renderActiveTabContent();
   });
   document.querySelectorAll("[data-build]").forEach(b=>b.onclick=()=>queueBuild(b.dataset.build));
+  const transferBtn=document.getElementById("btnVillageTransfer");
+  if(transferBtn) transferBtn.onclick=sendVillageTransfer;
   document.querySelectorAll("[data-train]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.train;
     const inp=document.getElementById("trainCount_"+k);
