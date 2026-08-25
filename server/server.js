@@ -242,6 +242,15 @@ async function handleApi(req, res, pathname, url){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/village/transfer" && req.method==="POST"){
+    const body = await readBody(req);
+    const source = game.villageByUser(db, username);
+    if(!source) return sendJson(res, 400, { error:"Village introuvable." });
+    const result = game.doTransferResourcesBetweenVillages(db, username, source.id, body.targetVillageId, body.wood, body.clay, body.iron);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
 
   // ---- Marché ----
   if(pathname==="/api/market/offer" && req.method==="POST"){

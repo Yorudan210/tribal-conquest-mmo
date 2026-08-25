@@ -258,7 +258,7 @@ function doTrain(db, username, key, count){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") / serverEventMultiplier(db, "train") });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "train") / serverEventMultiplier(db, "train") });
   return { ok: true };
 }
 
@@ -403,6 +403,29 @@ function doGiveResources(db, username, targetUsername, wood, clay, iron){
   for(const r of ["wood","clay","iron"]) target.resources[r]=Math.max(target.resources[r], Math.min(target.resources[r]+amt[r], cap));
   pushReport(db, targetUsername, { kind:"giftIn", time:now(), from:username, wood:amt.wood, clay:amt.clay, iron:amt.iron });
   pushReport(db, username, { kind:"giftOut", time:now(), target:targetUsername, wood:amt.wood, clay:amt.clay, iron:amt.iron });
+  return { ok:true };
+}
+
+/* Transfert instantané de ressources entre DEUX villages appartenant au MÊME joueur (sans marchand
+   ni délai de trajet, comme doGiveResources ci-dessus) — sert notamment à ravitailler un village
+   nouvellement conquis, ou à concentrer des ressources vers celui qui construit/entraîne le plus.
+   Contrairement à doGiveResources (toujours livré au village d'ORIGINE d'un AUTRE joueur), ici
+   c'est le joueur lui-même qui choisit le village de destination PARMI les siens. */
+function doTransferResourcesBetweenVillages(db, username, sourceVillageId, targetVillageId, wood, clay, iron){
+  const source = db.villages[sourceVillageId];
+  if(!source || source.owner!==username) return { error: "Village source introuvable." };
+  const target = db.villages[targetVillageId];
+  if(!target || target.owner!==username) return { error: "Village de destination introuvable." };
+  if(source.id===target.id) return { error: "Choisissez un village de destination différent." };
+  const amt = { wood:Math.max(0,Math.floor(Number(wood)||0)), clay:Math.max(0,Math.floor(Number(clay)||0)), iron:Math.max(0,Math.floor(Number(iron)||0)) };
+  if(!amt.wood && !amt.clay && !amt.iron) return { error: "Indiquez au moins une ressource à transférer." };
+  if(source.resources.wood<amt.wood || source.resources.clay<amt.clay || source.resources.iron<amt.iron){
+    return { error: "Ressources insuffisantes dans le village source." };
+  }
+  source.resources.wood-=amt.wood; source.resources.clay-=amt.clay; source.resources.iron-=amt.iron;
+  const cap = storageCap(target.buildings.warehouse);
+  // Comme un surplus de production ou un don reçu : ne fait jamais perdre de ressources déjà au-dessus du plafond.
+  for(const r of ["wood","clay","iron"]) target.resources[r]=Math.max(target.resources[r], Math.min(target.resources[r]+amt[r], cap));
   return { ok:true };
 }
 
@@ -886,7 +909,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "speed") / serverEventMultiplier(db, "train"); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "train") / serverEventMultiplier(db, "train"); }
       } else break;
     }
   }
@@ -1070,8 +1093,10 @@ function guildBonusMultiplier(guild){
 }
 
 /* Multiplicateur cumulé des bonus de boutique de guilde actuellement actifs, pour un type donné
-   ("production" ou "speed"). Les bonus expirés (expiresAt dépassé) sont ignorés sans avoir besoin
-   d'être déjà purgés du tableau (voir runTick, qui les purge aussi périodiquement par hygiène). */
+   ("production" = ressources/heure, "speed" = construction des bâtiments, "train" = entraînement
+   des troupes — trois familles indépendantes, à l'image des évènements serveur). Les bonus expirés
+   (expiresAt dépassé) sont ignorés sans avoir besoin d'être déjà purgés du tableau (voir runTick,
+   qui les purge aussi périodiquement par hygiène). */
 function guildBoostMultiplier(guild, type){
   if(!guild || !guild.activeBoosts || !guild.activeBoosts.length) return 1;
   const t = now();
@@ -1846,7 +1871,7 @@ module.exports = {
   adminFinishTrainQueue, adminSetSpeed, adminAnnounce, getSpeedMultiplier,
   adminListMissions, adminFinishMission,
   adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
-  doSendSupport, doRecallSupport, doGiveResources,
+  doSendSupport, doRecallSupport, doGiveResources, doTransferResourcesBetweenVillages,
   doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
