@@ -107,7 +107,9 @@
     { key:"demolisher", name:"Fléau des murailles", icon:"🧨", stat:"wallLevelsDestroyed",
       desc:"Détruisez des niveaux de muraille ennemis avec vos béliers.", tiers:[25,250,2500,10000] },
     { key:"warlord", name:"Guerrier tous azimuts", icon:"🎯", stat:"distinctOpponents",
-      desc:"Attaquez un maximum de joueurs différents.", tiers:[10,25,100,250] }
+      desc:"Attaquez un maximum de joueurs différents.", tiers:[10,25,100,250] },
+    { key:"blackHunter", name:"Chasseur de l'Armée Noire", icon:"💀", stat:"blackArmyDefeated",
+      desc:"Remportez des combats contre les campements de l'Armée Noire (évènement de lancement).", tiers:[3,10,25,60] }
   ];
 
   // Temps de base (baseTime, en secondes, au niveau 0 de Caserne — voir trainTime() ci-dessous) calés
