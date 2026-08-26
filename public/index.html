@@ -262,6 +262,8 @@
   .villagePin.ally .dot{background:#2c6a4a; border-color:#8ad9c0;}
   .villagePin.pact .dot{background:#22506a; border-color:#8ac0e0;}
   .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
+  .villagePin.blackarmy .dot{background:#0c0c10; border-color:#9a2b2b; box-shadow:0 0 9px rgba(154,43,43,.85);}
+  .villagePin.blackarmy:hover .dot{box-shadow:0 0 14px rgba(210,60,60,.95);}
   .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
   .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
@@ -894,18 +896,24 @@ function villageIconLevel(t, mine){
 }
 function villageMapIconSvg(kind, level, hasWall){
   const barb = kind==="barbarian";
-  const wall = barb ? "#6b5a3f" : "#8a6a45";
-  const roof = barb ? "#4a3826" : "#6b3226";
+  const black = kind==="blackarmy";
+  // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
+  // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
+  // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
+  const wall = black ? "#141417" : (barb ? "#6b5a3f" : "#8a6a45");
+  const roof = black ? "#4a1414" : (barb ? "#4a3826" : "#6b3226");
+  const doorStroke = black ? "#0a0a0c" : "#2a1c10";
   const hut = (x,s)=>`<g transform="translate(${x},2) scale(${s})">
-    <rect x="-9" y="-14" width="18" height="14" fill="${wall}" stroke="#2a1c10" stroke-width="1.4"/>
-    <polygon points="-11,-14 0,-25 11,-14" fill="${roof}" stroke="#2a1c10" stroke-width="1.4"/>
-    <rect x="-3" y="-8" width="6" height="8" fill="#2a1c10"/>
+    <rect x="-9" y="-14" width="18" height="14" fill="${wall}" stroke="${doorStroke}" stroke-width="1.4"/>
+    <polygon points="-11,-14 0,-25 11,-14" fill="${roof}" stroke="${doorStroke}" stroke-width="1.4"/>
+    <rect x="-3" y="-8" width="6" height="8" fill="${doorStroke}"/>
   </g>`;
   const huts = level<=0 ? hut(0,1) : level===1 ? hut(-9,0.82)+hut(9,0.9) : hut(-14,0.78)+hut(0,0.95)+hut(14,0.78);
-  const palisade = hasWall ? `<path d="M -22 4 Q 0 12 22 4" fill="none" stroke="#5a4326" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>` : "";
+  const palisade = hasWall ? `<path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black?'#3a1414':'#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>` : "";
   const flag = kind==="mine"
     ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>`
-    : kind==="player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : "";
+    : kind==="player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>`
+    : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 36" preserveAspectRatio="xMidYMax meet">${palisade}${huts}${flag}</svg>`;
 }
 
@@ -1484,6 +1492,10 @@ function stopPolling(){
 /* ============================= AUTHENTIFICATION ============================= */
 
 const CHANGELOG_ENTRIES = [
+  { tag:"Évènement", icon:"🏴", title:"Lancement officiel : l'Armée Noire", body:"Pour célébrer l'ouverture officielle du jeu, des campements de l'Armée Noire — reconnaissables à leurs pions noirs sur la carte — envahissent temporairement le monde. Cinq rangs (I à V) : les plus faibles et nombreux conviennent aux nouveaux joueurs, les rares campements de Rang V, bien défendus mais riches en ressources et déjà partiellement développés une fois conquis, récompensent les joueurs aguerris. Un succès dédié « Chasseur de l'Armée Noire » suit vos victoires contre eux. Voir l'onglet Aide pour le règlement complet." },
+  { tag:"Amélioration", icon:"🐗", title:"Villages barbares semi-vivants", body:"Conquérir un village barbare ne remet plus systématiquement tous ses bâtiments au niveau 1 : les barbares les mieux établis transmettent désormais un village de départ un peu plus développé, comme sur le jeu officiel." },
+  { tag:"Équilibrage", icon:"⏳", title:"Temps de construction réduits", body:"Les temps de construction des bâtiments, jugés bien trop longs, ont été nettement raccourcis (par exemple une Muraille niveau 1 ne demande plus qu'environ 7 à 8 minutes au lieu de près d'une heure)." },
+  { tag:"Amélioration", icon:"⏱️", title:"Vitesse d'entraînement de la Caserne enfin visible", body:"Le temps d'entraînement de chaque unité (déjà réduit par le niveau de la Caserne) est désormais affiché dans l'onglet Caserne et dans le panneau Empire, pour que le bénéfice de monter la Caserne soit clair." },
   { tag:"Nouveau", icon:"🔭", title:"Contre-espionnage des reconnaissances", body:"Une reconnaissance ne réussit désormais que si le nombre d'Éclaireurs envoyés dépasse strictement celui présent en défense (village + renforts) ; sinon, tous les Éclaireurs envoyés sont repérés et éliminés sans aucun renseignement obtenu, et le propriétaire du village est prévenu de la tentative repoussée (une reconnaissance réussie, elle, reste totalement furtive)." },
   { tag:"Nouveau", icon:"🏰", title:"Panneau Empire : gestion de tous vos villages", body:"Dès que vous possédez 2 villages ou plus, un nouvel onglet « 🏰 Empire » apparaît : Aperçu (tableau de tous vos villages), Notifications (constructions, entraînements et attaques entrantes de tout votre empire triés par ordre d'arrivée), Construction et Troupes (agissez sur n'importe lequel de vos villages sans y basculer), et Envoi de ressources (transfert entre deux villages au choix, pas seulement depuis l'actif)." },
   { tag:"Nouveau", icon:"⚔️", title:"Attaques ennemies visibles avant l'impact", body:"Une attaque ou reconnaissance lancée par un autre joueur contre l'un de vos villages apparaît désormais dans vos Missions en cours (et dans les Notifications de l'onglet Empire) dès son départ, avec l'assaillant, son village d'origine et le temps restant avant l'arrivée — jusqu'ici, seules les ripostes de villages barbares étaient visibles avant coup." },
@@ -1978,7 +1990,16 @@ function renderSidebar(){
       </div>
     </div>` : '';
 
+  const ba = state.blackArmyEvent;
+  const blackArmyBox = (ba && ba.active) ? `
+    <div class="box" style="border-color:#9a2b2b; background:linear-gradient(180deg, rgba(20,20,24,.55), rgba(20,20,24,.15)); box-shadow:0 0 14px rgba(154,43,43,.25);">
+      <h3 style="margin-top:0;">🏴 L'Armée Noire</h3>
+      <p class="small" style="margin:2px 0 4px;">Repérez les villages <b>noirs</b> sur la carte — encore <b>${fmtTime(ba.remainingSec)}</b> avant leur retrait.</p>
+      <p class="small muted" style="margin:0;">${fmt(ba.defeatedCount)} campement${ba.defeatedCount>1?'s':''} vaincu${ba.defeatedCount>1?'s':''} par la communauté · <a href="#" data-open-blackarmy-help="1">règles de l'évènement</a></p>
+    </div>` : '';
+
   side.innerHTML = `
+    ${blackArmyBox}
     ${eventsBox}
     ${resBox}
     <div class="box"><h3>🏗️ File de construction</h3>${bq}</div>
@@ -2005,6 +2026,13 @@ function renderSidebar(){
     const supportId=el.dataset.recallSupport;
     doAction(()=>apiCall("/api/support/recall","POST",{supportId}), "🤝 Rappel envoyé, vos troupes reviennent.", null);
   });
+  const openBlackArmyHelp = side.querySelector("[data-open-blackarmy-help]");
+  if(openBlackArmyHelp) openBlackArmyHelp.onclick=(e)=>{
+    e.preventDefault();
+    closeVillageAction();
+    activeTab="information"; infoSubTab="help"; renderTabs(); renderActiveTabContent();
+    setTimeout(()=>{ document.getElementById("helpBlackArmy")?.scrollIntoView({behavior:"smooth", block:"start"}); }, 30);
+  };
 }
 
 /* Widget de chat flottant, indépendant du système d'onglets : reconstruit la coquille (ouvert/fermé,
@@ -2739,6 +2767,7 @@ function renderLeaderboard(){
 
 const TIER_CLASS=["weak","weak","medium","strong","strong"];
 const TIER_LABEL=["Très faible","Faible","Moyen","Fort","Très fort"];
+const BLACK_ARMY_RANK_LABEL=["I","II","III","IV","V"];
 const DIPLOMACY_LABEL={pact:"Pacte de non-agression", alliance:"Alliance", war:"Guerre"};
 const DIPLOMACY_LABEL_LOWER={pact:"un pacte de non-agression", alliance:"une alliance", war:"un état de guerre"};
 
@@ -3035,11 +3064,17 @@ function renderMap(){
     const sel = ui.selectedVillage===t.id;
     const mine = t.owner===username;
     const rel = !mine && t.isPlayer ? guildRelationFor(t.guildId) : null;
-    const cls = mine ? "player" : (rel ? rel.cls : (t.isPlayer ? "medium" : TIER_CLASS[t.tier]));
-    const iconKind = mine ? "mine" : (t.isPlayer ? "player" : "barbarian");
+    // Campement de l'Armée Noire (évènement de lancement) : reste un village barbare ordinaire
+    // (owner:"barbarian") côté serveur, mais marqué "faction" pour recevoir un pin NOIR distinct
+    // sur la carte, impossible à confondre avec un barbare classique. Une fois conquis, t.isPlayer
+    // devient true et ce branchement ne s'applique plus (pin normal du nouveau propriétaire).
+    const isBlackArmy = !mine && !t.isPlayer && t.faction==="blackArmy";
+    const cls = mine ? "player" : (rel ? rel.cls : (isBlackArmy ? "blackarmy" : (t.isPlayer ? "medium" : TIER_CLASS[t.tier])));
+    const iconKind = mine ? "mine" : (isBlackArmy ? "blackarmy" : (t.isPlayer ? "player" : "barbarian"));
     const icon = villageMapIconSvg(iconKind, villageIconLevel(t, mine), (t.wallLevel||0)>0);
     const bonusTxt = t.resourceBonus ? (" · gisement riche : +"+Math.round(t.resourceBonus.pct*100)+"% "+RES_NAME[t.resourceBonus.res].toLowerCase()) : "";
-    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt;
+    const blackArmyTxt = isBlackArmy ? (" · 🏴 Armée Noire — Rang "+BLACK_ARMY_RANK_LABEL[t.tier||0]) : "";
+    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt+blackArmyTxt;
     const badge = t.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[t.resourceBonus.res]}</span>` : "";
     return `<div class="villagePin ${cls} ${sel?'selected':''}" data-village-pin="${t.id}" style="left:${left}px; top:${top}px;" title="${title}">
       <div class="dot">${icon}${badge}</div>
@@ -3978,6 +4013,8 @@ function renderAdmin(){
     <p class="small muted" id="adminEventDesc" style="margin-top:8px;"></p>
   </div>
 
+  ${renderAdminBlackArmyBox()}
+
   <div class="box" style="margin-bottom:14px;">
     <h3>🚩 Missions en cours (${(adminMissions||[]).length})</h3>
     <p class="small muted">Force la résolution/arrivée immédiate d'une mission (attaque, reconnaissance, soutien...), utile pour débloquer un joueur ou tester.</p>
@@ -4009,6 +4046,35 @@ function renderAdmin(){
 
   ${renderAdminVillagesTable()}
   `;
+}
+
+/* Section "Armée Noire" du panneau Admin : lance/arrête l'évènement de lancement officiel (voir
+   gameLogic.js adminStartBlackArmy/adminStopBlackArmy). Distincte des "Évènements du serveur"
+   ci-dessus car elle ne multiplie rien : elle FAIT APPARAÎTRE de vrais campements sur la carte. */
+function renderAdminBlackArmyBox(){
+  const ba = state.blackArmyEvent;
+  const statusBox = (ba && ba.active) ? `
+    <div class="event-badges" style="margin-bottom:12px;">
+      <span class="event-badge admin" title="🏴 L'Armée Noire — encore ${fmtTime(ba.remainingSec)} (cliquer pour arrêter)" data-stop-blackarmy="1">🏴<span class="event-badge-mult">${fmt(ba.totalSpawned)} campements</span><span class="event-badge-stop">✕</span></span>
+    </div>
+    <p class="small muted">Encore <b>${fmtTime(ba.remainingSec)}</b> avant le retrait automatique des campements non conquis — ${fmt(ba.defeatedCount)} victoire${ba.defeatedCount>1?'s':''} enregistrée${ba.defeatedCount>1?'s':''} jusqu'ici.</p>
+  ` : `<p class="small muted">Aucun évènement Armée Noire actif actuellement.</p>`;
+  return `<div class="box" style="margin-bottom:14px; border-color:#9a2b2b;">
+    <h3>🏴 Évènement : l'Armée Noire</h3>
+    <p class="small muted">Fait apparaître une vague de campements PNJ (pins noirs sur la Carte), plus forts et plus riches que des barbares ordinaires, répartis en 5 Rangs (I faible → V redoutable) pour donner un objectif aussi bien aux nouveaux joueurs qu'aux joueurs multi-villages. Une annonce automatique explique les règles à tous. Un seul évènement à la fois.</p>
+    ${statusBox}
+    <form id="adminBlackArmyForm" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;" ${(ba && ba.active)?'inert':''}>
+      <div>
+        <label class="small muted" for="adminBlackArmyCount">Nombre de campements</label><br>
+        <input type="number" id="adminBlackArmyCount" min="5" max="150" value="40">
+      </div>
+      <div>
+        <label class="small muted" for="adminBlackArmyMinutes">Durée (minutes)</label><br>
+        <input type="number" id="adminBlackArmyMinutes" min="60" max="10080" value="4320">
+      </div>
+      <button type="submit" class="primary" ${(ba && ba.active)?'disabled':''}>🏴 Lancer l'Armée Noire</button>
+    </form>
+  </div>`;
 }
 
 /* Section "gestion groupée" du panneau Admin : applique une action à TOUS les villages d'une
@@ -4232,6 +4298,18 @@ function attachAdminHandlers(){
   document.querySelectorAll("[data-stop-event]").forEach(b=>b.onclick=()=>{
     adminAction(()=>apiCall("/api/admin/event/stop","POST",{id:b.dataset.stopEvent}), "Évènement arrêté.");
   });
+  const blackArmyForm=document.getElementById("adminBlackArmyForm");
+  if(blackArmyForm) blackArmyForm.onsubmit=(e)=>{
+    e.preventDefault();
+    const count=Number(document.getElementById("adminBlackArmyCount").value);
+    const minutes=Number(document.getElementById("adminBlackArmyMinutes").value);
+    if(!count || count<=0){ toast("⚠️ Nombre de campements invalide."); return; }
+    if(!minutes || minutes<=0){ toast("⚠️ Durée invalide."); return; }
+    adminAction(()=>apiCall("/api/admin/blackarmy/start","POST",{count, minutes}), "🏴 L'Armée Noire envahit le monde !");
+  };
+  document.querySelectorAll("[data-stop-blackarmy]").forEach(b=>b.onclick=()=>{
+    adminAction(()=>apiCall("/api/admin/blackarmy/stop","POST",{}), "Évènement Armée Noire arrêté.");
+  });
   const giveAllBtn=document.getElementById("btnGiveAll");
   if(giveAllBtn) giveAllBtn.onclick=()=>{
     const wood=Number(document.getElementById("adminGiveAll_wood").value)||0;
@@ -4428,6 +4506,12 @@ function renderHelp(){
   <p><b>Contre-espionnage :</b> une reconnaissance ne réussit que si le nombre d'Éclaireurs envoyés dépasse strictement le nombre d'Éclaireurs présents en défense dans le village visé (troupes du village + renforts alliés stationnés confondus). En cas d'égalité ou d'infériorité, tous les Éclaireurs envoyés sont repérés et éliminés, sans aucun renseignement obtenu. Une reconnaissance réussie reste totalement furtive (la victime n'est jamais prévenue) ; une reconnaissance repoussée, elle, prévient son propriétaire.</p>
   <h3>Sièges et conquête</h3>
   <p>Le <b>Bélier</b> et la <b>Catapulte</b> sont des unités de siège : envoyées dans une attaque victorieuse contre un village barbare, elles endommagent respectivement sa muraille et sa capacité de stockage (l'entrepôt d'un vrai joueur ne peut pas être endommagé ainsi). Construisez une <b>Académie</b> (dès Hôtel de ville niveau 20 — coûteuse et longue, elle ne peut être bâtie qu'une seule fois) pour former des <b>Nobles</b> : chaque noble survivant à une attaque victorieuse contre un village barbare réduit sa loyauté d'environ 20 à 35% et est alors consommé ; à 0% le village est conquis et devient vôtre. La conquête d'un village appartenant à un autre joueur n'est pas possible dans cette version.</p>
+  <h3 id="helpBlackArmy">🏴 Évènement : l'Armée Noire</h3>
+  <p>Pour marquer l'ouverture officielle du jeu, une vague de campements de l'<b>Armée Noire</b> peut apparaître sur la carte pendant une durée limitée (bannière noire et rouge dans la colonne de gauche tant que l'évènement est actif). Ce sont des campements PNJ hostiles, en tout point semblables à des villages barbares pour le combat et la conquête, mais reconnaissables entre mille : <b>leur pin sur la Carte est noir</b>, avec une lueur rouge, jamais la couleur d'un barbare classique ni celle d'un autre joueur.</p>
+  <p>Chaque campement a un <b>Rang</b> (de I à V, indiqué au survol de son pin) qui détermine sa force :</p>
+  <p><b>Rang I-II</b> (les plus nombreux) sont volontairement accessibles à un tout nouveau village avec seulement quelques troupes entraînées — un bon premier objectif après vos toutes premières troupes. <b>Rang III-IV</b> demandent une petite armée dédiée et une muraille à entamer. <b>Rang V</b> (rares) sont redoutables : garnison conséquente et muraille haute, à réserver aux joueurs multi-villages avec béliers et catapultes en nombre.</p>
+  <p>Chaque victoire contre un campement de l'Armée Noire rapporte un <b>butin nettement plus riche</b> qu'un barbare ordinaire, et compte pour le succès <b>Chasseur de l'Armée Noire</b> (sous-onglet Succès). Conquérir un campement (comme pour un barbare classique, via un Noble) est encore plus intéressant : contrairement aux barbares normaux (1 sur 8 seulement), un campement de l'Armée Noire garantit <b>toujours</b> un gisement riche (+10% de production sur une ressource, définitivement) une fois conquis, et son niveau de développement initial reflète son Rang — un Rang V conquis démarre avec des bâtiments déjà bien avancés, pas au niveau 1.</p>
+  <p>L'évènement est temporaire : passé son délai, les campements pas encore conquis se retirent automatiquement du monde (une annonce prévient de son lancement et de sa fin). Aucun risque à s'y frotter au-delà du combat lui-même : comme pour un barbare, si vous perdez, vous ne perdez que les troupes envoyées.</p>
   <h3>Gisements riches</h3>
   <p>Environ 1 village barbare sur 8 recèle un <b>gisement riche</b> en une ressource tirée au hasard (bois, argile ou fer), repérable sur la Carte par un petit badge ${RES_ICON.iron} sur son pin (survolez ou touchez le pin pour voir laquelle). Une fois ce village conquis par un Noble, il produit <b>+10%</b> de cette ressource — un bonus propre à ce village précis, qui ne s'applique jamais à vos autres villages.</p>
   <h3>Un monde vivant, avec de vrais joueurs</h3>
