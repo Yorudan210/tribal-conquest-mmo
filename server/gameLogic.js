@@ -798,8 +798,14 @@ function resolveAttack(db, m){
         // Un village barbare n'a pas la même structure qu'un village de joueur (pas de
         // "buildings", de files de construction/entraînement ni de soutien) : sans cette
         // conversion, runTick() plantait dès le tick suivant sur ce village fraîchement conquis.
+        // Comme sur le jeu officiel, un village barbare est "semi-vivant" : selon son tier (0 à 4,
+        // sa force avant conquête), il a déjà un peu de développement, et noblir ne repart donc pas
+        // forcément de zéro partout -- les niveaux de départ sont dérivés du tier plutôt que figés.
         target.buildings = target.buildings || {
-          hq:1, wood:1, clay:1, iron:1, warehouse:1, farm:1, barracks:0,
+          hq: 1+Math.floor((target.tier||0)/2),
+          wood: 1+(target.tier||0), clay: 1+(target.tier||0), iron: 1+(target.tier||0),
+          warehouse: 1+Math.floor((target.tier||0)*0.75), farm: 1+Math.floor((target.tier||0)*0.75),
+          barracks: target.tier||0,
           wall: Math.max(0, target.wallLevel||0), hide: Math.max(0, target.hideLevel||0), academy:0
         };
         target.buildQueue = target.buildQueue || [];
