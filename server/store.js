@@ -40,6 +40,7 @@ function emptyDb(){
     diplomacy: [],        // [{id, guildA, guildB, type:"pact"|"alliance"|"war", status:"pending"|"active", proposedBy, createdAt}, ...]
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     serverEvents: [],     // [{id, key, name, icon, affects, multiplier, startAt, endAt}, ...] évènements admin en cours (voir gameLogic.js)
+    blackArmyEvent: null, // {active, startAt, endAt, totalSpawned, defeatedCount} | null -- évènement "Armée Noire" (voir gameLogic.js)
     market: [],           // [{id, seller, sellerVillageId, giveRes, giveAmount, wantRes, wantAmount, createdAt}, ...] offres d'échange publiques (voir gameLogic.js)
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
@@ -68,7 +69,8 @@ function migrateDb(){
     // Compteurs de Succès (voir gameLogic.js/computeAchievements) : absents des comptes créés avant
     // l'introduction des Succès (qui remplacent les anciens Objectifs, jamais migrés) — sans cette
     // ligne, bumpStat() créerait l'objet à la volée, mais on préfère un état initial explicite ici.
-    if(!db.users[uname].stats) db.users[uname].stats = { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, opponents:[] };
+    if(!db.users[uname].stats) db.users[uname].stats = { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, opponents:[] };
+    if(db.users[uname].stats.blackArmyDefeated===undefined) db.users[uname].stats.blackArmyDefeated = 0;
     // Village actuellement géré dans l'interface (peut différer du village d'origine une fois
     // qu'un joueur possède plusieurs villages) : par défaut, son village d'origine.
     if(!db.users[uname].activeVillageId) db.users[uname].activeVillageId = db.users[uname].villageId;

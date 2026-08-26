@@ -121,7 +121,7 @@ async function handleApi(req, res, pathname, url){
       // Compteurs cumulatifs utilisés par les Succès (voir computeAchievements, gameLogic.js) — au
       // niveau du COMPTE (pas du village, contrairement aux anciens Objectifs), pour rester valables
       // même en cas de conquête/perte de village.
-      stats: { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, opponents:[] }
+      stats: { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, opponents:[] }
     };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
@@ -482,6 +482,19 @@ async function handleApi(req, res, pathname, url){
       if(result.error) return sendJson(res, 400, result);
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/blackarmy/start" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminStartBlackArmy(db, body.count, body.minutes);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, spawned: result.spawned, snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/blackarmy/stop" && req.method==="POST"){
+      const result = game.adminStopBlackArmy(db);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
     }
 
     // ---- Panneau Admin : gestion de TOUS les villages (pas seulement le village d'origine de
