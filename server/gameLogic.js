@@ -890,26 +890,23 @@ function resolveAttack(db, m){
   // Répartit les pertes du défenseur entre ses propres troupes et les renforts alliés stationnés.
   const defenderLosses = applyDefenseLosses(target, defenderLossFrac);
 
-  /* Survie du noble : avec l'ancienne règle (même fraction de pertes que le reste de l'armée),
-     un noble envoyé seul (le cas le plus courant) mourait TOUJOURS dès qu'il y avait la moindre
-     perte, même infime (Math.floor(1*0.98)=0) — impossible de conquérir quoi que ce soit.
-     Nouvelle règle : chaque noble est tiré au sort indépendamment, avec une chance de survie qui
-     augmente avec la domination de l'attaque (donc avec l'escorte envoyée pour le protéger). */
-  let nobleSurvivedCount=0, nobleSurvivalChancePct=null;
+  /* Survie du noble : règle déterministe (remplace l'ancienne règle probabiliste) — le noble n'est
+     JAMAIS consommé au hasard. Il survit systématiquement tant qu'au moins NOBLE_ESCORT_SURVIVAL_PCT
+     de l'escorte envoyée (les troupes non-nobles de la même attaque) est revenue vivante du combat,
+     que l'attaque soit gagnée ou perdue ; en dessous de ce seuil, il est perdu avec le reste de
+     l'armée. "Escorte revenue vivante" = 1-attackerLossFrac, la même fraction déjà appliquée
+     ci-dessus à toutes les troupes non-nobles de cette attaque (donc cohérente avec les pertes
+     réellement affichées dans le rapport). Un noble envoyé seul (sans escorte) suit la même règle :
+     attackerLossFrac reste défini dans ce cas (calculé sur la puissance totale envoyée, noble compris). */
+  const NOBLE_ESCORT_SURVIVAL_PCT = 20;
+  let nobleSurvivedCount=0, nobleEscortSurvivorPct=null;
   if(originalNobleCount>0){
-    let noblesSurviving=0, survivalChance;
-    if(winner==="attacker"){
-      const dominance = clamp(1-attackerLossFrac, 0, 1); // proche de 1 si l'attaque écrase la défense
-      survivalChance = clamp(0.15+dominance*0.8, 0.05, 0.97);
-      for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
-    } else {
-      survivalChance = 0.05; // défaite : le noble a une petite chance de s'échapper malgré tout
-      for(let i=0;i<originalNobleCount;i++){ if(Math.random()<survivalChance) noblesSurviving++; }
-    }
+    const escortSurvivorFrac = clamp(1-attackerLossFrac, 0, 1);
+    nobleEscortSurvivorPct = Math.round(escortSurvivorFrac*100);
+    const noblesSurviving = (nobleEscortSurvivorPct>=NOBLE_ESCORT_SURVIVAL_PCT) ? originalNobleCount : 0;
     m.troops.noble = noblesSurviving;
     attackerLosses.noble = originalNobleCount-noblesSurviving;
     nobleSurvivedCount = noblesSurviving;
-    nobleSurvivalChancePct = Math.round(survivalChance*100);
   }
 
   // Anéantissement total (m.troops ne contient plus que les SURVIVANTS à ce stade) : s'il n'en
@@ -1035,7 +1032,7 @@ function resolveAttack(db, m){
     attackPower:Math.round(attackPower), effAttack:Math.round(effAttack), defensePower:Math.round(defensePower),
     luck, attackShare,
     troopsSent, attackerSurvivors, attackerLosses, attackerLossPct, defenderLosses, defenderLossPct, loot,
-    nobleSent: originalNobleCount, nobleSurvived: nobleSurvivedCount, nobleSurvivalChancePct,
+    nobleSent: originalNobleCount, nobleSurvived: nobleSurvivedCount, nobleEscortSurvivorPct,
     wallDamage, targetWallLevelAfter, storageDamageFrac, targetResCapAfter,
     loyaltyReduced, conquered, targetLoyalty: target.loyalty
   };
