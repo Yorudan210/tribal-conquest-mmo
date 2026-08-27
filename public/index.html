@@ -546,6 +546,45 @@
   body.theme-maquette nav#tabs button{ color:#c9b489; }
   body.theme-maquette nav#tabs button:hover:not(.active){ color:#f2e6c8; }
 
+  /* Texte agrandi dans ce thème (lisibilité façon manuscrit) : le thème "Bois sombre" garde ses
+     tailles d'origine à l'identique, seules ces règles plus spécifiques (activées par la classe
+     body.theme-maquette) s'appliquent en plus. Le texte incrusté dans les SVG (carte, rapports de
+     combat) est volontairement laissé de côté : il est positionné au pixel près dans des viewBox
+     de taille fixe et déborderait si on l'agrandissait. */
+  body.theme-maquette button{ font-size:14.5px; }
+  body.theme-maquette input[type=number], body.theme-maquette input[type=text],
+  body.theme-maquette input[type=password], body.theme-maquette select{ font-size:14.5px; }
+  body.theme-maquette .res .val{ font-size:16px; }
+  body.theme-maquette .res .rate{ font-size:12px; }
+  body.theme-maquette .res-box .res .val{ font-size:15px; }
+  body.theme-maquette .village-title .name{ font-size:15px; }
+  body.theme-maquette .village-title .coord{ font-size:13px; }
+  body.theme-maquette .village-title input[type=text]{ font-size:16px; }
+  body.theme-maquette .box h3{ font-size:16px; }
+  body.theme-maquette .card h4{ font-size:17px; }
+  body.theme-maquette .card .desc, body.theme-maquette .card .cost{ font-size:13px; }
+  body.theme-maquette .queue-item, body.theme-maquette .mission-item{ font-size:14px; }
+  body.theme-maquette .troop-row{ font-size:14px; }
+  body.theme-maquette .stats-mini{ font-size:12px; }
+  body.theme-maquette table{ font-size:14px; }
+  body.theme-maquette .tag{ font-size:11px; }
+  body.theme-maquette .report .title{ font-size:15px; }
+  body.theme-maquette .report .details{ font-size:13px; }
+  body.theme-maquette .toast{ font-size:13.5px; }
+  body.theme-maquette .muted{ font-size:13.5px; }
+  body.theme-maquette .small{ font-size:12.5px; }
+  body.theme-maquette footer{ font-size:12.5px; }
+  body.theme-maquette .chart-title{ font-size:11px; }
+  body.theme-maquette .filter-btn{ font-size:12.5px; }
+  body.theme-maquette .shop-card h4{ font-size:16px; }
+  body.theme-maquette .donation-row{ font-size:14px; }
+  body.theme-maquette #chatWidget{ font-size:14.5px; }
+  body.theme-maquette .chat-tab{ font-size:12.5px; }
+  body.theme-maquette .chat-msg{ font-size:13.5px; }
+  body.theme-maquette .chat-msg .chat-time{ font-size:11px; }
+  body.theme-maquette .tutorial-card h3{ font-size:21px; }
+  body.theme-maquette .tutorial-card p{ font-size:14.5px; }
+
   .theme-toggle-btn{ font-size:11.5px; padding:6px 12px; }
 
   /* ----------------------------------------------------------------------
@@ -557,7 +596,7 @@
   /* Carte : légende sous forme de puces (remplace visuellement les "■" en ligne) */
   .legend-chip i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:3px; vertical-align:1px; }
   body.theme-maquette .legend-row{ display:flex; flex-wrap:wrap; gap:8px; margin:6px 0; }
-  body.theme-maquette .legend-chip{ display:inline-flex; align-items:center; gap:5px; padding:4px 10px; background:var(--panel2); border:1px solid var(--border); border-radius:999px; font-size:11.5px; color:var(--text); }
+  body.theme-maquette .legend-chip{ display:inline-flex; align-items:center; gap:5px; padding:4px 10px; background:var(--panel2); border:1px solid var(--border); border-radius:999px; font-size:13px; color:var(--text); }
   body.theme-maquette .legend-chip i{ width:9px; height:9px; border-radius:50%; }
 
   /* Caserne : badge illustré par unité (masqué en Bois sombre, la ligne reste identique) */
@@ -567,7 +606,7 @@
   body.theme-maquette .troop-row{ display:flex; flex-direction:column; align-items:stretch; gap:8px; background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; }
   body.theme-maquette .troop-row .thead{ display:flex; align-items:center; gap:12px; }
   body.theme-maquette .troop-row .ticon{ display:block; flex-shrink:0; }
-  body.theme-maquette .troop-row .tname{ width:auto; font-size:15px; }
+  body.theme-maquette .troop-row .tname{ width:auto; font-size:16px; }
 
   /* Classement : médaille dégradée pour le podium (nombre seul au-delà) */
   .rank-medal{ display:none; }
@@ -585,12 +624,12 @@
     position:absolute; inset:0; display:flex; align-items:center; gap:16px; padding:0 22px;
   }
   .guild-banner-title{ font-family:'Cinzel', Georgia, serif; font-size:17px; color:#f6ecd3; }
-  .guild-banner-sub{ font-size:12px; color:#e6cfd4; margin-top:2px; }
+  .guild-banner-sub{ font-size:13.5px; color:#e6cfd4; margin-top:2px; }
 
   /* Rapports : pastille victoire/défaite (le texte reste identique en Bois sombre) */
   .report-pill{ display:inline; }
   body.theme-maquette .report-pill{
-    display:inline-block; padding:3px 10px; border-radius:999px; font-size:10.5px;
+    display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px;
     font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-right:8px;
   }
   body.theme-maquette .report-pill.win{ background:rgba(61,107,82,.18); color:var(--green); border:1px solid var(--green); }
