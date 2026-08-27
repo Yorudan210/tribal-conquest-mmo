@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Conquête Tribale — jeu de stratégie navigateur</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
+<!-- Polices du thème alternatif "Parchemin" (voir body.theme-maquette plus bas) — sans effet tant
+     que ce thème n'est pas activé, chargées ici pour éviter tout flash de police au premier bascule. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
   :root{
     --bg:#ecdcae; --bg2:#241a10; --panel:#2e2417; --panel2:#3c2f1c;
@@ -482,6 +487,66 @@
   /* ---- Panneau Admin ---- */
   #tabContent tr.admin-selected{background:rgba(193,121,62,.16);}
   #tabContent tr[data-admin-select]{cursor:pointer;}
+
+  /* ======================================================================
+     THÈME ALTERNATIF "PARCHEMIN" — reprend la palette/typo des maquettes
+     (fond crème, encre sombre, Cinzel/Crimson Pro). Activé/désactivé par
+     le bouton en bas de page (voir #btnThemeToggle / applyTheme()).
+     La bannière du logo et la barre de navigation de gauche restent
+     volontairement en bois sombre dans les deux thèmes : c'est le
+     "cadre" de l'appli, pas le contenu qu'on habille. ====================== */
+  body.theme-maquette{
+    --panel:#f1e5c7; --panel2:#e9dcb8; --bg:#f4e9cf;
+    --text:#2a1c10; --text-dim:#6b5a42; --gold:#b87a3a;
+    --green:#3d6b52; --red:#7a2530; --blue:#4a5a8f;
+    --shadow-sm:0 2px 6px rgba(72,48,20,.18);
+    --shadow-md:0 4px 16px rgba(72,48,20,.22);
+    --shadow-lg:0 8px 28px rgba(72,48,20,.28);
+    --ring:0 0 0 3px rgba(184,122,58,.28);
+    font-family:'Crimson Pro', Georgia, serif;
+    background:#f4e9cf;
+  }
+  body.theme-maquette::before{
+    background-image:none;
+    background:radial-gradient(ellipse at top, #f7ecd2 0%, #ecdcb4 55%, #ddc691 100%);
+  }
+  body.theme-maquette h1, body.theme-maquette h2, body.theme-maquette h3{
+    font-family:'Cinzel', Georgia, serif; color:#241708;
+  }
+  body.theme-maquette .res .val, body.theme-maquette .res .rate,
+  body.theme-maquette .village-title .coord{ font-family:'IBM Plex Mono', ui-monospace, monospace; }
+
+  /* Boutons/champs : les dégradés d'origine supposaient un texte clair — on leur donne
+     leur propre traitement clair plutôt que de s'appuyer sur --text (repris par le cadre sombre). */
+  body.theme-maquette button{
+    background:linear-gradient(180deg,#efe2bd,#ddc999); color:#2a1c10; border-color:#8f5c26;
+    box-shadow:0 2px 6px rgba(72,48,20,.16), inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  body.theme-maquette button:hover:not(:disabled){
+    background:linear-gradient(180deg,#f7ecd2,#e6d3a1); border-color:#b87a3a;
+  }
+  body.theme-maquette button.primary{ background:linear-gradient(180deg,#c78a48,#a3703c); color:#fbf3dd; }
+  body.theme-maquette button.danger{ background:linear-gradient(180deg,#a4453a,#7a2530); color:#fbf3dd; border-color:#5c2018; }
+  body.theme-maquette input[type=number], body.theme-maquette input[type=text],
+  body.theme-maquette input[type=password], body.theme-maquette select{
+    background:#fbf3dd; color:#2a1c10; border-color:#8f5c26;
+    box-shadow:inset 0 1px 4px rgba(72,48,20,.15);
+  }
+
+  /* Barre du village (nom/coordonnées) : devient une carte claire, comme dans les maquettes */
+  body.theme-maquette header#topbar{
+    background:linear-gradient(180deg, rgba(241,229,199,.95), rgba(233,215,176,.95));
+  }
+
+  /* Bannière de conquête : dégradé volontairement sombre même dans ce thème (effet dramatique) */
+  body.theme-maquette #battleBanner.conquest{ color:#f2e6c8; }
+
+  /* Bannière du logo + rail de navigation gauche : restent en bois sombre dans les deux thèmes,
+     on ne pin que leurs libellés pour qu'ils restent lisibles sur ce fond resté sombre. */
+  body.theme-maquette nav#tabs button{ color:#c9b489; }
+  body.theme-maquette nav#tabs button:hover:not(.active){ color:#f2e6c8; }
+
+  .theme-toggle-btn{ font-size:11.5px; padding:6px 12px; }
 </style>
 </head>
 <body>
@@ -507,7 +572,10 @@
         <main id="tabContent"></main>
         <aside id="sidebar"></aside>
       </div>
-      <footer>Conquête Tribale — monde partagé en temps réel. Votre progression est sauvegardée automatiquement sur le serveur.</footer>
+      <footer style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <span>Conquête Tribale — monde partagé en temps réel. Votre progression est sauvegardée automatiquement sur le serveur.</span>
+        <button id="btnThemeToggle" class="theme-toggle-btn" title="Changer l'apparence du jeu">🪵 Thème : Bois sombre</button>
+      </footer>
     </div>
   </div>
 </div>
@@ -4616,9 +4684,27 @@ function renderAll(){
   renderTopBar(); renderTabs(); renderActiveTabContent(); renderSidebar();
 }
 
+/* ---- Thème visuel (Bois sombre / Parchemin) : bouton en bas de page, persisté par joueur ---- */
+const THEME_KEY = "ct_theme";
+function applyTheme(theme){
+  document.body.classList.toggle("theme-maquette", theme==="maquette");
+  const btn=document.getElementById("btnThemeToggle");
+  if(btn) btn.textContent = theme==="maquette" ? "🪵 Thème : Bois sombre" : "📜 Thème : Parchemin";
+  localStorage.setItem(THEME_KEY, theme);
+}
+function initTheme(){
+  applyTheme(localStorage.getItem(THEME_KEY) || "classic");
+  const btn=document.getElementById("btnThemeToggle");
+  if(btn) btn.onclick=()=>{
+    const current = document.body.classList.contains("theme-maquette") ? "maquette" : "classic";
+    applyTheme(current==="maquette" ? "classic" : "maquette");
+  };
+}
+
 function start(){
   document.getElementById("gameRoot").style.display="none";
   window.addEventListener("resize", ()=>{ if(activeTab==="map") positionMapWorld(); });
+  initTheme();
   tryResumeSession();
 }
 
