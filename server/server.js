@@ -234,6 +234,13 @@ async function handleApi(req, res, pathname, url){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/train/cancel" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doTrainCancel(db, username, body.index, body.villageId);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
   if(pathname==="/api/support/send" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doSendSupport(db, username, body.targetId, body.troops||{});

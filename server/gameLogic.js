@@ -436,6 +436,31 @@ function doTrain(db, username, key, count, villageId){
   return { ok: true };
 }
 
+/* Annule un ordre d'entraînement en file (par son index) et rembourse intégralement son coût —
+   même principe que doBuildCancel pour la file de construction. Le remboursement ne porte que sur
+   order.count, c'est-à-dire les unités PAS ENCORE produites : celles déjà sorties de cet ordre (le
+   compteur décroît à chaque unité terminée, voir runTick) sont déjà dans v.troops et leur coût déjà
+   dépensé n'est pas remboursé une seconde fois. Contrairement à la file de construction, les ordres
+   d'entraînement n'ont pas besoin d'être re-chaînés entre eux après suppression : seul le premier de
+   la file est activement décompté par runTick (chaque ordre suit son propre unitStartAt/unitDuration
+   fixés à sa mise en file), donc en retirer un n'affecte pas le minutage des autres. */
+function doTrainCancel(db, username, index, villageId){
+  const v = villageId ? villageOwnedByUser(db, username, villageId) : villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  index = Math.floor(Number(index));
+  if(!Number.isInteger(index) || index<0 || index>=v.trainQueue.length) return { error: "Élément de file introuvable." };
+  const order = v.trainQueue[index];
+  const t = TROOPS[order.troop];
+  const cost = { wood: t.cost.wood*order.count, clay: t.cost.clay*order.count, iron: t.cost.iron*order.count };
+  const cap = storageCap(v.buildings.warehouse);
+  // Comme pour doBuildCancel : ne jamais faire redescendre un stock déjà au-dessus du plafond.
+  for(const r of ["wood","clay","iron"]){
+    v.resources[r] = Math.max(v.resources[r], Math.min(v.resources[r]+cost[r], cap));
+  }
+  v.trainQueue.splice(index, 1);
+  return { ok: true };
+}
+
 /* Licencie (détruit définitivement) des troupes STATIONNÉES dans le village actif — jamais celles
    parties en mission (m.troops, décompté du village dès le départ, voir doMission) ni celles encore
    en formation (v.trainQueue). Aucun remboursement de ressources : à la différence de l'annulation
@@ -2400,7 +2425,7 @@ function buildSnapshot(db, username){
 module.exports = {
   now, villageByUser, villageOwnedByUser, homeVillageOf, myVillages, myVillagesDetailed, doSwitchVillage,
   villageWall, villageHide, villageResCap, popUsed,
-  doBuild, doBuildCancel, doTrain, doDisbandTroops, doMission, doCancelMission, doRename, runTick, buildSnapshot,
+  doBuild, doBuildCancel, doTrain, doTrainCancel, doDisbandTroops, doMission, doCancelMission, doRename, runTick, buildSnapshot,
   completeMission,
   doChatSend, doReportDelete, doReportClear, isAdminUser, adminListPlayers, adminSetAdmin,
   adminDeletePlayer,
