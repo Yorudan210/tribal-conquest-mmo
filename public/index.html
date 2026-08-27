@@ -634,6 +634,41 @@
   }
   body.theme-maquette .report-pill.win{ background:rgba(61,107,82,.18); color:var(--green); border:1px solid var(--green); }
   body.theme-maquette .report-pill.lose{ background:rgba(122,37,48,.15); color:var(--red); border:1px solid var(--red); }
+
+  /* Village : liste compacte des bâtiments à côté de la scène (maquette "Direction A", le tout
+     premier écran choisi en début de session). En Bois sombre, .village-blist reste masquée et
+     .village-top garde son comportement de bloc d'origine — la scène occupe donc toute la largeur
+     exactement comme avant. */
+  .village-blist{ display:none; }
+  body.theme-maquette .village-top{ display:flex; gap:16px; align-items:stretch; margin-bottom:14px; }
+  body.theme-maquette .village-scene{ width:42%; flex:0 0 42%; margin-bottom:0; }
+  body.theme-maquette .village-blist{
+    display:flex; flex-direction:column; flex:1 1 0; min-width:0; overflow-y:auto; padding:6px 12px;
+  }
+  .blist-row{ display:none; }
+  body.theme-maquette .blist-row{
+    display:flex; align-items:center; gap:10px; padding:7px 2px; border-bottom:1px solid var(--border);
+    cursor:pointer; border-radius:6px; transition:background .15s ease;
+  }
+  body.theme-maquette .blist-row:last-child{ border-bottom:none; }
+  body.theme-maquette .blist-row:hover{ background:rgba(184,122,58,.14); }
+  body.theme-maquette .blist-row.selected{ background:rgba(184,122,58,.2); }
+  body.theme-maquette .blist-row .bname{ font-weight:600; font-size:14px; color:var(--text); flex-grow:1; }
+  body.theme-maquette .blist-row .bname.locked{ color:var(--text-dim); font-weight:normal; }
+  body.theme-maquette .blist-row .blevel{
+    font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:12.5px; color:var(--gold); white-space:nowrap;
+  }
+  body.theme-maquette .blist-row .blevel.muted{ color:var(--text-dim); font-size:11px; }
+  body.theme-maquette .blist-row .bup{
+    width:22px; height:22px; border-radius:5px; background:var(--gold); color:#fbf3dd;
+    display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0;
+  }
+  body.theme-maquette .blist-row .bup.disabled{ background:var(--border); color:var(--text-dim); }
+  @media(max-width:820px){
+    body.theme-maquette .village-top{ flex-direction:column; }
+    body.theme-maquette .village-scene{ width:100%; flex:1 1 auto; }
+    body.theme-maquette .village-blist{ max-height:320px; }
+  }
 </style>
 </head>
 <body>
@@ -649,6 +684,7 @@
     <pattern id="tex-clay" width="11" height="11" patternUnits="userSpaceOnUse"><rect width="11" height="11" fill="#b06b3e"></rect><ellipse cx="3" cy="3" rx="2.4" ry="1.6" fill="#96552f"></ellipse><ellipse cx="8" cy="7" rx="2.2" ry="1.5" fill="#c37c4d"></ellipse></pattern>
     <pattern id="tex-cloth" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#e6d9b0"></rect><path d="M0 0L8 8M8 0L0 8" stroke="#d0bd88" stroke-width="0.6"></path></pattern>
     <pattern id="tex-cloth-burgundy" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#8a3040"></rect><path d="M0 0L8 8M8 0L0 8" stroke="#752738" stroke-width="0.6"></path></pattern>
+    <pattern id="tex-stone-muted" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#b8b2a3"></rect><rect width="6" height="4" fill="#a29c8d"></rect><rect x="7" width="7" height="4" fill="#aca690"></rect><rect y="5" width="4" height="4" fill="#aca690"></rect><rect x="5" y="5" width="9" height="4" fill="#a29c8d"></rect></pattern>
     <radialGradient id="grad-gold" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fbe38a"></stop><stop offset="100%" stop-color="#b8860b"></stop></radialGradient>
     <radialGradient id="grad-silver" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#f2f2f2"></stop><stop offset="100%" stop-color="#9a9a9a"></stop></radialGradient>
     <radialGradient id="grad-bronze" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#e0a25c"></stop><stop offset="100%" stop-color="#8f5c26"></stop></radialGradient>
@@ -1068,6 +1104,19 @@ function rankBadgeSvg(rank){
 }
 function rankCell(rank){
   return rank<=3 ? `${rankBadgeSvg(rank)}<span class="rank-plain">${rank}</span>` : `<span class="rank-plain">${rank}</span>`;
+}
+
+/* ---- Badge de bâtiment (Village, thème Parchemin uniquement — voir renderBuildingsList) ----
+   Simple pastille texturée (sans glyphe), comme dans la maquette Direction A : le nom suffit à
+   identifier le bâtiment, la texture rappelle juste son "matériau". */
+const BUILDING_TEX = {
+  hq:'tex-stone', wood:'tex-wood', clay:'tex-clay', iron:'tex-metal', warehouse:'tex-tile',
+  farm:'tex-hay', barracks:'tex-stone-muted', wall:'tex-stone', hide:'tex-wood',
+  academy:'tex-cloth', guildHall:'tex-cloth-burgundy'
+};
+function buildingBadgeSvg(key){
+  const tex = BUILDING_TEX[key] || 'tex-stone';
+  return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="url(#${tex})" stroke="rgba(42,28,16,0.3)"></circle></svg>`;
 }
 function treeSvg(x,y,scale){
   return `<g transform="translate(${x},${y}) scale(${scale})">
@@ -2503,11 +2552,58 @@ function renderBuildings(){
   const transferBox = renderVillageTransferBox();
 
   return `<h2>Votre village</h2>
-    <p class="muted small">Cliquez sur un bâtiment du village pour voir ses détails et l'améliorer.</p>
-    <div class="village-scene">${renderVillageScene()}</div>
+    <p class="muted small">Cliquez sur un bâtiment du village (ou de la liste ci-contre) pour voir ses détails et l'améliorer.</p>
+    <div class="village-top">
+      <div class="village-scene">${renderVillageScene()}</div>
+      <div class="box village-blist">${renderBuildingsList()}</div>
+    </div>
     ${detail}
     ${buildMenu}
     ${transferBox}`;
+}
+
+/* ---- Liste compacte des bâtiments (Village, thème Parchemin uniquement) ----
+   Reprend la maquette "Direction A" retenue au départ : à côté de la scène du village, une liste
+   qui donne d'un coup d'œil le niveau de CHAQUE bâtiment (y compris le Hall de guilde, absent de
+   la scène — voir commentaire sur BUILD_ORDER) avec une flèche d'amélioration. Cliquer une ligne
+   sélectionne ce bâtiment exactement comme un clic sur la scène (même attribut data-plot, même
+   gestionnaire dans attachTabHandlers) — sauf le Hall de guilde, qui s'améliore depuis l'onglet
+   Guilde et ouvre donc cet onglet plutôt qu'une sélection ici. En thème Bois sombre, la liste
+   entière reste masquée (voir .village-blist) et l'écran garde son rendu d'origine à l'identique. */
+function renderBuildingsList(){
+  const v=state.village;
+  const keys=[...BUILD_ORDER, "guildHall"];
+  const rows = keys.map(key=>{
+    const b=BUILDINGS[key], lvl=v.buildings[key]||0;
+    const lockedReq = b.requires && Object.entries(b.requires).some(([rk,rv])=>(v.buildings[rk]||0)<rv);
+    const isEmpty = lvl<=0;
+    const frontQueued = state.village.buildQueue.length && state.village.buildQueue[0].key===key;
+    const isGuildHall = key==="guildHall";
+    const navAttr = isGuildHall ? `data-goto-tab="guild"` : `data-plot="${key}"`;
+    const selected = !isGuildHall && ui.selectedBuilding===key;
+    let levelHtml, upHtml;
+    if(frontQueued){
+      const remain=Math.max(0, state.village.buildQueue[0].startAt+state.village.buildQueue[0].duration-estimateNow());
+      levelHtml = `<span class="blevel muted">🔨 ${fmtTime(remain)}</span>`;
+      upHtml = `<span class="bup disabled">▲</span>`;
+    } else if(lockedReq){
+      levelHtml = `<span class="blevel muted">Verrouillé</span>`;
+      upHtml = `<span class="bup disabled">▲</span>`;
+    } else if(isEmpty){
+      levelHtml = `<span class="blevel muted">Non construit</span>`;
+      upHtml = `<span class="bup">▲</span>`;
+    } else {
+      levelHtml = `<span class="blevel">Niv. ${lvl}${lvl>=b.max?' (max)':''}</span>`;
+      upHtml = `<span class="bup">▲</span>`;
+    }
+    return `<div class="blist-row ${selected?'selected':''}" ${navAttr} title="${b.name}${isGuildHall?' — géré depuis l\'onglet Guilde':''}">
+      ${buildingBadgeSvg(key)}
+      <span class="bname ${lockedReq&&!frontQueued?'locked':''}">${b.name}</span>
+      ${levelHtml}
+      ${upHtml}
+    </div>`;
+  }).join("");
+  return rows;
 }
 
 /* Transfert instantané de ressources entre deux villages du MÊME joueur (aucun marchand, aucun
@@ -4761,6 +4857,12 @@ function attachTabHandlers(){
   document.querySelectorAll("[data-plot]").forEach(el=>el.onclick=()=>{
     ui.selectedBuilding = el.dataset.plot;
     renderActiveTabContent();
+  });
+  // Navigation générique vers un autre onglet (utilisé par la liste de bâtiments du thème
+  // Parchemin pour la ligne "Hall de guilde", qui se gère depuis l'onglet Guilde et non ici).
+  document.querySelectorAll("[data-goto-tab]").forEach(el=>el.onclick=()=>{
+    closeVillageAction();
+    activeTab = el.dataset.gotoTab; renderTabs(); renderActiveTabContent();
   });
   document.querySelectorAll("[data-build]").forEach(b=>b.onclick=()=>queueBuild(b.dataset.build));
   const transferBtn=document.getElementById("btnVillageTransfer");
