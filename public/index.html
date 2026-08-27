@@ -153,6 +153,23 @@
 
   .grid-buildings{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;}
 
+  /* Commandant (voir renderCommander) */
+  .cmd-branches{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;}
+  .cmd-branch{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:8px;}
+  .cmd-branch h3{font-size:14px; margin:0 0 4px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  .cmd-tier{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; transition:background .15s ease, border-color .15s ease;}
+  .cmd-tier.unlocked{border-color:var(--green,#8fd06a); background:rgba(143,208,106,.10);}
+  .cmd-tier-final{border-style:dashed;}
+  .cmd-tier-head{display:flex; align-items:flex-start; gap:8px;}
+  .cmd-tier-num{flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--gold); color:#241a0d; font-size:11px; font-weight:bold; display:flex; align-items:center; justify-content:center;}
+  .cmd-tier.unlocked .cmd-tier-num{background:var(--green,#8fd06a);}
+  .cmd-tier-desc{font-size:12px; color:var(--text); flex:1;}
+  .cmd-tier-status{font-size:11px;}
+  .cmd-status-done{color:var(--green,#8fd06a); font-weight:bold;}
+  body.theme-maquette .cmd-branch h3{ font-size:16px; }
+  body.theme-maquette .cmd-tier-desc{ font-size:13.5px; }
+  body.theme-maquette .cmd-tier-status{ font-size:12.5px; }
+
   .village-scene{
     position:relative; width:100%; aspect-ratio:16/10;
     border:2px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:14px;
@@ -203,12 +220,26 @@
   .queue-item:last-child, .mission-item:last-child{border-bottom:none;}
   .bar-bg{background:var(--bg2); border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
   .bar-fill{background:linear-gradient(90deg, var(--green), #8fd06a); height:100%; transition:width .2s ease;}
-  .troop-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
+  .troop-row{display:flex; flex-wrap:wrap; row-gap:6px; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
   .troop-row:hover{background:rgba(0,0,0,.14);}
   .troop-row:last-child{border-bottom:none;}
   .troop-row .tname{font-weight:bold; color:var(--gold); width:110px;}
   .disband-row{display:flex; align-items:center; gap:6px; padding-left:8px; margin-left:4px; border-left:1px dashed var(--border);}
   .stats-mini{font-size:10px; color:var(--text-dim);}
+  /* Triangle de contre-unités lisible (voir renderBarracks/troopTypeChip/troopTriangleBars) */
+  .type-chip{display:inline-block; padding:2px 7px; border-radius:20px; font-size:9.5px; font-weight:bold; letter-spacing:.2px; white-space:nowrap; border:1px solid var(--border);}
+  .type-chip.type-inf{background:rgba(150,110,60,.22); color:#d8b98a;}
+  .type-chip.type-cav{background:rgba(60,110,150,.22); color:#8ac2e0;}
+  .type-chip.type-arch{background:rgba(90,150,70,.22); color:#a8d98a;}
+  .ttriangle{display:flex; flex-direction:column; gap:2px; min-width:130px;}
+  .ttri-row{display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--text-dim);}
+  .ttri-lbl{width:58px; flex-shrink:0;}
+  .ttri-bar{flex:1 1 auto; height:6px; background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .ttri-fill{height:100%; border-radius:4px 0 0 4px;}
+  .ttri-fill.inf{background:linear-gradient(90deg,#8a6a3c,#d8b98a);}
+  .ttri-fill.cav{background:linear-gradient(90deg,#3c6a8a,#8ac2e0);}
+  .ttri-fill.arch{background:linear-gradient(90deg,#4a7a3c,#a8d98a);}
+  .ttri-val{width:22px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums;}
   table{width:100%; border-collapse:collapse; font-size:12px;}
   th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
   tr{transition:background .15s ease;}
@@ -584,6 +615,10 @@
   body.theme-maquette .chat-msg .chat-time{ font-size:11px; }
   body.theme-maquette .tutorial-card h3{ font-size:21px; }
   body.theme-maquette .tutorial-card p{ font-size:14.5px; }
+  body.theme-maquette .type-chip{ font-size:11.5px; }
+  body.theme-maquette .ttri-row{ font-size:11.5px; }
+  body.theme-maquette .ttri-lbl{ width:66px; }
+  body.theme-maquette .ttri-val{ width:26px; }
 
   .theme-toggle-btn{ font-size:11.5px; padding:6px 12px; }
 
@@ -734,7 +769,7 @@
 
 /* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
 const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
-        ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS,
+        ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER,
         clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 /* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
@@ -2130,7 +2165,7 @@ function updateTopBarStats(){
 function renderTabs(){
   // Aide, Succès, Admin et Mises à jour sont regroupés dans l'onglet "Informations" (sous-onglets,
   // voir renderInformation) plutôt que d'occuper chacun une place dans la navigation de gauche.
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"]];
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["commander","🎖️ Commandant"+(state.commander?(" (niv. "+state.commander.level+")"):"")],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"]];
   // Panneau "Empire" (gestion groupée de tous ses villages, comme le propose Tribal Wars) : n'apparaît
   // qu'à partir de 2 villages possédés — inutile (et vide) avec un seul village.
   if(state.myVillages && state.myVillages.length>=2) tabs.push(["empire","🏰 Empire ("+state.myVillages.length+")"]);
@@ -2389,6 +2424,7 @@ function renderActiveTabContent(){
   if(activeTab==="empire" && (!state.myVillages || state.myVillages.length<2)) activeTab="buildings";
   if(activeTab==="buildings") main.innerHTML=renderBuildings();
   else if(activeTab==="barracks") main.innerHTML=renderBarracks();
+  else if(activeTab==="commander") main.innerHTML=renderCommander();
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
   else if(activeTab==="reports") main.innerHTML=renderReports();
@@ -3022,6 +3058,25 @@ function renderAchievements(){
     <div class="grid-buildings">${cards}</div>`;
 }
 
+// Triangle de contre-unités lisible : chip de type (dérivé de INFANTRY/CAVALRY/ARCHERS, shared/gameData.js)
+// + mini barres defInf/defCav/defArch (déjà présentes dans TROOPS, mêmes valeurs que celles utilisées
+// par le serveur dans defensePowerOf/computePower — voir gameLogic.js). Purement client/affichage :
+// aucune formule de combat n'est modifiée, ce n'est qu'une visualisation de données déjà existantes.
+function troopTypeChip(k){
+  if(INFANTRY.includes(k)) return `<span class="type-chip type-inf" title="Type d'attaque : Infanterie">🗡️ Infanterie</span>`;
+  if(CAVALRY.includes(k)) return `<span class="type-chip type-cav" title="Type d'attaque : Cavalerie">🐎 Cavalerie</span>`;
+  if(ARCHERS.includes(k)) return `<span class="type-chip type-arch" title="Type d'attaque : Archers">🏹 Archers</span>`;
+  return "";
+}
+function troopTriangleBars(t){
+  const bar=(cls,label,val)=>`<div class="ttri-row"><span class="ttri-lbl">${label}</span><div class="ttri-bar"><div class="ttri-fill ${cls}" style="width:${clamp(val,0,100)}%"></div></div><span class="ttri-val">${val}</span></div>`;
+  return `<div class="ttriangle">
+    ${bar("inf","🗡️ vs Inf.",t.defInf)}
+    ${bar("cav","🐎 vs Cav.",t.defCav)}
+    ${bar("arch","🏹 vs Arc.",t.defArch)}
+  </div>`;
+}
+
 function renderBarracks(){
   const v=state.village;
   if((v.buildings.barracks||0)<1){
@@ -3034,8 +3089,9 @@ function renderBarracks(){
     const home=v.troops[k]||0;
     const capNote = k==="noble" ? `<div class="unit-note">Nobles vivants : ${nobleCount()} / ${NOBLE_CAP_PER_VILLAGE} dans ce village (1 seul noble peut partir par attaque)</div>` : "";
     return `<div class="troop-row">
-      <div class="thead"><div class="ticon">${troopBadgeSvg(k)}</div><div class="tname">${t.name}</div></div>
+      <div class="thead"><div class="ticon">${troopBadgeSvg(k)}</div><div class="tname">${t.name}</div>${troopTypeChip(k)}</div>
       <div class="stats-mini">⚔️${t.atk} 🛡️${t.defInf}/${t.defCav}/${t.defArch} 🎒${t.carry} 🐎${t.speed}</div>
+      ${troopTriangleBars(t)}
       <div class="small">Stock : ${home}</div>
       <div class="cost small">🪵${fmt(t.cost.wood)} 🧱${fmt(t.cost.clay)} ⛏️${fmt(t.cost.iron)} 👥${t.pop} ⏱ ${fmtTime(vTrainTime(k))}</div>
       ${locked
@@ -3046,7 +3102,49 @@ function renderBarracks(){
   }).join("");
   return `<h2>Caserne (niv. ${v.buildings.barracks})</h2>
     <p class="muted small">⚔️ attaque · 🛡️ défense infanterie/cavalerie/archers · 🎒 capacité de pillage · 🐎 vitesse (plus bas = plus rapide) · ⏱ temps d'entraînement par unité à ce niveau de Caserne (plus la Caserne est haute, plus l'entraînement est rapide)</p>
+    <p class="muted small">La puissance d'une attaque se répartit entre Infanterie/Cavalerie/Archers selon sa composition, et chaque troupe défensive résiste différemment à chacun de ces trois types (barres ci-dessous, 0-100) : ce n'est pas un triangle strict "qui bat qui", mais des résistances asymétriques — par exemple l'Archer défend très mal face à d'autres archers (🏹 5) mais bien contre l'infanterie et la cavalerie.</p>
     <div class="troops-list">${rows}</div>`;
+}
+
+/* Commandant : officier du compte (pas du village), arbre de compétences à 3 branches indépendantes
+   (Attaque/Défense/Économie), 4 paliers chacune — voir COMMANDER_BRANCHES/COMMANDER_MAX_TIER
+   (shared/gameData.js) et doCommanderUpgrade/grantCommanderXp (server/gameLogic.js). */
+function renderCommander(){
+  const c = state.commander;
+  if(!c){
+    return `<h2>🎖️ Commandant</h2><p class="muted">Informations de Commandant indisponibles pour le moment.</p>`;
+  }
+  const pct = c.xpToNext>0 ? clamp(Math.round(c.xp/c.xpToNext*100),0,100) : 0;
+  const branchCols = Object.keys(COMMANDER_BRANCHES).map(bk=>{
+    const branch = COMMANDER_BRANCHES[bk];
+    const cur = c.skills[bk]||0;
+    const tiersHtml = branch.tiers.map((tier,i)=>{
+      const tierNum=i+1;
+      const unlocked = cur>=tierNum;
+      const canUnlock = !unlocked && cur===tierNum-1 && c.skillPoints>0;
+      const isFinal = tierNum===COMMANDER_MAX_TIER;
+      let action;
+      if(unlocked) action = `<span class="cmd-tier-status cmd-status-done">✅ Acquis</span>`;
+      else if(canUnlock) action = `<button data-commander-upgrade="${bk}">🔓 Débloquer (1 pt)</button>`;
+      else action = `<span class="cmd-tier-status muted small">🔒 Verrouillé</span>`;
+      return `<div class="cmd-tier ${unlocked?'unlocked':''}${isFinal?' cmd-tier-final':''}">
+        <div class="cmd-tier-head"><span class="cmd-tier-num">${tierNum}</span><span class="cmd-tier-desc">${tier.desc}</span></div>
+        ${action}
+      </div>`;
+    }).join("");
+    return `<div class="cmd-branch">
+      <h3>${branch.icon} ${branch.name} <span class="small muted">(palier ${cur}/${COMMANDER_MAX_TIER})</span></h3>
+      ${tiersHtml}
+    </div>`;
+  }).join("");
+  return `<h2>🎖️ Commandant</h2>
+    <p class="muted small">Votre Commandant est propre à votre <b>compte</b> (pas à un village précis) : il gagne de l'expérience à chaque combat — pertes infligées à l'adversaire, aussi bien en attaque qu'en défense — et monte de niveau, ce qui octroie 1 point de compétence à répartir librement entre 3 branches indépendantes. Chaque branche a 4 paliers ; les 3 premiers accordent un bonus progressif, le 4ᵉ un bonus spécial plus marqué.</p>
+    <div class="box" style="margin-bottom:14px;">
+      <div class="flex-between"><h3 style="margin:0;">Niveau ${c.level}</h3><span class="small muted">${c.skillPoints} point(s) de compétence disponible(s)</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;"></div></div>
+      <div class="small muted" style="margin-top:4px;">${c.xp} / ${c.xpToNext} XP jusqu'au niveau ${c.level+1}</div>
+    </div>
+    <div class="cmd-branches">${branchCols}</div>`;
 }
 
 function renderLeaderboard(){
@@ -4876,6 +4974,11 @@ function attachTabHandlers(){
     const k=b.dataset.disband;
     const inp=document.getElementById("disbandCount_"+k);
     disbandTroops(k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-commander-upgrade]").forEach(b=>b.onclick=()=>{
+    const branch=b.dataset.commanderUpgrade;
+    const name=(COMMANDER_BRANCHES[branch]||{}).name || branch;
+    doAction(()=>apiCall("/api/commander/upgrade","POST",{branch}), "🎖️ Palier débloqué : "+name+" !", null);
   });
   document.querySelectorAll("[data-info-subtab]").forEach(b=>b.onclick=()=>{
     infoSubTab=b.dataset.infoSubtab;
