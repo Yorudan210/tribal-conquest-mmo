@@ -133,6 +133,35 @@
   const CAVALRY = ["light"];
   const ARCHERS = ["archer"];
 
+  /* Commandant : officier propre à chaque compte (pas au village), qui monte en niveau en gagnant de
+     l'XP au combat (pertes infligées à l'adversaire) et distribue des points de compétence dans 3
+     branches indépendantes (Attaque / Défense / Économie), chacune sur 4 paliers cumulables. Système
+     original (aucun équivalent dans le jeu officiel "Die Stämme / Tribal Wars"), inspiré des arbres de
+     compétences de commandants que l'on retrouve dans les jeux de stratégie mobile modernes (Rise of
+     Kingdoms, Whiteout Survival) mais avec des bonus et une progression propres à ce moteur. */
+  const COMMANDER_MAX_TIER = 4;
+  const COMMANDER_BRANCHES = {
+    atk: { name:"Attaque", icon:"⚔️", tiers:[
+      {desc:"+5% de puissance d'attaque."},
+      {desc:"+5% de puissance d'attaque (10% cumulé)."},
+      {desc:"+5% de puissance d'attaque (15% cumulé)."},
+      {desc:"Maîtrise du pillage : +20% de capacité de transport des troupes."}
+    ]},
+    def: { name:"Défense", icon:"🛡️", tiers:[
+      {desc:"+5% de puissance défensive."},
+      {desc:"+5% de puissance défensive (10% cumulé)."},
+      {desc:"+5% de puissance défensive (15% cumulé)."},
+      {desc:"Ténacité : -15% de pertes subies en défense."}
+    ]},
+    eco: { name:"Économie", icon:"🏗️", tiers:[
+      {desc:"+5% de production de ressources."},
+      {desc:"+5% de production de ressources (10% cumulé)."},
+      {desc:"+5% de production de ressources (15% cumulé)."},
+      {desc:"Génie logistique : +15% de vitesse de construction et d'entraînement."}
+    ]}
+  };
+  function commanderXpToNext(level){ return 60 + level*30; }
+
   function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
 
   function buildCost(key, level){
@@ -167,7 +196,7 @@
 
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
-    ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS,
+    ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR
   };
 });
