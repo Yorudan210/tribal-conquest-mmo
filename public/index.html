@@ -2212,9 +2212,10 @@ function renderSidebar(){
     return `<div class="queue-item"><div class="flex-between"><span>${b.name} → niv. ${item.level}</span><span>${fmtTime(timeLeft)} <a href="#" data-cancel-build="${i}" title="Annuler (remboursé)" style="margin-left:6px;">✖</a></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
   }).join("") || `<div class="muted small">File vide.</div>`;
 
-  const tq=state.village.trainQueue.map(o=>{
+  const tq=state.village.trainQueue.map((o,i)=>{
     const timeLeft=Math.max(0, o.unitStartAt+o.unitDuration-now);
-    return `<div class="queue-item"><div class="flex-between"><span>${TROOPS[o.troop].name} ×${o.count}</span><span>${fmtTime(timeLeft)} / unité</span></div></div>`;
+    const pct=100*(1-timeLeft/o.unitDuration);
+    return `<div class="queue-item"><div class="flex-between"><span>${TROOPS[o.troop].name} ×${o.count}</span><span>${fmtTime(timeLeft)} / unité <a href="#" data-cancel-train="${i}" title="Annuler (remboursé)" style="margin-left:6px;">✖</a></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
   }).join("") || `<div class="muted small">File vide.</div>`;
 
   const activeMissions=state.missions.filter(m=>m.kind!=="raid");
@@ -2304,6 +2305,11 @@ function renderSidebar(){
     e.preventDefault();
     const index=Number(el.dataset.cancelBuild);
     doAction(()=>apiCall("/api/build/cancel","POST",{index}), "Construction annulée, ressources remboursées.", null);
+  });
+  side.querySelectorAll("[data-cancel-train]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    const index=Number(el.dataset.cancelTrain);
+    doAction(()=>apiCall("/api/train/cancel","POST",{index}), "Entraînement annulé, ressources remboursées.", null);
   });
   side.querySelectorAll("[data-cancel-mission]").forEach(el=>el.onclick=(e)=>{
     e.preventDefault();
@@ -2689,9 +2695,10 @@ function sendVillageTransfer(){
    de ses villages sans avoir à y basculer d'abord (contrairement aux écrans Bâtiments/Caserne normaux,
    qui ne concernent que le village actif). S'appuie sur state.myVillagesDetailed (vue complète de
    chaque village, envoyée par le serveur — voir buildSnapshot/myVillagesDetailed côté serveur) et sur
-   les routes existantes (/api/build, /api/train, /api/build/cancel, /api/troops/disband,
-   /api/village/transfer), toutes désormais capables de cibler un villageId précis plutôt que le seul
-   village actif. N'apparaît dans la navigation (renderTabs) qu'à partir de 2 villages possédées. */
+   les routes existantes (/api/build, /api/train, /api/build/cancel, /api/train/cancel,
+   /api/troops/disband, /api/village/transfer), toutes désormais capables de cibler un villageId
+   précis plutôt que le seul village actif. N'apparaît dans la navigation (renderTabs) qu'à partir
+   de 2 villages possédées. */
 
 function empireBuildQueueHead(v){
   if(!v.buildQueue.length) return `<span class="muted">File vide</span>`;
@@ -2870,6 +2877,12 @@ function renderEmpireTroopsEditor(v){
   if((v.buildings.barracks||0)<1){
     return `<div class="box"><h3 style="margin-top:0;">✏️ ${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y})</span></h3><p class="muted small">Ce village n'a pas encore de Caserne : construisez-en une (sous-onglet Construction) pour pouvoir y entraîner des troupes.</p></div>`;
   }
+  const now=estimateNow();
+  const tq = v.trainQueue.map((o,i)=>{
+    const timeLeft=Math.max(0, o.unitStartAt+o.unitDuration-now);
+    const pct=100*(1-timeLeft/o.unitDuration);
+    return `<div class="queue-item"><div class="flex-between"><span>${TROOPS[o.troop].name} ×${o.count}</span><span>${fmtTime(timeLeft)} / unité <a href="#" data-empire-cancel-train="${i}" data-village="${v.id}" title="Annuler (remboursé)" style="margin-left:6px;">✖</a></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+  }).join("") || `<div class="muted small">File vide.</div>`;
   const rows=TROOP_ORDER.map(k=>{
     const t=TROOPS[k];
     const lockedEntries=Object.entries(t.requires).filter(([rk,rv])=>(v.buildings[rk]||0)<rv);
@@ -2893,6 +2906,9 @@ function renderEmpireTroopsEditor(v){
   }).join("");
   return `<div class="box">
     <h3 style="margin-top:0;">✏️ ${v.isHome?'🏠 ':'🚩 '}${escapeHtml(v.name)} <span class="small muted" style="font-weight:normal;">(${v.x}|${v.y})</span> — Caserne niv. ${v.buildings.barracks}</h3>
+    <h4>File d'entraînement</h4>
+    ${tq}
+    <h4>Troupes</h4>
     <p class="muted small">⏱ temps d'entraînement par unité au niveau de Caserne de <b>ce</b> village (plus elle est haute, plus l'entraînement est rapide).</p>
     ${rows}
   </div>`;
@@ -2926,6 +2942,9 @@ function empireCancelBuild(villageId, index){
 }
 function empireQueueTrain(villageId, key, count){
   doAction(()=>apiCall("/api/train","POST",{key, count, villageId}), "⚔️ Entraînement lancé.", null);
+}
+function empireCancelTrain(villageId, index){
+  doAction(()=>apiCall("/api/train/cancel","POST",{index, villageId}), "Entraînement annulé, ressources remboursées.", null);
 }
 function empireDisbandTroops(villageId, key, count){
   doAction(()=>apiCall("/api/troops/disband","POST",{key, count, villageId}), "🗑️ Troupes licenciées.", null);
@@ -2978,6 +2997,10 @@ function attachEmpireHandlers(){
     const villageId=b.dataset.village, k=b.dataset.empireTrain;
     const inp=document.getElementById("empireTrainCount_"+villageId+"_"+k);
     empireQueueTrain(villageId, k, Number(inp.value));
+  });
+  document.querySelectorAll("[data-empire-cancel-train]").forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    empireCancelTrain(el.dataset.village, Number(el.dataset.empireCancelTrain));
   });
   document.querySelectorAll("[data-empire-disband]").forEach(b=>b.onclick=()=>{
     const villageId=b.dataset.village, k=b.dataset.empireDisband;
