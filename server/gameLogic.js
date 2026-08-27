@@ -8,7 +8,7 @@ const GameData = require("../shared/gameData.js");
 // en retour, donc pas de dépendance circulaire.
 const store = require("./store.js");
 const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
-        ACHIEVEMENTS, clamp,
+        ACHIEVEMENTS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext, clamp,
         buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
@@ -366,7 +366,7 @@ function doBuild(db, username, key, villageId){
   const cost = buildCost(key, nextLevel);
   if(v.resources.wood<cost.wood || v.resources.clay<cost.clay || v.resources.iron<cost.iron) return { error: "Ressources insuffisantes pour "+b.name+"." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") / serverEventMultiplier(db, "build");
+  const dur = buildTime(key, nextLevel, v.buildings.hq) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "speed") / serverEventMultiplier(db, "build") / commanderSpeedMult(db, username);
   // Une seule construction est réellement en cours à la fois dans le village (peu importe le
   // bâtiment) : chaque nouvel ordre démarre à la fin du DERNIER de toute la file, jamais
   // immédiatement. Avant ce correctif, deux bâtiments DIFFÉRENTS démarraient tous les deux à
@@ -432,7 +432,7 @@ function doTrain(db, username, key, count, villageId){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "train") / serverEventMultiplier(db, "train") });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, username) });
   return { ok: true };
 }
 
@@ -857,8 +857,10 @@ function resolveAttack(db, m){
   // Composition de l'armée AVANT pertes (m.troops est muté plus bas) : nécessaire pour un rapport
   // de combat détaillé montrant "envoyées / survivantes / perdues" pour chaque type de troupe.
   const troopsSent = {...m.troops};
-  const { power: attackPower, shareInf, shareCav, shareArch } = computePower(m.troops);
-  const defensePower = defensePowerOf(combinedDefenseTroops(target), shareInf, shareCav, shareArch, villageWall(target));
+  const { power: attackPowerRaw, shareInf, shareCav, shareArch } = computePower(m.troops);
+  const attackPower = attackPowerRaw * commanderAttackMult(db, m.attackerUsername);
+  const defensePower = defensePowerOf(combinedDefenseTroops(target), shareInf, shareCav, shareArch, villageWall(target))
+    * commanderDefenseMult(db, target.owner);
   const luck = (Math.random()*2-1)*0.25;
   const effAttack = attackPower*(1+luck);
 
@@ -881,6 +883,10 @@ function resolveAttack(db, m){
     attackerLosses[k]=m.troops[k]-survivors;
     m.troops[k]=survivors;
   }
+  // Palier 4 Défense du Commandant ("Ténacité") : réduit la fraction de pertes subies, APRÈS le
+  // calcul du vainqueur (qui reste déterminé par attackPower/defensePower ci-dessus) — ce bonus
+  // n'aide donc jamais à gagner un combat déjà perdu, seulement à limiter les dégâts encaissés.
+  defenderLossFrac = clamp(defenderLossFrac * commanderDefenseLossMult(db, target.owner), 0, 1);
   // Répartit les pertes du défenseur entre ses propres troupes et les renforts alliés stationnés.
   const defenderLosses = applyDefenseLosses(target, defenderLossFrac);
 
@@ -969,7 +975,7 @@ function resolveAttack(db, m){
   if(winner==="attacker" && target.owner!==m.attackerUsername){
     let carryCap=0;
     for(const k in m.troops) carryCap+=m.troops[k]*TROOPS[k].carry;
-    carryCap *= serverEventMultiplier(db, "loot");
+    carryCap *= serverEventMultiplier(db, "loot") * commanderCarryMult(db, m.attackerUsername);
     const protectedFrac=clamp(villageHide(target)*0.05,0,0.7);
     const avail={
       wood:target.resources.wood*(1-protectedFrac),
@@ -1005,6 +1011,12 @@ function resolveAttack(db, m){
   const attackerLossesTotal = Object.values(attackerLosses||{}).reduce((s,n)=>s+(n||0),0);
   bumpStat(db, m.attackerUsername, "unitsKilled", defenderLossesTotal); // troupes (et renforts) adverses détruites
   if(target.owner!=="barbarian") bumpStat(db, target.owner, "unitsKilled", attackerLossesTotal); // troupes attaquantes détruites en défense
+
+  // XP de Commandant : chaque camp gagne de l'XP en fonction des pertes qu'il a INFLIGÉES à l'autre
+  // (pas celles qu'il a subies), qu'il soit vainqueur ou non — un défenseur qui repousse une attaque
+  // en infligeant de lourdes pertes progresse tout autant qu'un attaquant qui perce une défense.
+  grantCommanderXp(db, m.attackerUsername, defenderLossesTotal);
+  if(target.owner!=="barbarian") grantCommanderXp(db, target.owner, attackerLossesTotal);
 
   // Champs communs aux deux rapports (attaquant et défenseur), pour un compte-rendu de combat
   // bien plus détaillé : composition complète de l'armée attaquante (envoyée/survivante/perdue),
@@ -1130,11 +1142,12 @@ function runTick(db){
     const guildMult = guildBonusMultiplier(guild);
     const guildProdBoostMult = guildBoostMultiplier(guild, "production");
     const eventProdMult = serverEventMultiplier(db, "production");
+    const commanderProdM = commanderProdMult(db, v.owner);
     for(const r of ["wood","clay","iron"]){
       // Bonus de gisement (voir rollResourceBonus, store.js) : +10% UNIQUEMENT sur la ressource
       // concernée et UNIQUEMENT dans ce village précis — jamais propagé aux autres villages du joueur.
       const villageResBonusMult = (v.resourceBonus && v.resourceBonus.res===r) ? (1+v.resourceBonus.pct) : 1;
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult*villageResBonusMult;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult*villageResBonusMult*commanderProdM;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -1155,7 +1168,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "train") / serverEventMultiplier(db, "train"); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, v.owner); }
       } else break;
     }
   }
@@ -1324,6 +1337,107 @@ function computeAchievements(db, username){
       points: tier*(tier+1)/2 // 1+2+...+tier (palier Or entièrement gravi = 1+2+3+4 = 10 points)
     };
   });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Commandant (officier de compte, arbre de compétences à 3 branches)     */
+/*  Voir COMMANDER_BRANCHES / COMMANDER_MAX_TIER dans shared/gameData.js.  */
+/* ---------------------------------------------------------------------- */
+
+const EMPTY_COMMANDER = ()=>({ level:1, xp:0, skillPoints:0, skills:{atk:0, def:0, eco:0} });
+
+/* Renvoie (en l'initialisant si besoin, pour la rétrocompatibilité des comptes créés avant
+   l'introduction du Commandant) l'officier d'un joueur. Renvoie null pour une cible sans compte
+   utilisateur réel (ex. "barbarian") : tous les multiplicateurs ci-dessous gèrent ce cas en
+   renvoyant une valeur neutre plutôt que de planter. */
+function commanderOf(db, username){
+  const u = db.users[username];
+  if(!u) return null;
+  if(!u.commander) u.commander = EMPTY_COMMANDER();
+  return u.commander;
+}
+
+/* Ajoute de l'XP au Commandant d'un joueur (gagnée au combat, voir resolveAttack) et fait monter
+   son niveau autant de fois que nécessaire (boucle, pour gérer un gain d'XP dépassant plusieurs
+   paliers d'un coup) ; chaque niveau gagné accorde 1 point de compétence à dépenser librement
+   dans l'une des 3 branches (voir doCommanderUpgrade). No-op silencieux si le compte n'existe pas.
+   */
+function grantCommanderXp(db, username, amount){
+  if(!amount || amount<=0) return;
+  const c = commanderOf(db, username);
+  if(!c) return;
+  c.xp += Math.round(amount);
+  while(c.xp >= commanderXpToNext(c.level)){
+    c.xp -= commanderXpToNext(c.level);
+    c.level += 1;
+    c.skillPoints += 1;
+  }
+}
+
+/* Dépense un point de compétence du Commandant dans une branche (atk/def/eco), en faisant monter
+   son palier de 1 (jusqu'à COMMANDER_MAX_TIER). Même schéma de validation que doGuildBuyBoost :
+   village/ressource introuvable -> {error}, sinon {ok:true}. */
+function doCommanderUpgrade(db, username, branch){
+  const c = commanderOf(db, username);
+  if(!c) return { error: "Compte introuvable." };
+  if(!COMMANDER_BRANCHES[branch]) return { error: "Branche de compétence inconnue." };
+  if(c.skillPoints<=0) return { error: "Aucun point de compétence disponible." };
+  const cur = c.skills[branch]||0;
+  if(cur>=COMMANDER_MAX_TIER) return { error: "Palier maximum déjà atteint pour cette branche." };
+  c.skills[branch] = cur+1;
+  c.skillPoints -= 1;
+  return { ok: true };
+}
+
+// +5%/palier sur les 3 premiers paliers de chaque branche (paliers 1 à 3) ; le palier 4 est un bonus
+// spécial géré séparément par chaque fonction ci-dessous (capacité de transport / réduction des
+// pertes / vitesse) plutôt que de continuer la même progression linéaire.
+function commanderLinearBonus(tier){ return 1 + 0.05*Math.min(tier,3); }
+
+function commanderAttackMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return commanderLinearBonus(c.skills.atk||0);
+}
+function commanderDefenseMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return commanderLinearBonus(c.skills.def||0);
+}
+// Palier 4 Attaque ("Maîtrise du pillage") : +20% de capacité de transport.
+function commanderCarryMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return (c.skills.atk||0)>=4 ? 1.20 : 1;
+}
+// Palier 4 Défense ("Ténacité") : -15% de pertes subies en défense (multiplie directement la
+// fraction de pertes déjà calculée, donc toujours <1 et jamais négatif).
+function commanderDefenseLossMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return (c.skills.def||0)>=4 ? 0.85 : 1;
+}
+function commanderProdMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return commanderLinearBonus(c.skills.eco||0);
+}
+// Palier 4 Économie ("Génie logistique") : +15% de vitesse de construction ET d'entraînement
+// (un seul multiplicateur combiné, réutilisé dans les deux chaînes de diviseurs existantes).
+function commanderSpeedMult(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return 1;
+  return (c.skills.eco||0)>=4 ? 1.15 : 1;
+}
+
+function publicCommanderView(db, username){
+  const c = commanderOf(db, username);
+  if(!c) return null;
+  return {
+    level: c.level, xp: c.xp, xpToNext: commanderXpToNext(c.level),
+    skillPoints: c.skillPoints, skills: {...c.skills},
+    branches: COMMANDER_BRANCHES, maxTier: COMMANDER_MAX_TIER
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -2281,7 +2395,8 @@ function buildSnapshot(db, username){
     market: (db.market||[]).slice().sort((a,b)=>b.createdAt-a.createdAt),
     mySupport,
     guild: guild ? publicGuildView(db, guild, username) : null,
-    guildInvites
+    guildInvites,
+    commander: publicCommanderView(db, username)
   };
 }
 
@@ -2304,5 +2419,6 @@ module.exports = {
   doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
-  doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic
+  doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic,
+  doCommanderUpgrade, publicCommanderView
 };

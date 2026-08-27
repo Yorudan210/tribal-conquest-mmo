@@ -121,7 +121,11 @@ async function handleApi(req, res, pathname, url){
       // Compteurs cumulatifs utilisés par les Succès (voir computeAchievements, gameLogic.js) — au
       // niveau du COMPTE (pas du village, contrairement aux anciens Objectifs), pour rester valables
       // même en cas de conquête/perte de village.
-      stats: { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, opponents:[] }
+      stats: { totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, opponents:[] },
+      // Commandant : officier du compte, arbre de compétences à 3 branches (voir gameLogic.js /
+      // shared/gameData.js). Les comptes créés avant l'introduction de ce système sont initialisés
+      // paresseusement à la volée (voir commanderOf, gameLogic.js).
+      commander: { level:1, xp:0, skillPoints:0, skills:{atk:0, def:0, eco:0} }
     };
     store.scheduleSave();
     const token = auth.signToken({ username }, SECRET);
@@ -339,6 +343,13 @@ async function handleApi(req, res, pathname, url){
   if(pathname==="/api/guild/buy-boost" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doGuildBuyBoost(db, username, String(body.key||""));
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
+  if(pathname==="/api/commander/upgrade" && req.method==="POST"){
+    const body = await readBody(req);
+    const result = game.doCommanderUpgrade(db, username, String(body.branch||""));
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
