@@ -2205,6 +2205,20 @@ function renderSidebar(){
         <div class="res"><div class="val" id="popVal">👥 ${pop}/${popMax}</div><div class="rate">population</div></div>
       </div>
     </div>`;
+  // Troupes STATIONNÉES dans ce village (v.troops — ni celles en formation dans v.trainQueue, ni
+  // celles parties en mission), juste sous les ressources : réutilise la même mise en page en
+  // grille que la boîte Ressources ci-dessus (classe res-box/res-group) pour un rendu cohérent et
+  // compact, dans les deux thèmes, sans CSS supplémentaire.
+  const presentTroops = TROOP_ORDER.filter(k=>(v.troops[k]||0)>0);
+  const troopsBox = `
+    <div class="box res-box">
+      <h3>⚔️ Troupes</h3>
+      ${presentTroops.length ? `<div class="res-group">
+        ${presentTroops.map(k=>`
+          <div class="res"><div class="val">${fmt(v.troops[k])}</div><div class="rate">${TROOPS[k].name}</div></div>
+        `).join("")}
+      </div>` : `<p class="muted small" style="margin:0;">Aucune troupe stationnée dans ce village.</p>`}
+    </div>`;
   const bq=state.village.buildQueue.map((item,i)=>{
     const b=BUILDINGS[item.key];
     const timeLeft=Math.max(0, item.startAt+item.duration-now);
@@ -2292,6 +2306,7 @@ function renderSidebar(){
     ${blackArmyBox}
     ${eventsBox}
     ${resBox}
+    ${troopsBox}
     <div class="box"><h3>🏗️ File de construction</h3>${bq}</div>
     <div class="box"><h3>⚔️ File d'entraînement</h3>${tq}</div>
     <div class="box"><h3>🚩 Missions en cours</h3>${missions}</div>
@@ -2591,8 +2606,6 @@ function renderBuildings(){
       </div>
     </div>` : "";
 
-  const transferBox = renderVillageTransferBox();
-
   return `<h2>Votre village</h2>
     <p class="muted small">Cliquez sur un bâtiment du village (ou de la liste ci-contre) pour voir ses détails et l'améliorer.</p>
     <div class="village-top">
@@ -2600,8 +2613,7 @@ function renderBuildings(){
       <div class="box village-blist">${renderBuildingsList()}</div>
     </div>
     ${detail}
-    ${buildMenu}
-    ${transferBox}`;
+    ${buildMenu}`;
 }
 
 /* ---- Liste compacte des bâtiments (Village, thème Parchemin uniquement) ----
@@ -2650,44 +2662,9 @@ function renderBuildingsList(){
 
 /* Transfert instantané de ressources entre deux villages du MÊME joueur (aucun marchand, aucun
    délai de trajet — comme le don direct à un autre joueur, voir sendGift/doGiveResources, mais
-   sans passer par le compte d'un tiers). N'apparaît que si le joueur possède plus d'un village. */
-function renderVillageTransferBox(){
-  const others = (state.myVillages||[]).filter(mv=>!mv.isActive);
-  if(!others.length) return "";
-  const v=state.village;
-  const options = others.map(mv=>`<option value="${mv.id}">${mv.isHome?'🏠 ':'🚩 '}${escapeHtml(mv.name)} (${mv.x}|${mv.y})</option>`).join("");
-  return `<div class="box" style="margin-top:14px;">
-    <h3>🚚 Transfert entre vos villages</h3>
-    <p class="muted small">Envoyez instantanément des ressources de <b>${escapeHtml(v.name)}</b> vers un autre village vous appartenant (sans trajet, plafonné par l'entrepôt du village de destination).</p>
-    <div class="inputs" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
-      <select id="transferTargetVillage">${options}</select>
-      ${["wood","clay","iron"].map(r=>`<div class="inp">${RES_ICON[r]}<input type="number" min="0" max="${Math.floor(v.resources[r])}" value="0" id="transfer_${r}"></div>`).join("")}
-    </div>
-    <button id="btnVillageTransfer">🚚 Transférer</button>
-  </div>`;
-}
-
-function sendVillageTransfer(){
-  const sel=document.getElementById("transferTargetVillage");
-  if(!sel || !sel.value){ toast("Choisissez un village de destination."); return; }
-  const targetVillageId=sel.value;
-  const target=(state.myVillages||[]).find(mv=>mv.id===targetVillageId);
-  const amt={};
-  let any=false;
-  for(const r of ["wood","clay","iron"]){
-    const el=document.getElementById("transfer_"+r);
-    if(!el) continue;
-    let n=Math.floor(Number(el.value)||0);
-    n=Math.max(0, Math.min(n, Math.floor(state.village.resources[r]||0)));
-    if(n>0){ amt[r]=n; any=true; }
-  }
-  if(!any){ toast("Indiquez au moins une ressource à transférer."); return; }
-  doAction(
-    ()=>apiCall("/api/village/transfer","POST",{targetVillageId, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
-    "🚚 Ressources transférées"+(target?(" vers "+target.name):"")+".",
-    null
-  );
-}
+   sans passer par le compte d'un tiers). Volontairement disponible UNIQUEMENT depuis le panneau
+   Empire (sous-onglet "📦 Envoi de ressources", voir renderEmpireResources/empireSendResources
+   plus bas) : l'écran Bâtiments du village actif n'en propose plus de version dupliquée. */
 
 /* ============================= EMPIRE (gestion multi-villages, dès 2 villages) ============================= */
 /* Panneau "Empire" : reprend les écrans multi-villages de Tribal Wars (Aperçu / Notifications /
@@ -4986,8 +4963,6 @@ function attachTabHandlers(){
     activeTab = el.dataset.gotoTab; renderTabs(); renderActiveTabContent();
   });
   document.querySelectorAll("[data-build]").forEach(b=>b.onclick=()=>queueBuild(b.dataset.build));
-  const transferBtn=document.getElementById("btnVillageTransfer");
-  if(transferBtn) transferBtn.onclick=sendVillageTransfer;
   document.querySelectorAll("[data-train]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.train;
     const inp=document.getElementById("trainCount_"+k);
