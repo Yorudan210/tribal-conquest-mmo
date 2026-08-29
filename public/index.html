@@ -291,6 +291,13 @@
     background:var(--gold); border:1px solid #1a140d; font-size:9px; line-height:1;
     display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.6);
   }
+  /* Badge de marqueur personnel (voir VILLAGE_TAGS / villageTagBadgeSvg) : coin OPPOSÉ du badge de
+     gisement riche ci-dessus pour ne jamais se chevaucher, les deux pouvant apparaître ensemble. */
+  .village-tag-badge{
+    position:absolute; bottom:-5px; left:-5px; width:15px; height:15px; border-radius:50%;
+    display:block; box-shadow:0 1px 3px rgba(0,0,0,.6);
+  }
+  .village-tag-badge svg{ display:block; width:100%; height:100%; }
   .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
   .villagePin.weak .dot{background:#4d7a37;}
   .villagePin.medium .dot{background:#9a7526;}
@@ -364,6 +371,22 @@
   .filter-btn{background:var(--panel2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; padding:4px 12px; font-size:11px; cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;}
   .filter-btn:hover{color:var(--text);}
   .filter-btn.active{background:var(--gold); border-color:var(--gold); color:#2a1c07; font-weight:bold;}
+
+  /* Sélecteur de marqueur personnel (panoplie d'icônes, voir villageTagPickerHtml) : une rangée de
+     petits boutons circulaires reprenant chacun le badge exact posé sur le pin de la carte, pour
+     que le choix dans le popup corresponde visuellement à ce qu'on verra ensuite sur la carte. */
+  .village-tag-picker{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);}
+  .tag-chip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  .tag-chip{
+    width:28px; height:28px; padding:0; border-radius:50%; cursor:pointer; flex:none;
+    background:var(--panel2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+    transition:transform .12s ease, border-color .12s ease;
+  }
+  .tag-chip svg{width:22px; height:22px; display:block;}
+  .tag-chip:hover{transform:scale(1.1);}
+  .tag-chip.active{border:2px solid var(--gold); box-shadow:0 0 0 2px rgba(193,121,62,.35);}
+  .tag-chip-clear{font-size:13px; color:var(--text-dim); font-weight:bold;}
+  .tag-chip-clear.active{border-color:var(--text-dim); box-shadow:none;}
 
   #battleBanner{
     position:fixed; top:76px; left:50%; transform:translateX(-50%) translateY(-16px);
@@ -770,7 +793,13 @@
 /* ============================= DONNÉES DE JEU (partagées avec le serveur) ============================= */
 const { BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
         ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER,
-        clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
+        clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime,
+        VILLAGE_TAGS, VILLAGE_TAG_KEYS } = GameData;
+const VILLAGE_TAG_MAP = Object.fromEntries(VILLAGE_TAGS.map(t=>[t.key, t]));
+// Clés dont la couleur de badge est claire (voir VILLAGE_TAGS ci-dessus) : le glyphe intérieur y
+// reste sombre pour le contraste ; toutes les autres couleurs de badge, plus foncées, reçoivent un
+// glyphe clair. Purement une décision de rendu (aucune donnée ici n'est envoyée au serveur).
+const VILLAGE_TAG_DARK_GLYPH = new Set(["star","exclaim","coin","crown"]);
 
 /* Disposition circulaire façon Tribal Wars : l'Hôtel de ville trône au centre de la place,
    les 8 autres bâtiments (hors Muraille, qui entoure tout le village) forment un anneau autour. */
@@ -1243,6 +1272,46 @@ function villageMapIconSvg(kind, level, hasWall){
     : kind==="player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>`
     : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${defs}${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
+}
+
+/* ------------------------- Marqueurs personnels de village (carte) ------------------------- *
+ * Badge vectoriel affiché sur le pin d'un village pour un marqueur privé posé par le joueur (voir
+ * VILLAGE_TAGS, shared/gameData.js, et doSetVillageTag, gameLogic.js). Glyphe volontairement très
+ * simple (quelques traits/formes) pour rester lisible à 15px de diamètre sur la carte ; le même
+ * SVG, agrandi par le CSS, sert aussi de bouton dans le sélecteur de marqueur du popup de village
+ * (voir villageTagPickerHtml) — un seul dessin pour les deux usages. */
+function villageTagGlyphSvg(key, glyphColor){
+  const c = glyphColor;
+  switch(key){
+    case "star": return `<polygon points="10,3 11.8,7.6 16.8,7.9 12.9,11 14.2,15.8 10,13 5.8,15.8 7.1,11 3.2,7.9 8.2,7.6" fill="${c}"/>`;
+    // Deux "épées" croisées (lame effilée + garde + poignée), plutôt qu'un simple X : reste
+    // distinct du ✕ (aucun marqueur) et du ⊘ interdiction (clé "cross") au premier coup d'oeil,
+    // même à la petite taille d'un badge de pin.
+    case "swords": return `<g fill="${c}">
+      <g transform="rotate(45 10 10)"><polygon points="10,2 11.1,5.2 8.9,5.2" /><rect x="9.3" y="5" width="1.4" height="7.6"/><rect x="7.1" y="12.4" width="5.8" height="1.3"/><rect x="9.3" y="13.5" width="1.4" height="2.6"/></g>
+      <g transform="rotate(-45 10 10)"><polygon points="10,2 11.1,5.2 8.9,5.2" /><rect x="9.3" y="5" width="1.4" height="7.6"/><rect x="7.1" y="12.4" width="5.8" height="1.3"/><rect x="9.3" y="13.5" width="1.4" height="2.6"/></g>
+    </g>`;
+    case "shield": return `<path d="M10 3.6 L15.2 5.6 V10.4 C15.2 13.8 12.9 15.8 10 16.7 C7.1 15.8 4.8 13.8 4.8 10.4 V5.6 Z" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>`;
+    case "exclaim": return `<rect x="8.8" y="4" width="2.4" height="7.6" rx="1.2" fill="${c}"/><circle cx="10" cy="15" r="1.4" fill="${c}"/>`;
+    case "check": return `<path d="M4.8 10.3 L7.8 13.6 L15.2 5.6" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "cross": return `<circle cx="10" cy="10" r="6.3" fill="none" stroke="${c}" stroke-width="1.8"/><line x1="5.7" y1="14.3" x2="14.3" y2="5.7" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case "hourglass": return `<path d="M5.8 4.2 H14.2 L10 10 L14.2 15.8 H5.8 L10 10 Z" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    case "coin": return `<polygon points="10,3.8 14.5,8 10,16.2 5.5,8" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round"/><line x1="5.5" y1="8" x2="14.5" y2="8" stroke="${c}" stroke-width="1.1"/>`;
+    case "skull": return `<circle cx="10" cy="9" r="5.8" fill="none" stroke="${c}" stroke-width="1.6"/><circle cx="7.7" cy="8.6" r="1.2" fill="${c}"/><circle cx="12.3" cy="8.6" r="1.2" fill="${c}"/><rect x="7.9" y="12.4" width="1.3" height="2" fill="${c}"/><rect x="10.8" y="12.4" width="1.3" height="2" fill="${c}"/>`;
+    case "peace": return `<circle cx="10" cy="10" r="6.3" fill="none" stroke="${c}" stroke-width="1.5"/><line x1="10" y1="4" x2="10" y2="16" stroke="${c}" stroke-width="1.5"/><line x1="10" y1="10" x2="6.2" y2="15.3" stroke="${c}" stroke-width="1.5"/><line x1="10" y1="10" x2="13.8" y2="15.3" stroke="${c}" stroke-width="1.5"/>`;
+    case "question": return `<text x="10" y="14.6" font-size="12" text-anchor="middle" fill="${c}" font-family="Georgia,'Times New Roman',serif" font-weight="bold">?</text>`;
+    case "crown": return `<path d="M5 15 H15 V12.6 L12.4 14 L10 8 L7.6 14 L5 12.6 Z" fill="none" stroke="${c}" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5" cy="12" r="1" fill="${c}"/><circle cx="10" cy="7.6" r="1" fill="${c}"/><circle cx="15" cy="12" r="1" fill="${c}"/>`;
+    default: return "";
+  }
+}
+function villageTagBadgeSvg(key){
+  const t = VILLAGE_TAG_MAP[key];
+  if(!t) return "";
+  const glyphColor = VILLAGE_TAG_DARK_GLYPH.has(key) ? "#2a1c10" : "#f5edd8";
+  return `<svg viewBox="0 0 20 20">
+    <circle cx="10" cy="10" r="9.3" fill="${t.color}" stroke="#1a140d" stroke-width="1.3"/>
+    ${villageTagGlyphSvg(key, glyphColor)}
+  </svg>`;
 }
 
 /* ------------------------- Décor de la carte du monde ------------------------- *
@@ -3297,6 +3366,7 @@ function renderVillageActionModal(){
           </div>
           <p class="muted small">Votre village (${v.x}|${v.y}). Impossible de s'attaquer soi-même.</p>
           ${v.resourceBonus?`<p class="small" style="color:var(--gold); background:rgba(193,121,62,.16); border:1px solid rgba(193,121,62,.5); border-radius:8px; padding:6px 10px;">${RES_ICON[v.resourceBonus.res]} Gisement riche : +${Math.round(v.resourceBonus.pct*100)}% de production de ${RES_NAME[v.resourceBonus.res].toLowerCase()} dans ce village précis.</p>`:""}
+          ${villageTagPickerHtml(v.id)}
         </div>
       </div>`;
     wireVillageActionModal();
@@ -3322,6 +3392,7 @@ function renderVillageActionModal(){
           ${isActive
             ? `<p class="sub small"><span class="tag strong">Village actif</span> — c'est celui que vous gérez actuellement (onglets Bâtiments/Caserne).</p>`
             : `<button data-manage-village="${t.id}" class="primary">🏗️ Gérer ce village</button>`}
+          ${villageTagPickerHtml(t.id)}
         </div>
       </div>`;
     wireVillageActionModal();
@@ -3382,9 +3453,24 @@ function renderVillageActionModal(){
           ${t.isPlayer?`<button data-send="${t.id}_support">🤝 Envoyer en soutien</button>`:''}
         </div>
         ${giftBox}
+        ${villageTagPickerHtml(t.id)}
       </div>
     </div>`;
   wireVillageActionModal();
+}
+
+/* Rangée de badges cliquables (la "panoplie" d'icônes) permettant de poser ou retirer un marqueur
+   personnel sur CE village précis — le sien, celui d'un autre joueur, ou un village barbare : voir
+   VILLAGE_TAGS (shared/gameData.js) et l'appel data-set-village-tag ci-dessous dans
+   wireVillageActionModal(). Purement une aide-mémoire privée : jamais vue par personne d'autre. */
+function villageTagPickerHtml(villageId){
+  const current = (state.villageTags||{})[villageId] || "";
+  const clearChip = `<button type="button" class="tag-chip tag-chip-clear ${current?'':'active'}" data-set-village-tag="${villageId}" data-tag-key="" title="Aucun marqueur">✕</button>`;
+  const chips = VILLAGE_TAGS.map(t=>`<button type="button" class="tag-chip ${current===t.key?'active':''}" data-set-village-tag="${villageId}" data-tag-key="${t.key}" title="${escapeHtml(t.label)}">${villageTagBadgeSvg(t.key)}</button>`).join("");
+  return `<div class="village-tag-picker">
+    <div class="small muted" style="margin-bottom:6px;">🏳️ Marqueur personnel (visible seulement par vous) :</div>
+    <div class="tag-chip-row">${clearChip}${chips}</div>
+  </div>`;
 }
 
 /* Câble les contrôles de la fenêtre de mission : fermeture, liens "max", envoi de troupes/don,
@@ -3408,6 +3494,19 @@ function wireVillageActionModal(){
   });
   modal.querySelectorAll("[data-gift]").forEach(b=>b.onclick=()=>{ if(sendGift(b.dataset.gift)!==false) closeVillageAction(); });
   modal.querySelectorAll("[data-manage-village]").forEach(b=>b.onclick=()=>{ closeVillageAction(); switchVillage(b.dataset.manageVillage, true); });
+  // Marqueur personnel : contrairement aux autres actions ci-dessus, on garde le popup ouvert et on
+  // le rafraîchit sur place (au lieu de closeVillageAction()) pour pouvoir changer d'avis tout de
+  // suite ou simplement voir le badge choisi se refléter sans rouvrir la fenêtre.
+  modal.querySelectorAll("[data-set-village-tag]").forEach(b=>b.onclick=async ()=>{
+    const villageId=b.dataset.setVillageTag, tag=b.dataset.tagKey;
+    try{
+      const data = await apiCall("/api/map/tag", "POST", { villageId, tag });
+      applySnapshot(data.snapshot);
+      renderTabs(); renderTopBar(); rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar);
+      if(activeTab==="map") renderActiveTabContent();
+      renderVillageActionModal();
+    }catch(err){ toast("⚠️ "+err.message); }
+  });
 }
 
 function missionMarkerPos(m){
@@ -3537,8 +3636,10 @@ function renderMap(){
     const blackArmyTxt = isBlackArmy ? (" · 🏴 Armée Noire — Rang "+BLACK_ARMY_RANK_LABEL[t.tier||0]) : "";
     const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt+blackArmyTxt;
     const badge = t.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[t.resourceBonus.res]}</span>` : "";
+    const tagKey = (state.villageTags||{})[t.id];
+    const tagBadge = tagKey ? `<span class="village-tag-badge" title="${escapeHtml((VILLAGE_TAG_MAP[tagKey]||{}).label||"")}">${villageTagBadgeSvg(tagKey)}</span>` : "";
     return `<div class="villagePin ${cls} ${sel?'selected':''}" data-village-pin="${t.id}" style="left:${left}px; top:${top}px;" title="${title}">
-      <div class="dot">${icon}${badge}</div>
+      <div class="dot">${icon}${badge}${tagBadge}</div>
       ${ppf>=20?`<div class="plabel">${t.x}|${t.y}</div>`:''}
     </div>`;
   }).join("");
@@ -3548,8 +3649,10 @@ function renderMap(){
   const playerBadge = v.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[v.resourceBonus.res]}</span>` : "";
   const homeWallLvl = (v.buildings && v.buildings.wall)||0;
   const homeIcon = villageMapIconSvg("mine", homeWallLvl>=10?2:1, homeWallLvl>0);
+  const homeTagKey = (state.villageTags||{})[v.id];
+  const homeTagBadge = homeTagKey ? `<span class="village-tag-badge" title="${escapeHtml((VILLAGE_TAG_MAP[homeTagKey]||{}).label||"")}">${villageTagBadgeSvg(homeTagKey)}</span>` : "";
   const playerPin = `<div class="villagePin player ${playerSel?'selected':''}" data-village-pin="home" style="left:${playerLeft}px; top:${playerTop}px;" title="${v.name} (${v.x}|${v.y})${playerBonusTxt}">
-    <div class="dot">${homeIcon}${playerBadge}</div>
+    <div class="dot">${homeIcon}${playerBadge}${homeTagBadge}</div>
     ${ppf>=20?`<div class="plabel">${v.name}</div>`:''}
   </div>`;
 
@@ -3576,7 +3679,7 @@ function renderMap(){
   const decor = mapDecorHtml(minX, maxX, minY, maxY, ppf, occupiedTiles);
 
   return `<h2>Carte du monde</h2>
-    <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur.</p>
+    <p class="muted small">Glissez la carte pour explorer, molette pour zoomer, cliquez sur un village pour ouvrir ses informations et lui envoyer des troupes. 👤 = village d'un autre joueur. Depuis ce popup, posez aussi un 🏳️ marqueur personnel (visible seulement par vous) sur n'importe quel village, pour l'organiser sur votre propre carte.</p>
     <p class="muted small">🗺️ Zones d'influence (purement visuelles, sans effet sur le jeu) :</p>
     <div class="legend-row">
       <span class="legend-chip" style="color:var(--gold);"><i style="background:currentColor;"></i>vous</span>
