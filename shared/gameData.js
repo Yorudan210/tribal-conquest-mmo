@@ -194,9 +194,34 @@
     return Math.max(3, Math.round(t/Math.pow(TRAIN_TIME_FACTOR, barracksLevel||0)));
   }
 
+  // Marqueurs personnels que le joueur peut poser sur n'importe quel village de la carte (le sien,
+  // ceux d'un autre joueur, ou un village barbare) : une simple note visuelle privée ("cible
+  // prioritaire", "à surveiller"...), jamais vue par personne d'autre et SANS AUCUN effet sur le
+  // jeu (contrairement à tout ce qui touche réellement au village visé). Stockés au niveau du
+  // compte (voir villageTagsOf, gameLogic.js), pas du village, pour survivre à un changement de
+  // village actif comme à la perte/conquête d'un village. La couleur ci-dessous ne sert qu'à
+  // teinter le badge côté client (voir villageTagBadgeSvg, public/index.html) ; la clé "key" est la
+  // seule valeur réellement stockée et validée côté serveur (voir VILLAGE_TAG_KEYS).
+  const VILLAGE_TAGS = [
+    { key:"star",      label:"Cible prioritaire",    color:"#e6c14a" },
+    { key:"swords",    label:"Cible d'attaque",      color:"#b23a3a" },
+    { key:"shield",    label:"À défendre",           color:"#4a7fb0" },
+    { key:"exclaim",   label:"À surveiller",         color:"#d98a2b" },
+    { key:"check",     label:"Traité",               color:"#5a9a52" },
+    { key:"cross",     label:"À éviter",             color:"#7a7268" },
+    { key:"hourglass", label:"Timing en préparation", color:"#8a5fb0" },
+    { key:"coin",      label:"Ferme à piller",       color:"#c9a227" },
+    { key:"skull",     label:"Danger",               color:"#8a3226" },
+    { key:"peace",     label:"Paix / pacte",         color:"#3d9e7a" },
+    { key:"question",  label:"À explorer",           color:"#5b93b0" },
+    { key:"crown",     label:"À conquérir (noble)",  color:"#c1793e" }
+  ];
+  const VILLAGE_TAG_KEYS = VILLAGE_TAGS.map(t=>t.key);
+
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
     ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext,
-    clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR
+    clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR,
+    VILLAGE_TAGS, VILLAGE_TAG_KEYS
   };
 });
