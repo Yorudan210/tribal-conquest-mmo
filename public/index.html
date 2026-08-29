@@ -1183,27 +1183,66 @@ function villageIconLevel(t, mine){
   const tier = t.tier||0;
   return tier<=1 ? 0 : (tier<=2 ? 1 : 2);
 }
+let _villageIconSeq = 0;
 function villageMapIconSvg(kind, level, hasWall){
   const barb = kind==="barbarian";
   const black = kind==="blackarmy";
   // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
   // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
   // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
-  const wall = black ? "#141417" : (barb ? "#6b5a3f" : "#8a6a45");
-  const roof = black ? "#4a1414" : (barb ? "#4a3826" : "#6b3226");
+  // Chaque appel obtient un préfixe d'id unique (uid) pour ses <linearGradient> : plusieurs icônes
+  // cohabitent dans le même document (tous les pins de la carte, ou toutes les cartes d'une galerie),
+  // et des id de <defs> partagés entre icônes de couleurs différentes se voleraient leur dégradé.
+  const uid = "vi" + (_villageIconSeq++);
+  const wallTop = black ? "#26262b" : (barb ? "#8c7752" : "#a8825a");
+  const wallBot = black ? "#0a0a0c" : (barb ? "#544628" : "#6b4f31");
+  const roofTop = black ? "#5c1c1c" : (barb ? "#5c4530" : "#82402e");
+  const roofBot = black ? "#280a0a" : (barb ? "#2e2416" : "#42201a");
   const doorStroke = black ? "#0a0a0c" : "#2a1c10";
-  const hut = (x,s)=>`<g transform="translate(${x},2) scale(${s})">
-    <rect x="-9" y="-14" width="18" height="14" fill="${wall}" stroke="${doorStroke}" stroke-width="1.4"/>
-    <polygon points="-11,-14 0,-25 11,-14" fill="${roof}" stroke="${doorStroke}" stroke-width="1.4"/>
+  const windowCol = black ? "#6a1c1c" : "#e6c978";
+  const groundCol = black ? "#1c1414" : (barb ? "#39431f" : "#463822");
+  const defs = `<defs>
+    <linearGradient id="${uid}w" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${wallTop}"/><stop offset="1" stop-color="${wallBot}"/>
+    </linearGradient>
+    <linearGradient id="${uid}r" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${roofTop}"/><stop offset="1" stop-color="${roofBot}"/>
+    </linearGradient>
+  </defs>`;
+  // Chaque hutte : mur dégradé, toit dégradé + faîtage, porte, une fenêtre éclairée, et en option
+  // une cheminée qui fume légèrement (portée uniquement par la hutte principale du groupe, pour
+  // rester lisible à la petite taille réelle des pins).
+  const hut = (x,s,chimney)=>`<g transform="translate(${x},2) scale(${s})">
+    <rect x="-9" y="-14" width="18" height="14" fill="url(#${uid}w)" stroke="${doorStroke}" stroke-width="1.4"/>
+    <rect x="3.5" y="-11" width="4" height="4" fill="${windowCol}" stroke="${doorStroke}" stroke-width="0.8"/>
+    <polygon points="-11,-14 0,-25 11,-14" fill="url(#${uid}r)" stroke="${doorStroke}" stroke-width="1.4"/>
+    <line x1="-11" y1="-14" x2="0" y2="-25" stroke="${roofTop}" stroke-width="0.8" opacity="0.55"/>
     <rect x="-3" y="-8" width="6" height="8" fill="${doorStroke}"/>
+    ${chimney ? `<rect x="4.5" y="-22.5" width="3" height="6" fill="${doorStroke}"/><circle cx="6" cy="-25.5" r="2.1" fill="#d8d2c2" opacity="0.45"/><circle cx="7.3" cy="-28.8" r="2.7" fill="#d8d2c2" opacity="0.28"/>` : ""}
   </g>`;
-  const huts = level<=0 ? hut(0,1) : level===1 ? hut(-9,0.82)+hut(9,0.9) : hut(-14,0.78)+hut(0,0.95)+hut(14,0.78);
-  const palisade = hasWall ? `<path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black?'#3a1414':'#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>` : "";
+  const huts = level<=0 ? hut(0,1,true) : level===1 ? hut(-9,0.82,false)+hut(9,0.9,true) : hut(-14,0.78,false)+hut(0,0.95,true)+hut(14,0.78,false);
+  // Parcelle de terre battue sous les huttes : ancre visuellement le groupe au sol (au lieu de
+  // huttes qui semblaient "flotter") et grandit avec le niveau, comme le hameau lui-même.
+  const groundRx = level<=0 ? 13 : level===1 ? 19 : 23;
+  const ground = `<ellipse cx="0" cy="6" rx="${groundRx}" ry="4" fill="${groundCol}" opacity="0.55"/>`;
+  // Élément central du hameau/village (niveau >= 1) : un puits pour un village (le vôtre ou un
+  // joueur), un petit feu de camp pour les barbares -- rien pour l'Armée Noire, dont l'ambiance
+  // sombre + la lueur rouge du pin suffisent déjà à la distinguer sans surcharger l'icône.
+  const centerpiece = level>=1 && !black
+    ? (barb
+        ? `<g transform="translate(0,5.5)"><polygon points="-3,3 3,3 1.6,-3.5 -1.6,-3.5" fill="#2a2016" stroke="${doorStroke}" stroke-width="0.7"/><polygon points="0,-3.5 -1.6,1 1.3,0.4" fill="#e0862c" opacity="0.85"/><polygon points="0,-2 -0.9,0.8 0.8,0.5" fill="#f5c25a"/></g>`
+        : `<g transform="translate(0,5)"><ellipse cx="0" cy="1.6" rx="3.6" ry="1.7" fill="#4a3c28" stroke="${doorStroke}" stroke-width="0.8"/><rect x="-2.6" y="-2.6" width="5.2" height="3.6" fill="#352a1a" stroke="${doorStroke}" stroke-width="0.7"/><line x1="-2.6" y1="-2.6" x2="2.6" y2="-2.6" stroke="#6b5533" stroke-width="1"/></g>`)
+    : "";
+  const palisade = hasWall ? `
+    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black?'#3a1414':'#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black?'#2a0e0e':'#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black?'#2a0e0e':'#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+  ` : "";
   const flag = kind==="mine"
     ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>`
     : kind==="player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>`
     : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
-  return `<svg viewBox="-24 -30 48 36" preserveAspectRatio="xMidYMax meet">${palisade}${huts}${flag}</svg>`;
+  return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${defs}${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
 }
 
 /* ------------------------- Décor de la carte du monde ------------------------- *
