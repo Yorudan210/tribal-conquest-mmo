@@ -9,7 +9,7 @@ const GameData = require("../shared/gameData.js");
 const store = require("./store.js");
 const { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
         ACHIEVEMENTS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext, clamp,
-        buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime } = GameData;
+        buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, VILLAGE_TAG_KEYS } = GameData;
 
 function now(){ return Date.now()/1000; } // "temps de jeu" en secondes réelles (vitesse toujours x1 en multijoueur)
 
@@ -1379,6 +1379,34 @@ function commanderOf(db, username){
   return u.commander;
 }
 
+/* ------------------------- Marqueurs de village (carte) ------------------------- *
+ * Notes personnelles posées sur n'importe quel village visible sur la carte (le sien, celui d'un
+ * autre joueur, ou un village barbare) — voir VILLAGE_TAGS/VILLAGE_TAG_KEYS, shared/gameData.js.
+ * Stockées au niveau du COMPTE (comme le Commandant ci-dessus), sous forme { [villageId]: tagKey },
+ * et initialisées paresseusement pour les comptes créés avant l'introduction de cette fonctionnalité.
+ * Purement cosmétique et strictement privé : jamais lu ni exposé pour un autre joueur, et sans le
+ * moindre effet sur la simulation — aucune vérification de propriété n'est donc nécessaire ici,
+ * contrairement à toute action qui affecte réellement le village visé. */
+function villageTagsOf(db, username){
+  const u = db.users[username];
+  if(!u) return null;
+  if(!u.villageTags) u.villageTags = {};
+  return u.villageTags;
+}
+
+function doSetVillageTag(db, username, villageId, tag){
+  const tags = villageTagsOf(db, username);
+  if(!tags) return { error: "Compte introuvable." };
+  if(!db.villages[villageId]) return { error: "Village introuvable." };
+  if(tag){
+    if(!VILLAGE_TAG_KEYS.includes(tag)) return { error: "Marqueur inconnu." };
+    tags[villageId] = tag;
+  } else {
+    delete tags[villageId];
+  }
+  return { ok: true };
+}
+
 /* Ajoute de l'XP au Commandant d'un joueur (gagnée au combat, voir resolveAttack) et fait monter
    son niveau autant de fois que nécessaire (boucle, pour gérer un gain d'XP dépassant plusieurs
    paliers d'un coup) ; chaque niveau gagné accorde 1 point de compétence à dépenser librement
@@ -2418,7 +2446,8 @@ function buildSnapshot(db, username){
     mySupport,
     guild: guild ? publicGuildView(db, guild, username) : null,
     guildInvites,
-    commander: publicCommanderView(db, username)
+    commander: publicCommanderView(db, username),
+    villageTags: villageTagsOf(db, username) || {}
   };
 }
 
@@ -2442,5 +2471,6 @@ module.exports = {
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
   doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic,
-  doCommanderUpgrade, publicCommanderView
+  doCommanderUpgrade, publicCommanderView,
+  doSetVillageTag
 };

@@ -241,6 +241,15 @@ async function handleApi(req, res, pathname, url){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/map/tag" && req.method==="POST"){
+    // Marqueur personnel posé sur un village de la carte (voir doSetVillageTag, gameLogic.js) —
+    // purement cosmétique et privé au compte, envoyer body.tag="" (ou omis) retire le marqueur.
+    const body = await readBody(req);
+    const result = game.doSetVillageTag(db, username, body.villageId, body.tag);
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
+  }
   if(pathname==="/api/support/send" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doSendSupport(db, username, body.targetId, body.troops||{});
