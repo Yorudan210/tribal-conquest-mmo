@@ -42,7 +42,7 @@ export default function PlayerProfileModal() {
     }), "🎁 Don envoyé à " + p.username + ".", null);
     closePlayerProfile();
   }
-  function attackOrScout() {
+  function goToVillage() {
     closePlayerProfile();
     goToVillageOnMap(p.homeVillageId);
   }
@@ -147,8 +147,6 @@ export default function PlayerProfileModal() {
     onClick: sendGift
   }, "\uD83C\uDF81 Envoyer")), /*#__PURE__*/React.createElement("button", {
     className: "primary",
-    onClick: attackOrScout
-  }, "\u2694\uFE0F Attaquer"), /*#__PURE__*/React.createElement("button", {
-    onClick: attackOrScout
-  }, "\uD83D\uDD2D Espionner")))));
+    onClick: goToVillage
+  }, "\uD83D\uDD2D Espionner / voir sur la carte")))));
 }

@@ -203,7 +203,6 @@ export default function VillageActionModal({
   // ---- Cas 3 : village barbare ou d'un autre joueur ----
   const intel = scoutIntel[t.id];
   const rel = t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
-  const diplomacyWarning = rel && (rel.type === "pact" || rel.type === "alliance");
   return /*#__PURE__*/React.createElement("div", {
     className: "tutorial-backdrop",
     id: "villageActionBackdrop",
@@ -251,17 +250,16 @@ export default function VillageActionModal({
       padding: "6px 10px",
       margin: "0 0 8px"
     }
-  }, RES_ICON[t.resourceBonus.res], " Gisement riche : ce village produit +", Math.round(t.resourceBonus.pct * 100), "% de ", RES_NAME[t.resourceBonus.res].toLowerCase(), t.isPlayer ? "" : " une fois conquis", " \u2014 le bonus reste propre \xE0 ce village.") : null, diplomacyWarning ? /*#__PURE__*/React.createElement("p", {
-    className: "small",
+  }, RES_ICON[t.resourceBonus.res], " Gisement riche : ce village produit +", Math.round(t.resourceBonus.pct * 100), "% de ", RES_NAME[t.resourceBonus.res].toLowerCase(), t.isPlayer ? "" : " une fois conquis", " \u2014 le bonus reste propre \xE0 ce village.") : null, t.isPlayer ? /*#__PURE__*/React.createElement("p", {
+    className: "small muted",
     style: {
-      color: "#e0c98a",
-      background: "rgba(74,63,34,.35)",
-      border: "1px solid #4a3f22",
+      background: "rgba(0,0,0,.12)",
+      border: "1px solid var(--border-soft)",
       borderRadius: 8,
       padding: "6px 10px",
       margin: "8px 0"
     }
-  }, "\u26A0\uFE0F Votre guilde a ", rel.type === "alliance" ? "une alliance" : "un pacte de non-agression", " avec ce joueur. L'attaque reste possible, mais r\xE9fl\xE9chissez-y \xE0 deux fois.") : null, /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDD4A\uFE0F Ce monde est int\xE9gralement JcE : les attaques entre joueurs sont d\xE9sactiv\xE9es. Vous pouvez tout de m\xEAme reconna\xEEtre ce village ou lui envoyer un soutien.") : null, /*#__PURE__*/React.createElement("div", {
     className: "send-form open"
   }, /*#__PURE__*/React.createElement("div", {
     className: "inputs"
@@ -287,7 +285,7 @@ export default function VillageActionModal({
         document.getElementById("send_" + t.id + "_" + k).value = maxSend;
       }
     }, "max ", maxSend));
-  })), /*#__PURE__*/React.createElement("button", {
+  })), t.isPlayer ? null : /*#__PURE__*/React.createElement("button", {
     className: "primary",
     onClick: () => sendMission(t.id, "attack")
   }, "\u2694\uFE0F Attaquer"), /*#__PURE__*/React.createElement("button", {
