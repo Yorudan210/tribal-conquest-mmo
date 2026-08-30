@@ -53,7 +53,7 @@ function HelpBox({ isAdmin, replayTutorial, doAction, call }){
     <div>
       <h2>Aide &amp; règles du jeu</h2>
       <div className="flex-between" style={{marginBottom:10}}>
-        <p style={{margin:0}}>Conquête Tribale est un jeu de gestion de village médiéval type <i>Tribal Wars</i>, qui tourne désormais dans un <b>monde partagé en temps réel</b> : les autres joueurs sont de vraies personnes, connectées avec leur propre compte, et vous pouvez les attaquer comme ils peuvent vous attaquer. Les « villages barbares » de la carte restent contrôlés par le jeu et servent de cibles faciles pour démarrer.</p>
+        <p style={{margin:0}}>Conquête Tribale est un jeu de gestion de village médiéval type <i>Tribal Wars</i>, qui tourne désormais dans un <b>monde partagé en temps réel</b> : les autres joueurs sont de vraies personnes, connectées avec leur propre compte. Ce monde est intégralement <b>JcE</b> (joueur contre environnement) : aucune attaque n'est possible entre joueurs, seulement la reconnaissance et le soutien. Les « villages barbares » de la carte (dont ceux de l'Armée Noire) restent contrôlés par le jeu et sont les seules cibles d'attaque.</p>
         <button onClick={replayTutorial}>🔰 Revoir le tutoriel</button>
       </div>
       <div className="accordion">
