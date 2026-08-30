@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useGame } from "../../GameContext.jsx";
 import { fmt } from "../../formulas.js";
 import { ACHIEVEMENT_TIER_LABELS, clamp } from "../../gameData.js";
-import { helpBodyHtml } from "../../legacy/helpContent.js";
+import { helpSections } from "../../legacy/helpContent.js";
 import { ChangelogCards } from "../AuthScreen.jsx";
 import AdminPanel from "./AdminPanel.jsx";
 const ACHIEVEMENT_TIER_COLORS = ["#a9895f", "#cd7f32", "#c0c0c0", "#e0b83c"];
@@ -55,6 +55,15 @@ function HelpBox({
   doAction,
   call
 }) {
+  const sections = helpSections("⛏️");
+  const [openSet, setOpenSet] = useState(() => new Set([0]));
+  function toggle(i) {
+    setOpenSet(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "Aide & r\xE8gles du jeu"), /*#__PURE__*/React.createElement("div", {
     className: "flex-between",
     style: {
@@ -67,10 +76,31 @@ function HelpBox({
   }, "Conqu\xEAte Tribale est un jeu de gestion de village m\xE9di\xE9val type ", /*#__PURE__*/React.createElement("i", null, "Tribal Wars"), ", qui tourne d\xE9sormais dans un ", /*#__PURE__*/React.createElement("b", null, "monde partag\xE9 en temps r\xE9el"), " : les autres joueurs sont de vraies personnes, connect\xE9es avec leur propre compte, et vous pouvez les attaquer comme ils peuvent vous attaquer. Les \xAB villages barbares \xBB de la carte restent contr\xF4l\xE9s par le jeu et servent de cibles faciles pour d\xE9marrer."), /*#__PURE__*/React.createElement("button", {
     onClick: replayTutorial
   }, "\uD83D\uDD30 Revoir le tutoriel")), /*#__PURE__*/React.createElement("div", {
-    dangerouslySetInnerHTML: {
-      __html: helpBodyHtml("⛏️")
-    }
-  }), !isAdmin && /*#__PURE__*/React.createElement("div", {
+    className: "accordion"
+  }, sections.map((sec, i) => {
+    const open = openSet.has(i);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "acc-item" + (open ? " open" : ""),
+      key: i,
+      id: sec.id
+    }, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "acc-head",
+      "aria-expanded": open,
+      onClick: () => toggle(i)
+    }, /*#__PURE__*/React.createElement("span", null, sec.title), /*#__PURE__*/React.createElement("span", {
+      className: "chev"
+    }, "\u2304")), /*#__PURE__*/React.createElement("div", {
+      className: "acc-body-wrap"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "acc-body"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "acc-body-inner",
+      dangerouslySetInnerHTML: {
+        __html: sec.html
+      }
+    }))));
+  })), !isAdmin && /*#__PURE__*/React.createElement("div", {
     className: "box",
     style: {
       marginTop: 16
