@@ -557,6 +557,16 @@ async function handleApi(req, res, pathname, url){
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
     }
+    // Peuple rétroactivement en bandits/raiders un monde déjà généré avant l'introduction des
+    // factions permanentes (voir PERMANENT_FACTIONS, shared/gameData.js) -- un monde neuf les a déjà
+    // dès sa création (store.load()), cette route n'est utile qu'une fois, pour rattraper un monde
+    // existant. Sans effet (erreur explicite) si des campements de ces factions existent déjà.
+    if(pathname==="/api/admin/factions/seed" && req.method==="POST"){
+      const result = game.adminSeedPermanentFactions(db);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, counts: result.counts, snapshot: game.buildSnapshot(db, username) });
+    }
 
     // ---- Panneau Admin : gestion de TOUS les villages (pas seulement le village d'origine de
     // chaque joueur comme les routes /api/admin/village, /api/admin/give... ci-dessus) ----

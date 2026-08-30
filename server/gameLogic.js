@@ -188,6 +188,117 @@ function publicBlackArmyEvent(db){
   };
 }
 
+/* ------------------------------------------------------------------------ */
+/*  Factions PNJ permanentes (bandits/raiders) : voir PERMANENT_FACTIONS      */
+/*  dans shared/gameData.js. La génération initiale (population complète, à   */
+/*  la création d'un monde neuf) vit dans store.js (spawnPermanentFactions,   */
+/*  appelée par store.load()) ; le top-up périodique des brigands ci-dessous,*/
+/*  lui, doit vivre ICI et pas dans store.js, car il est appelé par runTick   */
+/*  avec le "db" du tick en cours -- jamais le "db" interne au module         */
+/*  store.js (voir le commentaire sur `store` en tête de ce fichier). On      */
+/*  duplique donc volontairement une petite partie du calcul de coordonnées   */
+/*  et de la formule de village, exactement comme spawnBlackArmy ci-dessus    */
+/*  duplique déjà celle de generateBarbarians (store.js) pour la même raison. */
+/* ------------------------------------------------------------------------ */
+const BANDIT_FLOOR = 40;        // sous ce nombre de repaires de brigands non conquis, on en refait apparaître
+const BANDIT_TOPUP_BATCH = 6;   // par lots, pour ne pas tout recréer d'un coup
+const BANDIT_TOPUP_RADIUS = 15; // apparition à proximité (en cases) d'un village de joueur choisi au hasard
+
+function findFreeCoordNearVillage(db, base, radius){
+  const w = store.getWorldBounds();
+  for(let attempt=0; attempt<200; attempt++){
+    const angle = Math.random()*Math.PI*2;
+    const r = Math.random()*radius;
+    const x = Math.round(clamp(base.x+r*Math.cos(angle), w.minX, w.maxX));
+    const y = Math.round(clamp(base.y+r*Math.sin(angle), w.minY, w.maxY));
+    if(!isCoordOccupied(db,x,y)) return {x,y};
+  }
+  return findFreeBlackArmyCoord(db); // dernier recours : coordonnée libre n'importe où sur la carte
+}
+
+function countActiveFaction(db, factionKey){
+  let n = 0;
+  for(const id in db.villages){ if(db.villages[id].faction===factionKey) n++; }
+  return n;
+}
+
+/* Comme countActiveFaction, mais ne compte que les campements ENCORE barbares (owner==="barbarian") --
+   contrairement à countActiveFaction (qui sert uniquement à détecter "cette faction a-t-elle déjà été
+   semée sur ce monde", conquêtes comprises, pour adminSeedPermanentFactions), topUpBandits a besoin du
+   nombre de repaires RÉELLEMENT disponibles pour savoir s'il doit en refaire apparaître : un village
+   conquis garde son champ `faction` (jamais effacé à la conquête, voir resolveAttack) mais n'est plus
+   un repaire de brigands pour un joueur qui cherche une cible -- sans ce filtre, le seuil ne descend
+   jamais et topUpBandits ne se déclenche jamais. */
+function countUnconqueredFaction(db, factionKey){
+  let n = 0;
+  for(const id in db.villages){ const v=db.villages[id]; if(v.faction===factionKey && v.owner==="barbarian") n++; }
+  return n;
+}
+
+/* Fait réapparaître, par petits lots, des repaires de brigands près de villages de joueurs existants
+   quand leur population tombe sous BANDIT_FLOOR (conquis au fil du temps) -- c'est ce qui garantit
+   qu'il reste toujours des cibles faciles à proximité, contrairement aux barbares classiques (nombre
+   fixe depuis la génération du monde, voir generateBarbarians dans store.js). Appelé depuis runTick,
+   au même rythme que la croissance des barbares. */
+function topUpBandits(db){
+  const cfg = GameData.PERMANENT_FACTIONS && GameData.PERMANENT_FACTIONS.bandits;
+  if(!cfg) return;
+  const current = countUnconqueredFaction(db, "bandits");
+  if(current>=BANDIT_FLOOR) return;
+  const playerVillages = Object.values(db.villages).filter(v=>v.owner!=="barbarian");
+  if(!playerVillages.length) return; // monde tout juste créé, pas encore de joueur : rien à faire
+  const toSpawn = Math.min(BANDIT_TOPUP_BATCH, BANDIT_FLOOR-current);
+  for(let i=0;i<toSpawn;i++){
+    const base = playerVillages[Math.floor(Math.random()*playerVillages.length)];
+    const coord = findFreeCoordNearVillage(db, base, BANDIT_TOPUP_RADIUS);
+    if(!coord) break;
+    const cx = (store.getWorldBounds().minX+store.getWorldBounds().maxX)/2, cy = (store.getWorldBounds().minY+store.getWorldBounds().maxY)/2;
+    const dist = Math.sqrt((coord.x-cx)*(coord.x-cx)+(coord.y-cy)*(coord.y-cy));
+    const maxDist = Math.sqrt(2)*(store.getWorldBounds().maxX-cx);
+    const tier = Math.max(0, Math.min(4, Math.floor((dist/maxDist)*5)));
+    const troopBase = (tier*7+Math.random()*8)*cfg.troopMult;
+    const troops = {
+      spear: Math.round(troopBase*(0.3+Math.random()*0.4)),
+      sword: Math.round(troopBase*(0.2+Math.random()*0.3)),
+      archer: Math.round(troopBase*(0.1+Math.random()*0.2)),
+      scout:0, light:0, ram:0, catapult:0, noble:0
+    };
+    const resBase = (150+tier*250)*cfg.resMult;
+    const id = String(db.nextVillageId++);
+    db.villages[id] = {
+      id, x:coord.x, y:coord.y, name:"Repaire de brigands",
+      owner: "barbarian", tier, faction: "bandits",
+      resources: {
+        wood: Math.round(resBase*(0.7+Math.random()*0.6)),
+        clay: Math.round(resBase*(0.7+Math.random()*0.6)),
+        iron: Math.round(resBase*(0.7+Math.random()*0.6))
+      },
+      resCap: Math.round((600+tier*500)*cfg.resMult),
+      troops,
+      wallLevel: cfg.wallGuarantee ? Math.max(1, Math.round(Math.random()*tier)+1) : Math.round(Math.random()*tier),
+      hideLevel: 0, loyalty: 100, aggro: {},
+      resourceBonus: Math.random()<0.12 ? { res:["wood","clay","iron"][Math.floor(Math.random()*3)], pct:0.10 } : null
+    };
+  }
+}
+
+/* Peuple rétroactivement un monde DÉJÀ généré (donc jamais passé par store.load() depuis l'ajout des
+   factions permanentes) en bandits/raiders, via le panneau Admin. Refuse de le faire si des
+   campements de ces factions sont déjà présents (évite qu'un clic répété double/triple la
+   population). store.spawnPermanentFactions() lit/écrit le "db" interne à store.js -- ici, sans
+   risque, car cette fonction n'est appelée que depuis une route admin ponctuelle avec le "db" du
+   serveur en cours (le même objet), jamais depuis runTick (voir le commentaire au-dessus de
+   topUpBandits). */
+function adminSeedPermanentFactions(db){
+  const counts = {};
+  for(const key in GameData.PERMANENT_FACTIONS) counts[key] = countActiveFaction(db, key);
+  if(Object.values(counts).some(n=>n>0)){
+    return { error:"Des campements de factions permanentes existent déjà sur la carte (bandits : "+(counts.bandits||0)+", raiders : "+(counts.raiders||0)+"). Rien à faire." };
+  }
+  store.spawnPermanentFactions();
+  return { ok:true, counts: { bandits: countActiveFaction(db,"bandits"), raiders: countActiveFaction(db,"raiders") } };
+}
+
 // Nombre maximum de nobles vivants qu'un même village peut entretenir à la fois.
 const NOBLE_CAP_PER_VILLAGE = 4;
 // Nombre maximum de nobles qu'une seule attaque peut emporter (voir doMission).
@@ -432,7 +543,7 @@ function doTrain(db, username, key, count, villageId){
   if(t.pop*count > free) return { error: "Population insuffisante (ferme trop petite)." };
   if(v.trainQueue.length>=8) return { error: "File d'entraînement pleine (max 8)." };
   v.resources.wood-=cost.wood; v.resources.clay-=cost.clay; v.resources.iron-=cost.iron;
-  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, username) });
+  v.trainQueue.push({ troop:key, count, unitStartAt: now(), unitDuration: trainTime(key, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, username), "train") / villageBoostMultiplier(v, "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, username) });
   return { ok: true };
 }
 
@@ -1097,6 +1208,23 @@ function resolveAttack(db, m){
       bumpStat(db, m.attackerUsername, "blackArmyDefeated", 1);
       if(db.blackArmyEvent) db.blackArmyEvent.defeatedCount = (db.blackArmyEvent.defeatedCount||0)+1;
     }
+    // Camp de maraudeurs (faction "raiders", voir PERMANENT_FACTIONS) : chaque victoire octroie en
+    // plus, au village qui a envoyé l'attaque, le boost temporaire défini par boostOnVictory (même
+    // forme qu'une entrée de GUILD_BOOSTS -- voir villageBoostMultiplier). Le village source peut en
+    // théorie avoir disparu depuis le départ de la mission (action admin) : on vérifie qu'il existe.
+    if(target.faction==="raiders"){
+      const raidersCfg = GameData.PERMANENT_FACTIONS && GameData.PERMANENT_FACTIONS.raiders;
+      const boost = raidersCfg && raidersCfg.boostOnVictory;
+      const sourceVillage = db.villages[m.sourceVillageId];
+      if(boost && sourceVillage){
+        if(!sourceVillage.activeBoosts) sourceVillage.activeBoosts = [];
+        sourceVillage.activeBoosts = sourceVillage.activeBoosts.filter(b=>b.expiresAt>now());
+        sourceVillage.activeBoosts.push({
+          key: boost.key, name: boost.name, icon: boost.icon, type: boost.type,
+          multiplier: boost.multiplier, expiresAt: now()+boost.durationSec, source: "raiders"
+        });
+      }
+    }
   }
   const defenderLossesTotal = Object.values(defenderLosses||{}).reduce((s,n)=>s+(n||0),0);
   const attackerLossesTotal = Object.values(attackerLosses||{}).reduce((s,n)=>s+(n||0),0);
@@ -1232,13 +1360,14 @@ function runTick(db){
     const guild = guildOf(db, v.owner);
     const guildMult = guildBonusMultiplier(guild);
     const guildProdBoostMult = guildBoostMultiplier(guild, "production");
+    const villageProdBoostMult = villageBoostMultiplier(v, "production");
     const eventProdMult = serverEventMultiplier(db, "production");
     const commanderProdM = commanderProdMult(db, v.owner);
     for(const r of ["wood","clay","iron"]){
       // Bonus de gisement (voir rollResourceBonus, store.js) : +10% UNIQUEMENT sur la ressource
       // concernée et UNIQUEMENT dans ce village précis — jamais propagé aux autres villages du joueur.
       const villageResBonusMult = (v.resourceBonus && v.resourceBonus.res===r) ? (1+v.resourceBonus.pct) : 1;
-      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*eventProdMult*villageResBonusMult*commanderProdM;
+      const perSec = prodPerHour(r, v.buildings[r])/3600*empireMult*speedMult*guildMult*guildProdBoostMult*villageProdBoostMult*eventProdMult*villageResBonusMult*commanderProdM;
       // borne haute = cap normal, sauf si un admin a déjà placé le stock au-dessus (auquel cas
       // on ne le fait pas redescendre — la production s'arrête juste, comme un entrepôt plein).
       const upperBound = Math.max(cap, v.resources[r]);
@@ -1259,7 +1388,7 @@ function runTick(db){
         v.troops[order.troop] = (v.troops[order.troop]||0)+1;
         order.count--;
         if(order.count<=0){ v.trainQueue.shift(); }
-        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, v.owner); }
+        else { order.unitStartAt = order.unitStartAt+order.unitDuration; order.unitDuration = trainTime(order.troop, v.buildings.barracks) / getSpeedMultiplier(db) / guildBoostMultiplier(guildOf(db, v.owner), "train") / villageBoostMultiplier(v, "train") / serverEventMultiplier(db, "train") / commanderSpeedMult(db, v.owner); }
       } else break;
     }
   }
@@ -1281,6 +1410,13 @@ function runTick(db){
   for(const gid in db.guilds){
     const g = db.guilds[gid];
     if(g.activeBoosts && g.activeBoosts.length) g.activeBoosts = g.activeBoosts.filter(b=>b.expiresAt>t);
+  }
+  // même purge pour les boosts de village (Ration de guerre gagnée contre un camp de maraudeurs —
+  // voir villageBoostMultiplier/PERMANENT_FACTIONS.raiders.boostOnVictory).
+  for(const id in db.villages){
+    const v = db.villages[id];
+    if(v.owner==="barbarian") continue;
+    if(v.activeBoosts && v.activeBoosts.length) v.activeBoosts = v.activeBoosts.filter(b=>b.expiresAt>t);
   }
 
   // villages barbares : régénération, apaisement, croissance, ripostes
@@ -1304,6 +1440,7 @@ function runTick(db){
 
   if(t >= db.nextWorldGrowthAt){
     db.nextWorldGrowthAt = t + 180 + Math.random()*180;
+    topUpBandits(db);
     const growable = Object.values(db.villages).filter(v=>v.owner==="barbarian");
     const growCount = Math.max(1, Math.round(growable.length*0.06));
     for(let i=0;i<growCount;i++){
@@ -1589,6 +1726,20 @@ function guildBoostMultiplier(guild, type){
   const t = now();
   let mult = 1;
   for(const b of guild.activeBoosts){
+    if(b.type===type && b.expiresAt>t) mult *= b.multiplier;
+  }
+  return mult;
+}
+
+/* Même principe que guildBoostMultiplier ci-dessus, mais pour les boosts propres à UN village
+   (v.activeBoosts, même forme {key,name,icon,type,multiplier,expiresAt,source}) -- gagnés en
+   battant un camp de maraudeurs (faction "raiders", voir PERMANENT_FACTIONS/resolveAttack),
+   contrairement aux boosts de guilde qui s'achètent avec la banque commune. */
+function villageBoostMultiplier(v, type){
+  if(!v || !v.activeBoosts || !v.activeBoosts.length) return 1;
+  const t = now();
+  let mult = 1;
+  for(const b of v.activeBoosts){
     if(b.type===type && b.expiresAt>t) mult *= b.multiplier;
   }
   return mult;
@@ -2490,9 +2641,18 @@ function buildSnapshot(db, username){
   const chatGlobal = chatAll.filter(m=>m.channel!=="guild").slice(-60).map(withChatMeta);
   const chatGuild = guild ? chatAll.filter(m=>m.channel==="guild" && m.guildId===guild.id).slice(-60).map(withChatMeta) : [];
 
+  // village.activeBoosts (Ration de guerre des maraudeurs, etc.) est transformé pour le client
+  // exactement comme guild.activeBoosts dans publicGuildView (expiresAt absolu -> secondsLeft) --
+  // on construit une copie superficielle de v pour ça, sans jamais réécrire v.activeBoosts lui-même
+  // (qui reste en expiresAt absolu dans db.json, seule forme que runTick sait purger).
+  const villageView = { ...v, activeBoosts: (v.activeBoosts||[]).filter(b=>b.expiresAt>now()).map(b=>({
+    key:b.key, name:b.name, icon:b.icon, type:b.type, multiplier:b.multiplier,
+    secondsLeft: Math.max(0, Math.round(b.expiresAt-now())), source:b.source
+  })) };
+
   return {
     serverTime: now(),
-    village: v,
+    village: villageView,
     missions: myMissions,
     incomingAttacks,
     worldMissions,
@@ -2534,7 +2694,7 @@ module.exports = {
   adminFinishBuildQueueForVillage, adminFinishTrainQueueForVillage,
   adminBulkUpdateVillages, adminBulkGiveResourcesToVillages, adminBulkFinishQueues,
   adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
-  adminStartBlackArmy, adminStopBlackArmy,
+  adminStartBlackArmy, adminStopBlackArmy, adminSeedPermanentFactions,
   doSendSupport, doRecallSupport, doGiveResources, doTransferResourcesBetweenVillages,
   doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,

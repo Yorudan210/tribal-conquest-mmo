@@ -150,6 +150,7 @@ function load(){
   }
   db = emptyDb();
   generateBarbarians(BARBARIAN_COUNT);
+  spawnPermanentFactions();
   save();
   return db;
 }
@@ -239,6 +240,82 @@ function generateBarbarians(count){
   }
 }
 
+/* ------------------- Factions PNJ permanentes (bandits/raiders) -------------------- *
+ * Voir PERMANENT_FACTIONS dans shared/gameData.js pour le pourquoi. Un village de ces
+ * factions est généré exactement comme un barbare classique (generateBarbarians
+ * ci-dessus) mais avec les multiplicateurs de la config, un flag "faction", et un
+ * choix de coordonnées biaisé (proche du centre pour "bandits", proche de la
+ * périphérie pour "raiders") plutôt qu'uniformément aléatoire sur toute la carte. */
+const PERMANENT_FACTION_COUNTS = { bandits: 60, raiders: 45 };
+// Le top-up périodique des repaires de brigands (topUpBandits) qui garantit qu'il en
+// reste toujours près des joueurs, même après plusieurs semaines de jeu, vit dans
+// gameLogic.js (runTick) et NON ici : runTick(db) reçoit son "db" en paramètre (celui
+// du serveur en cours), alors que toutes les fonctions de CE fichier lisent la
+// variable "db" interne au module store.js -- les deux ne sont PAS interchangeables
+// (voir le commentaire en tête de gameLogic.js sur ce sujet). spawnPermanentFactions
+// ci-dessous reste ici car il n'est appelé QUE par store.js lui-même (load(), à
+// l'initialisation d'un monde neuf) ou par la route admin de seed rétroactif, jamais
+// depuis le tick de gameLogic.js.
+
+function findFreeCoordBiased(preference){
+  const cx = (WORLD.minX+WORLD.maxX)/2, cy = (WORLD.minY+WORLD.maxY)/2;
+  const maxRadius = Math.min(WORLD.maxX-WORLD.minX, WORLD.maxY-WORLD.minY)/2;
+  for(let attempt=0; attempt<500; attempt++){
+    let r;
+    if(preference==="near") r = maxRadius*Math.pow(Math.random(),2);       // biaisé vers le centre
+    else if(preference==="far") r = maxRadius*(1-Math.pow(Math.random(),2)); // biaisé vers la périphérie
+    else r = maxRadius*Math.random();
+    const angle = Math.random()*Math.PI*2;
+    const x = Math.round(GameData.clamp(cx+r*Math.cos(angle), WORLD.minX, WORLD.maxX));
+    const y = Math.round(GameData.clamp(cy+r*Math.sin(angle), WORLD.minY, WORLD.maxY));
+    if(!isOccupied(x,y)) return {x,y};
+  }
+  return findFreeCoord(); // dernier recours : balayage uniforme (voir findFreeCoord)
+}
+
+/* Génère UN village pour une faction permanente donnée (cfg = une entrée de
+   PERMANENT_FACTIONS), aux coordonnées renvoyées par coordFn() -- même formule de
+   tier/troupes/ressources que generateBarbarians ci-dessus, simplement passée au
+   crible des multiplicateurs troopMult/resMult/wallGuarantee de la config. */
+function spawnFactionVillage(cfg, coordFn){
+  const {x,y} = coordFn();
+  const cx = (WORLD.minX+WORLD.maxX)/2, cy = (WORLD.minY+WORLD.maxY)/2;
+  const dist = Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));
+  const maxDist = Math.sqrt(2)*(WORLD.maxX-cx);
+  const tier = Math.max(0, Math.min(4, Math.floor((dist/maxDist)*5)));
+  const troopBase = (tier*7+Math.random()*8)*cfg.troopMult;
+  const troops = {
+    spear: Math.round(troopBase*(0.3+Math.random()*0.4)),
+    sword: Math.round(troopBase*(0.2+Math.random()*0.3)),
+    archer: Math.round(troopBase*(0.1+Math.random()*0.2)),
+    scout:0, light:0, ram:0, catapult:0, noble:0
+  };
+  const resBase = (150+tier*250)*cfg.resMult;
+  const id = String(db.nextVillageId++);
+  db.villages[id] = {
+    id, x, y, name: VILLAGE_NAMES[Math.floor(Math.random()*VILLAGE_NAMES.length)],
+    owner: "barbarian", tier, faction: cfg.key,
+    resources: {
+      wood: Math.round(resBase*(0.7+Math.random()*0.6)),
+      clay: Math.round(resBase*(0.7+Math.random()*0.6)),
+      iron: Math.round(resBase*(0.7+Math.random()*0.6))
+    },
+    resCap: Math.round((600+tier*500)*cfg.resMult),
+    troops,
+    wallLevel: cfg.wallGuarantee ? Math.max(1, Math.round(Math.random()*tier)+1) : Math.round(Math.random()*tier),
+    hideLevel: 0, loyalty: 100, aggro: 0, resourceBonus: rollResourceBonus()
+  };
+  return db.villages[id];
+}
+
+function spawnPermanentFactions(){
+  for(const key in GameData.PERMANENT_FACTIONS){
+    const cfg = GameData.PERMANENT_FACTIONS[key];
+    const count = PERMANENT_FACTION_COUNTS[key] || 30;
+    for(let i=0;i<count;i++) spawnFactionVillage(cfg, ()=>findFreeCoordBiased(cfg.distancePreference));
+  }
+}
+
 function createPlayerVillage(username){
   const {x,y} = findFreeCoord();
   const id = String(db.nextVillageId++);
@@ -261,6 +338,7 @@ function getWorldBounds(){ return WORLD; }
 module.exports = {
   load, save, scheduleSave, getDb, getWorldBounds,
   findFreeCoord, createPlayerVillage, generateBarbarians,
+  spawnPermanentFactions,
   restoreFromRemoteIfNeeded, backupNowRemote,
   backupEnabled: backup.enabled
 };
