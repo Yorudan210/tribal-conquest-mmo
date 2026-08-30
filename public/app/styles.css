@@ -283,6 +283,9 @@
   .tag.ally{background:#1f4a3a;color:#8ad9c0;}
   .tag.pact{background:#22384a;color:#8ac0e0;}
   .tag.war{background:#4a2222;color:#e0a0a0;}
+  .tag.blackarmy{background:#1c1c22;color:#e08a8a;}
+  .tag.bandits{background:#2e2436;color:#c9a8e8;}
+  .tag.raiders{background:#3a2110;color:#f0b060;}
   .event-badges{display:flex; flex-wrap:wrap; gap:8px;}
   .event-badge{position:relative; display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:10px; background:rgba(193,121,62,.16); border:1px solid var(--gold); font-size:18px; cursor:default; transition:transform .15s ease, background .15s ease;}
   .event-badge:hover{background:rgba(193,121,62,.32); transform:translateY(-1px);}
@@ -350,6 +353,10 @@
   .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
   .villagePin.blackarmy .dot{background:#0c0c10; border-color:#9a2b2b; box-shadow:0 0 9px rgba(154,43,43,.85);}
   .villagePin.blackarmy:hover .dot{box-shadow:0 0 14px rgba(210,60,60,.95);}
+  .villagePin.bandits .dot{background:#2e2436; border-color:#a878d0; box-shadow:0 0 7px rgba(168,120,208,.6);}
+  .villagePin.bandits:hover .dot{box-shadow:0 0 12px rgba(190,140,224,.8);}
+  .villagePin.raiders .dot{background:#3a2110; border-color:#e08a30; box-shadow:0 0 7px rgba(224,138,48,.6);}
+  .villagePin.raiders:hover .dot{box-shadow:0 0 12px rgba(240,160,60,.8);}
   .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
   .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
