@@ -11,6 +11,14 @@ import { villageMapIconSvg, villageIconLevel, villageTagBadgeSvg, mapDecorHtml }
 export const TIER_CLASS = ["weak","weak","medium","strong","strong"];
 export const TIER_LABEL = ["Très faible","Faible","Moyen","Fort","Très fort"];
 export const BLACK_ARMY_RANK_LABEL = ["I","II","III","IV","V"];
+// Table générique de rendu des factions PvE spéciales (pins carte + badge VillageActionModal).
+// blackArmy garde exactement son comportement d'avant (cls "blackarmy", label "Armée Noire") --
+// bandits/raiders (Phase 1 "variété des cibles PvE") suivent le même pattern.
+export const FACTION_PIN = {
+  blackArmy: {cls:"blackarmy", icon:"🏴", label:"Armée Noire"},
+  bandits: {cls:"bandits", icon:"🗡️", label:"Repaire de brigands"},
+  raiders: {cls:"raiders", icon:"🐎", label:"Camp de maraudeurs"}
+};
 export const DIPLOMACY_LABEL = {pact:"Pacte de non-agression", alliance:"Alliance", war:"Guerre"};
 export const VILLAGE_TAG_MAP = Object.fromEntries(VILLAGE_TAGS.map(t=>[t.key, t]));
 
@@ -94,13 +102,13 @@ export function buildMapMarkup(snapshot, username, mapView, selectedVillage, now
     const sel = selectedVillage===t.id;
     const mine = t.owner===username;
     const rel = !mine && t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
-    const isBlackArmy = !mine && !t.isPlayer && t.faction==="blackArmy";
-    const cls = mine ? "player" : (rel ? rel.cls : (isBlackArmy ? "blackarmy" : (t.isPlayer ? "medium" : TIER_CLASS[t.tier])));
-    const iconKind = mine ? "mine" : (isBlackArmy ? "blackarmy" : (t.isPlayer ? "player" : "barbarian"));
+    const factionInfo = !mine && !t.isPlayer && t.faction ? FACTION_PIN[t.faction] : null;
+    const cls = mine ? "player" : (rel ? rel.cls : (factionInfo ? factionInfo.cls : (t.isPlayer ? "medium" : TIER_CLASS[t.tier])));
+    const iconKind = mine ? "mine" : (factionInfo ? factionInfo.cls : (t.isPlayer ? "player" : "barbarian"));
     const icon = villageMapIconSvg(iconKind, villageIconLevel(t, mine), (t.wallLevel||0)>0);
     const bonusTxt = t.resourceBonus ? (" · gisement riche : +"+Math.round(t.resourceBonus.pct*100)+"% "+RES_NAME[t.resourceBonus.res].toLowerCase()) : "";
-    const blackArmyTxt = isBlackArmy ? (" · 🏴 Armée Noire — Rang "+BLACK_ARMY_RANK_LABEL[t.tier||0]) : "";
-    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt+blackArmyTxt;
+    const factionTxt = factionInfo ? (" · "+factionInfo.icon+" "+factionInfo.label+(t.faction==="blackArmy" ? (" — Rang "+BLACK_ARMY_RANK_LABEL[t.tier||0]) : "")) : "";
+    const title = t.name+" ("+t.x+"|"+t.y+")"+(mine?' — vous':(t.isPlayer?(' — '+t.owner):''))+(rel?(' · '+rel.label):'')+bonusTxt+factionTxt;
     const badge = t.resourceBonus ? `<span class="resbonus-badge">${RES_ICON[t.resourceBonus.res]}</span>` : "";
     const tagKey = (snapshot.villageTags||{})[t.id];
     const tagBadge = tagKey ? `<span class="village-tag-badge" title="${escapeHtml((VILLAGE_TAG_MAP[tagKey]||{}).label||"")}">${villageTagBadgeSvg(tagKey)}</span>` : "";

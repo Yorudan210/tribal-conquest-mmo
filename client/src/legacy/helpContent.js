@@ -29,6 +29,14 @@ export function helpSections(ironIcon){
       <p>L'évènement est temporaire : passé son délai, les campements pas encore conquis se retirent automatiquement du monde (une annonce prévient de son lancement et de sa fin). Aucun risque à s'y frotter au-delà du combat lui-même : comme pour un barbare, si vous perdez, vous ne perdez que les troupes envoyées.</p>`,
     },
     {
+      id: "helpFactions",
+      title: "🗡️ Repaires de brigands et camps de maraudeurs",
+      html: `<p>En dehors des barbares classiques et de l'Armée Noire, deux autres types de campements PNJ permanents peuplent la carte pour varier les cibles disponibles :</p>
+      <p>🗡️ <b>Repaires de brigands</b> (pin violet) : proches du centre de la carte, plus faibles qu'un village barbare classique de même distance — une cible d'appoint accessible même en fin de partie. De nouveaux repaires réapparaissent régulièrement à proximité des villages joueurs dès que trop peu en restent sur la carte : impossible de les épuiser durablement.</p>
+      <p>🐎 <b>Camps de maraudeurs</b> (pin orange) : plus loin du centre, plus forts qu'un barbare classique de même distance. Chaque victoire contre un camp de maraudeurs octroie en plus du butin habituel une <b>Ration de guerre</b> : un bonus de production temporaire (quelques heures) sur le village qui a attaqué, visible en haut de l'écran tant qu'il est actif. De quoi donner une bonne raison de les traquer spécifiquement plutôt que de piller au hasard.</p>
+      <p>Ces deux types de campement sont des villages barbares ordinaires pour tout le reste (combat, conquête par un Noble, gisement riche possible) — seuls leur force et, pour les maraudeurs, la récompense de victoire diffèrent.</p>`,
+    },
+    {
       title: "Gisements riches",
       html: `<p>Environ 1 village barbare sur 8 recèle un <b>gisement riche</b> en une ressource tirée au hasard (bois, argile ou fer), repérable sur la Carte par un petit badge ${ironIcon} sur son pin (survolez ou touchez le pin pour voir laquelle). Une fois ce village conquis par un Noble, il produit <b>+10%</b> de cette ressource — un bonus propre à ce village précis, qui ne s'applique jamais à vos autres villages.</p>`,
     },
