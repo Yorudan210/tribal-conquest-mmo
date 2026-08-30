@@ -29,7 +29,7 @@ export default function PlayerProfileModal(){
     closePlayerProfile();
   }
 
-  function attackOrScout(){
+  function goToVillage(){
     closePlayerProfile();
     goToVillageOnMap(p.homeVillageId);
   }
@@ -76,8 +76,7 @@ export default function PlayerProfileModal(){
                 </div>
                 <button onClick={sendGift}>🎁 Envoyer</button>
               </div>
-              <button className="primary" onClick={attackOrScout}>⚔️ Attaquer</button>
-              <button onClick={attackOrScout}>🔭 Espionner</button>
+              <button className="primary" onClick={goToVillage}>🔭 Espionner / voir sur la carte</button>
             </>
           )}
         </div>

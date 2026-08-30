@@ -126,7 +126,6 @@ export default function VillageActionModal({ onGotoTab }){
   // ---- Cas 3 : village barbare ou d'un autre joueur ----
   const intel = scoutIntel[t.id];
   const rel = t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
-  const diplomacyWarning = rel && (rel.type==="pact" || rel.type==="alliance");
 
   return (
     <div className="tutorial-backdrop" id="villageActionBackdrop" onClick={onBackdropClick}>
@@ -154,9 +153,9 @@ export default function VillageActionModal({ onGotoTab }){
             {RES_ICON[t.resourceBonus.res]} Gisement riche : ce village produit +{Math.round(t.resourceBonus.pct*100)}% de {RES_NAME[t.resourceBonus.res].toLowerCase()}{t.isPlayer?"":" une fois conquis"} — le bonus reste propre à ce village.
           </p>
         ) : null}
-        {diplomacyWarning ? (
-          <p className="small" style={{color:"#e0c98a", background:"rgba(74,63,34,.35)", border:"1px solid #4a3f22", borderRadius:8, padding:"6px 10px", margin:"8px 0"}}>
-            ⚠️ Votre guilde a {rel.type==="alliance"?"une alliance":"un pacte de non-agression"} avec ce joueur. L'attaque reste possible, mais réfléchissez-y à deux fois.
+        {t.isPlayer ? (
+          <p className="small muted" style={{background:"rgba(0,0,0,.12)", border:"1px solid var(--border-soft)", borderRadius:8, padding:"6px 10px", margin:"8px 0"}}>
+            🕊️ Ce monde est intégralement JcE : les attaques entre joueurs sont désactivées. Vous pouvez tout de même reconnaître ce village ou lui envoyer un soutien.
           </p>
         ) : null}
         <div className="send-form open">
@@ -173,7 +172,7 @@ export default function VillageActionModal({ onGotoTab }){
               );
             })}
           </div>
-          <button className="primary" onClick={()=>sendMission(t.id,"attack")}>⚔️ Attaquer</button>
+          {t.isPlayer ? null : <button className="primary" onClick={()=>sendMission(t.id,"attack")}>⚔️ Attaquer</button>}
           <button onClick={()=>sendMission(t.id,"scout")}>🔭 Reconnaître</button>
           {t.isPlayer ? <button onClick={()=>sendMission(t.id,"support")}>🤝 Envoyer en soutien</button> : null}
         </div>
