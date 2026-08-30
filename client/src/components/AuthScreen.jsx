@@ -70,6 +70,7 @@ export default function AuthScreen(){
           </div>
         ) : (
           <form onSubmit={onSubmit} style={{display:"flex", flexDirection:"column", gap:10, textAlign:"left"}}>
+            <div className="divider"><span className="diamond"></span></div>
             <label className="small">Pseudo
               <input type="text" maxLength={20} autoComplete="username" placeholder="3 à 20 caractères"
                 value={u} onChange={e=>setU(e.target.value)} />
