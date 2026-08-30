@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useGame } from "../../GameContext.jsx";
 import { fmt } from "../../formulas.js";
 import { ACHIEVEMENT_TIER_LABELS, clamp } from "../../gameData.js";
-import { helpBodyHtml } from "../../legacy/helpContent.js";
+import { helpSections } from "../../legacy/helpContent.js";
 import { ChangelogCards } from "../AuthScreen.jsx";
 import AdminPanel from "./AdminPanel.jsx";
 
@@ -40,6 +40,15 @@ export default function InformationTab(){
 }
 
 function HelpBox({ isAdmin, replayTutorial, doAction, call }){
+  const sections = helpSections("⛏️");
+  const [openSet, setOpenSet] = useState(() => new Set([0]));
+  function toggle(i){
+    setOpenSet(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
   return (
     <div>
       <h2>Aide &amp; règles du jeu</h2>
@@ -47,7 +56,23 @@ function HelpBox({ isAdmin, replayTutorial, doAction, call }){
         <p style={{margin:0}}>Conquête Tribale est un jeu de gestion de village médiéval type <i>Tribal Wars</i>, qui tourne désormais dans un <b>monde partagé en temps réel</b> : les autres joueurs sont de vraies personnes, connectées avec leur propre compte, et vous pouvez les attaquer comme ils peuvent vous attaquer. Les « villages barbares » de la carte restent contrôlés par le jeu et servent de cibles faciles pour démarrer.</p>
         <button onClick={replayTutorial}>🔰 Revoir le tutoriel</button>
       </div>
-      <div dangerouslySetInnerHTML={{__html: helpBodyHtml("⛏️")}} />
+      <div className="accordion">
+        {sections.map((sec, i) => {
+          const open = openSet.has(i);
+          return (
+            <div className={"acc-item"+(open?" open":"")} key={i} id={sec.id}>
+              <button type="button" className="acc-head" aria-expanded={open} onClick={()=>toggle(i)}>
+                <span>{sec.title}</span><span className="chev">⌄</span>
+              </button>
+              <div className="acc-body-wrap">
+                <div className="acc-body">
+                  <div className="acc-body-inner" dangerouslySetInnerHTML={{__html: sec.html}} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
       {!isAdmin && (
         <div className="box" style={{marginTop:16}}>
           <h3>🔑 Devenir administrateur</h3>
