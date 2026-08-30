@@ -298,6 +298,17 @@
     display:block; box-shadow:0 1px 3px rgba(0,0,0,.6);
   }
   .village-tag-badge svg{ display:block; width:100%; height:100%; }
+  /* Assistant de pillage : lignes cliquables (voir renderFarm/attachFarmHandlers) — toute la ligne
+     est une cible pour cocher/décocher, pas seulement la petite case à cocher. */
+  tr.farm-row{cursor:pointer; transition:background-color .12s ease;}
+  tr.farm-row:hover{background:rgba(193,121,62,.10);}
+  tr.farm-row.farm-row-selected{background:rgba(154,117,38,.16);}
+  tr.farm-row.farm-row-selected:hover{background:rgba(193,121,62,.22);}
+  tr.farm-row.farm-row-busy{cursor:default; opacity:.55;}
+  tr.farm-row.farm-row-busy:hover{background:none;}
+  tr.farm-row td:first-child{width:30px; text-align:center;}
+  tr.farm-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
+  tr.farm-row.farm-row-busy input[type=checkbox]{cursor:not-allowed;}
   .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
   .villagePin.weak .dot{background:#4d7a37;}
   .villagePin.medium .dot{background:#9a7526;}
@@ -3781,6 +3792,13 @@ function renderMap(){
    qu'un aperçu client pour composer confortablement l'envoi avant de cliquer. */
 let farmComposition = null;
 let farmRadius = 15;
+// Ids de villages que l'utilisateur a manuellement DÉCOCHÉS de la sélection d'envoi. Comme
+// farmComposition/farmRadius ci-dessus, cet état vit ici (hors du DOM) et survit donc aux
+// re-rendus fréquents de renderFarm() déclenchés par le sondage HTTP (10s) et, bien plus souvent,
+// par chaque instantané poussé en WebSocket (~2s, au rythme du tick serveur) — sans quoi renderFarm()
+// réinitialiserait silencieusement toutes les cases à "cochée" à chaque rafraîchissement automatique,
+// même quelques secondes à peine après que l'utilisateur en ait décoché une (bug corrigé ici).
+let farmDeselectedIds = new Set();
 
 function ensureFarmComposition(){
   if(!farmComposition){
@@ -3805,6 +3823,49 @@ function farmEligibleTargets(){
     .sort((a,b)=>a.dist-b.dist);
 }
 
+// Estimation client du temps de trajet aller (même formule que doMission côté serveur — voir
+// gameLogic.js), pour afficher un ordre de grandeur par cible avant l'envoi. Le serveur revalide
+// et recalcule de toute façon à l'envoi réel : ceci n'est qu'un aperçu, pas une garantie.
+function farmEstimateTravelSec(dist){
+  const comp = ensureFarmComposition();
+  let maxSpeed = 0;
+  for(const k in comp) if(comp[k]>0) maxSpeed = Math.max(maxSpeed, TROOPS[k].speed);
+  if(!maxSpeed) return null;
+  let moveMult = 1;
+  for(const e of (state.serverEvents||[])) if(e.affects==="move") moveMult *= e.multiplier;
+  return Math.max(4, Math.round(dist*maxSpeed/moveMult));
+}
+
+function formatDurationShort(sec){
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if(h>0) return `${h}h${String(m).padStart(2,"0")}`;
+  if(m>0) return `${m}min${String(s).padStart(2,"0")}`;
+  return `${s}s`;
+}
+
+// Recalcule combien de cibles sont sélectionnées / combien seront réellement pillées avec le
+// modèle et les troupes actuels, et met à jour les petits compteurs + le bouton d'envoi SANS
+// reconstruire tout le tableau (évite le clignotement à chaque coche/décoche).
+function farmRecomputeCounts(){
+  const v = state.village;
+  const comp = ensureFarmComposition();
+  const compKeys = Object.keys(comp).filter(k=>comp[k]>0);
+  let maxByTroops = compKeys.length ? Infinity : 0;
+  for(const k of compKeys) maxByTroops = Math.min(maxByTroops, Math.floor((v.troops[k]||0)/comp[k]));
+  if(!Number.isFinite(maxByTroops)) maxByTroops = 0;
+  const available = farmEligibleTargets().filter(t=>!t.busy);
+  const selectedCount = available.filter(t=>!farmDeselectedIds.has(t.id)).length;
+  const willSend = Math.min(maxByTroops, selectedCount);
+  const countEl = document.getElementById("farmSelectedCount");
+  if(countEl) countEl.textContent = selectedCount;
+  const sendCountEl = document.getElementById("farmSendCount");
+  if(sendCountEl) sendCountEl.textContent = willSend;
+  const btn = document.getElementById("btnFarmSendAll");
+  if(btn) btn.disabled = willSend<=0;
+  return { available, selectedCount, willSend };
+}
+
 function renderFarm(){
   const v = state.village;
   const comp = ensureFarmComposition();
@@ -3818,7 +3879,8 @@ function renderFarm(){
   let maxByTroops = compKeys.length ? Infinity : 0;
   for(const k of compKeys) maxByTroops = Math.min(maxByTroops, Math.floor((v.troops[k]||0)/comp[k]));
   if(!Number.isFinite(maxByTroops)) maxByTroops = 0;
-  const willSend = Math.min(maxByTroops, available.length);
+  const selectedCount = available.filter(t=>!farmDeselectedIds.has(t.id)).length;
+  const willSend = Math.min(maxByTroops, selectedCount);
 
   const compInputs = TROOP_ORDER.filter(k=>k!=="noble").map(k=>{
     const avail=v.troops[k]||0;
@@ -3832,17 +3894,23 @@ function renderFarm(){
   const rows = targets.map(t=>{
     const tagKey = (state.villageTags||{})[t.id];
     const tagBadge = tagKey ? `<span class="village-tag-badge" style="position:static; display:inline-block; width:14px; height:14px; vertical-align:-2px;">${villageTagBadgeSvg(tagKey)}</span> ` : "";
-    return `<tr>
-      <td><input type="checkbox" data-farm-select="${t.id}" ${t.busy?'disabled':'checked'}></td>
+    // L'état "coché" dérive TOUJOURS de farmDeselectedIds (jamais d'un défaut codé en dur) : c'est
+    // ce qui garantit qu'un re-rendu automatique ne peut plus jamais recocher une case que
+    // l'utilisateur a explicitement décochée.
+    const checked = !t.busy && !farmDeselectedIds.has(t.id);
+    const etaSec = t.busy ? null : farmEstimateTravelSec(t.dist);
+    const etaHtml = t.busy ? "🚩 pillage en cours" : (etaSec==null ? "—" : `⏱️ ${formatDurationShort(etaSec)}`);
+    return `<tr class="farm-row${checked?' farm-row-selected':''}${t.busy?' farm-row-busy':''}" data-farm-row="${t.id}">
+      <td><input type="checkbox" data-farm-select="${t.id}" ${t.busy?'disabled':''} ${checked?'checked':''}></td>
       <td>${tagBadge}${escapeHtml(t.name)} <span class="small muted">(${t.x}|${t.y})</span></td>
       <td>${t.dist.toFixed(1)}</td>
       <td><span class="tag ${TIER_CLASS[t.tier]}">${TIER_LABEL[t.tier]}</span></td>
-      <td>${t.busy?'<span class="small muted">🚩 pillage en cours</span>':''}</td>
+      <td class="small muted">${etaHtml}</td>
     </tr>`;
   }).join("");
 
   return `<h2>🌾 Assistant de pillage</h2>
-    <p class="muted small">Compose un modèle de troupes une bonne fois pour toutes, puis envoie-le en un clic vers tous les villages barbares à portée de <b>${escapeHtml(v.name)}</b> — plus besoin de remplir le formulaire d'attaque cible par cible. Ne cible jamais un autre joueur, même par erreur.</p>
+    <p class="muted small">Compose un modèle de troupes une bonne fois pour toutes, puis envoie-le en un clic vers tous les villages barbares à portée de <b>${escapeHtml(v.name)}</b> — plus besoin de remplir le formulaire d'attaque cible par cible. Ne cible jamais un autre joueur, même par erreur. Clique une ligne (ou sa case) pour l'exclure de l'envoi : ce choix est conservé même pendant les mises à jour automatiques.</p>
     <div class="card" style="margin-bottom:14px;">
       <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:18px;">
         <div>
@@ -3855,10 +3923,16 @@ function renderFarm(){
         </div>
       </div>
     </div>
-    <p class="small">${targets.length} village${targets.length>1?'s':''} barbare${targets.length>1?'s':''} à portée · ${available.length} disponible${available.length>1?'s':''} (hors pillages déjà en cours) · le modèle actuel permet d'en viser <b>${maxByTroops===Infinity?'—':maxByTroops}</b> à la fois avec les troupes présentes ici.</p>
-    <button id="btnFarmSendAll" class="primary" ${willSend<=0?'disabled':''}>🌾 Piller la sélection (${willSend})</button>
+    <div class="flex-between" style="align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+      <p class="small" style="margin:0;">${targets.length} village${targets.length>1?'s':''} barbare${targets.length>1?'s':''} à portée · <b id="farmSelectedCount">${selectedCount}</b> sélectionné${selectedCount>1?'s':''} (sur ${available.length} disponible${available.length>1?'s':''}) · le modèle actuel permet d'en viser <b>${maxByTroops===Infinity?'—':maxByTroops}</b> à la fois avec les troupes présentes ici.</p>
+      <div style="display:flex; gap:8px;">
+        <button id="btnFarmSelectAll" class="small" type="button" ${available.length===0?'disabled':''}>Tout sélectionner</button>
+        <button id="btnFarmSelectNone" class="small" type="button" ${available.length===0?'disabled':''}>Tout désélectionner</button>
+      </div>
+    </div>
+    <button id="btnFarmSendAll" class="primary" ${willSend<=0?'disabled':''}>🌾 Piller la sélection (<span id="farmSendCount">${willSend}</span>)</button>
     <table style="margin-top:12px;">
-      <thead><tr><th></th><th>Village</th><th>Distance</th><th>Rang</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Village</th><th>Distance</th><th>Rang</th><th>Trajet</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="5" class="muted small">Aucun village barbare dans ce rayon — augmentez le rayon de recherche.</td></tr>`}</tbody>
     </table>`;
 }
@@ -3866,6 +3940,43 @@ function renderFarm(){
 function attachFarmHandlers(){
   const main=document.getElementById("tabContent");
   if(!main) return;
+
+  // Coche/décoche une cible sans reconstruire tout le tableau : met juste à jour l'état persisté,
+  // la case elle-même, le surlignage de la ligne, et les compteurs.
+  function setFarmRowSelected(id, selected){
+    if(selected) farmDeselectedIds.delete(id);
+    else farmDeselectedIds.add(id);
+    const row = main.querySelector(`tr[data-farm-row="${CSS.escape(id)}"]`);
+    if(row){
+      const cb = row.querySelector("[data-farm-select]");
+      if(cb) cb.checked = selected;
+      row.classList.toggle("farm-row-selected", selected);
+    }
+    farmRecomputeCounts();
+  }
+
+  main.querySelectorAll("tr.farm-row").forEach(row=>{
+    if(row.classList.contains("farm-row-busy")) return; // pillage déjà en cours : rien à cocher
+    const id = row.dataset.farmRow;
+    const cb = row.querySelector("[data-farm-select]");
+    if(cb) cb.onchange = () => setFarmRowSelected(id, cb.checked);
+    row.onclick = (e) => {
+      if(e.target===cb) return; // la case gère déjà son propre clic via onchange ci-dessus
+      setFarmRowSelected(id, !(cb && cb.checked));
+    };
+  });
+
+  const selectAllBtn = document.getElementById("btnFarmSelectAll");
+  if(selectAllBtn) selectAllBtn.onclick = () => {
+    farmDeselectedIds.clear();
+    renderActiveTabContent();
+  };
+  const selectNoneBtn = document.getElementById("btnFarmSelectNone");
+  if(selectNoneBtn) selectNoneBtn.onclick = () => {
+    farmEligibleTargets().filter(t=>!t.busy).forEach(t=>farmDeselectedIds.add(t.id));
+    renderActiveTabContent();
+  };
+
   main.querySelectorAll("[data-farm-troop]").forEach(inp=>{
     inp.onchange=()=>{
       ensureFarmComposition()[inp.dataset.farmTroop] = Math.max(0, Math.floor(Number(inp.value)||0));
@@ -3886,7 +3997,7 @@ function attachFarmHandlers(){
   };
   const btn=document.getElementById("btnFarmSendAll");
   if(btn) btn.onclick=async ()=>{
-    const ids = Array.from(main.querySelectorAll("[data-farm-select]:checked")).map(c=>c.dataset.farmSelect);
+    const ids = farmEligibleTargets().filter(t=>!t.busy && !farmDeselectedIds.has(t.id)).map(t=>t.id);
     if(!ids.length) return;
     const comp={};
     const c = ensureFarmComposition();
