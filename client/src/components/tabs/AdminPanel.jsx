@@ -72,6 +72,7 @@ export default function AdminPanel(){
       <BulkVillagesBox bulkScope={bulkScope} setBulkScope={setBulkScope} adminAction={adminAction} call={call} toast={toast} />
       <ServerEventsBox snapshot={snapshot} eventKey={eventKey} setEventKey={setEventKey} adminAction={adminAction} call={call} toast={toast} />
       <BlackArmyBox snapshot={snapshot} adminAction={adminAction} call={call} toast={toast} />
+      <PermanentFactionsBox adminAction={adminAction} call={call} />
       <MissionsBox missions={missions} adminAction={adminAction} call={call} />
 
       <div className="box" style={{marginBottom:14}}>
@@ -355,6 +356,23 @@ function BlackArmyBox({ snapshot, adminAction, call, toast }){
         </div>
         <button type="submit" className="primary" disabled={active}>🏴 Lancer l'Armée Noire</button>
       </form>
+    </div>
+  );
+}
+
+/* Peuple rétroactivement un monde déjà généré en repaires de brigands/camps de maraudeurs (Phase 1
+   "variété des cibles PvE") -- utile pour tout monde de production existant depuis avant l'ajout de
+   ces factions (spawnPermanentFactions ne s'exécute normalement qu'à l'init d'un monde neuf, voir
+   server/store.js). Action à usage unique et sans danger : le serveur refuse de dupliquer la
+   population si ces factions existent déjà (voir adminSeedPermanentFactions, server/gameLogic.js). */
+function PermanentFactionsBox({ adminAction, call }){
+  return (
+    <div className="box" style={{marginBottom:14}}>
+      <h3>🗡️ Repaires de brigands &amp; camps de maraudeurs</h3>
+      <p className="small muted">Peuple la carte en factions PvE permanentes (voir la section d'aide dédiée) si ce n'est pas déjà fait -- utile une seule fois pour un monde qui existait déjà avant l'ajout de cette fonctionnalité. Sans effet si déjà peuplé (le serveur refuse toute duplication).</p>
+      <button onClick={()=>adminAction(()=>call("/api/admin/factions/seed","POST",{}), "🗡️🐎 Factions permanentes peuplées avec succès !")}>
+        Peupler les factions permanentes
+      </button>
     </div>
   );
 }
