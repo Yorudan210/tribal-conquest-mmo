@@ -493,6 +493,10 @@ function doMission(db, username, targetId, kind, troopsWanted){
   const target = db.villages[String(targetId)];
   if(!target) return { error: "Village ciblé introuvable." };
   if(target.owner===username) return { error: "Ce village vous appartient déjà." };
+  // Jeu intégralement JcE (PvE) : seuls les villages barbares (et les campements de l'Armée Noire,
+  // qui sont des barbares avec un flag faction supplémentaire — voir plus haut) peuvent être attaqués.
+  // La reconnaissance et le soutien entre joueurs restent autorisés, seule l'attaque est bloquée ici.
+  if(kind==="attack" && target.owner!=="barbarian") return { error: "Les attaques entre joueurs sont désactivées : ce monde est intégralement JcE. Seuls les villages barbares (et les campements de l'Armée Noire) peuvent être attaqués." };
   const troops = {};
   let any=false, maxSpeed=0;
   for(const k of TROOP_ORDER){
