@@ -1862,29 +1862,101 @@ function rerenderPreservingInputs(containerEl, renderFn){
   }
 }
 
+/* Fusionne un instantané (reçu par sondage HTTP OU poussé en WebSocket, voir connectWs ci-dessous)
+   et rafraîchit l'affichage -- factorisé ici pour que les deux canaux appliquent EXACTEMENT la même
+   séquence de rendu, plutôt que de risquer une divergence entre deux copies du même code. */
+function refreshUiFromSnapshot(snapshot){
+  applySnapshot(snapshot);
+  renderTabs();
+  updateTopBarStats();
+  rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar);
+  rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
+}
+
 async function pollState(){
   if(!authToken) return;
   try{
     const data = await apiCall("/api/state","GET");
-    applySnapshot(data.snapshot);
-    renderTabs();
-    updateTopBarStats();
-    rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar);
-    rerenderPreservingInputs(document.getElementById("tabContent"), renderActiveTabContent);
+    refreshUiFromSnapshot(data.snapshot);
   }catch(err){
     // session expirée ou serveur momentanément injoignable : on retentera au prochain sondage
     if(/session|reconnect/i.test(err.message||"")) logout(true);
   }
 }
 
+/* Sondage HTTP périodique -- depuis l'introduction du WebSocket temps réel (connectWs ci-dessous),
+   ce n'est plus le mécanisme PRINCIPAL de mise à jour mais un filet de sécurité peu fréquent : si le
+   WebSocket est bloqué par un réseau/proxy particulier ou tombe sans que le navigateur déclenche
+   "close" (ça arrive), le jeu reste tout de même à jour, juste avec plus de latence. D'où l'intervalle
+   nettement plus long qu'avant (2,5s → 10s) : le WebSocket porte désormais la réactivité "temps réel". */
 function startPolling(){
   if(pollHandle) clearInterval(pollHandle);
-  pollHandle=setInterval(pollState, 2500);
+  pollHandle=setInterval(pollState, 10000);
 }
 
 function stopPolling(){
   if(pollHandle){ clearInterval(pollHandle); pollHandle=null; }
 }
+
+/* ============================= TEMPS RÉEL (WebSocket) =============================
+   Le serveur pousse un instantané frais à chaque tick de jeu (toutes les 2s, voir server.js) et
+   immédiatement après un nouveau message de chat, sur un canal de LECTURE SEULE : aucune action de
+   jeu ne passe par ce WebSocket, uniquement l'API HTTP existante (apiCall) continue de le faire. Se
+   reconnecte tout seul avec un délai croissant si la connexion tombe (proxy, veille du poste,
+   coupure réseau...) ; le sondage HTTP ci-dessus reste actif en toile de fond pendant ce temps. */
+let ws = null, wsReconnectTimer = null, wsReconnectDelay = 1000;
+const WS_RECONNECT_MAX_MS = 15000;
+
+function wsUrl(){
+  const proto = location.protocol==="https:" ? "wss:" : "ws:";
+  return proto+"//"+location.host+"/ws";
+}
+
+function connectWs(){
+  if(!authToken || typeof WebSocket==="undefined") return;
+  if(ws && (ws.readyState===WebSocket.OPEN || ws.readyState===WebSocket.CONNECTING)) return;
+  let socket;
+  try{ socket = new WebSocket(wsUrl()); }catch(e){ scheduleWsReconnect(); return; }
+  ws = socket;
+  socket.onopen = () => {
+    wsReconnectDelay = 1000; // connexion réussie : on repart d'un délai de reconnexion court
+    try{ socket.send(JSON.stringify({type:"auth", token:authToken})); }catch(e){}
+  };
+  socket.onmessage = (ev) => {
+    let msg;
+    try{ msg = JSON.parse(ev.data); }catch(e){ return; }
+    if(msg.type==="snapshot" && msg.snapshot) refreshUiFromSnapshot(msg.snapshot);
+    // {type:"authError"} : jeton invalide/expiré côté serveur -- inutile d'insister ici, le
+    // prochain sondage HTTP régulier (pollState) détectera la session expirée et redirigera vers
+    // l'écran de connexion (voir son propre traitement d'erreur "session|reconnect").
+  };
+  socket.onclose = () => { if(ws===socket) ws=null; scheduleWsReconnect(); };
+  socket.onerror = () => { try{ socket.close(); }catch(e){} };
+}
+
+function scheduleWsReconnect(){
+  if(!authToken) return; // déconnecté entre-temps (logout) : inutile de continuer à retenter
+  if(wsReconnectTimer) clearTimeout(wsReconnectTimer);
+  wsReconnectTimer = setTimeout(connectWs, wsReconnectDelay);
+  wsReconnectDelay = Math.min(WS_RECONNECT_MAX_MS, Math.round(wsReconnectDelay*1.6));
+}
+
+function disconnectWs(){
+  if(wsReconnectTimer){ clearTimeout(wsReconnectTimer); wsReconnectTimer=null; }
+  wsReconnectDelay = 1000;
+  if(ws){ const s=ws; ws=null; try{ s.onclose=null; s.close(); }catch(e){} }
+}
+
+/* Un onglet remis au premier plan (retour d'un mobile mis en veille, changement d'onglet du
+   navigateur...) peut avoir manqué des pushes WebSocket pendant qu'il était masqué (le système
+   d'exploitation coupe parfois la connexion en arrière-plan) : on rattrape immédiatement l'état via
+   un sondage HTTP, et on relance le WebSocket s'il n'est plus ouvert. */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="visible" && authToken){
+    pollState();
+    if(!ws || ws.readyState!==WebSocket.OPEN) connectWs();
+  }
+});
 
 /* ============================= AUTHENTIFICATION ============================= */
 
@@ -2029,6 +2101,7 @@ function enterGame(data){
   document.getElementById("gameRoot").style.display="";
   renderAll();
   startPolling();
+  connectWs();
   if(!localStorage.getItem("ct_tutorial_"+username)) renderTutorial();
   document.addEventListener("click", function unlockAudio(){
     Audio.ensureCtx();
@@ -2038,6 +2111,7 @@ function enterGame(data){
 
 function logout(silent){
   stopPolling();
+  disconnectWs();
   authToken=null; username=null; state=null; mapView=null; scoutIntel={}; mapDragging=false;
   adminPlayers=null; adminSelected=null; adminPlayerFilter=""; adminMissions=null; reportFilter="all";
   adminVillages=null; adminSelectedVillageId=null; adminVillageFilter=""; adminBulkScope="all";
@@ -2273,7 +2347,7 @@ function updateTopBarStats(){
 function renderTabs(){
   // Aide, Succès, Admin et Mises à jour sont regroupés dans l'onglet "Informations" (sous-onglets,
   // voir renderInformation) plutôt que d'occuper chacun une place dans la navigation de gauche.
-  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["commander","🎖️ Commandant"+(state.commander?(" (niv. "+state.commander.level+")"):"")],["map","🗺️ Carte"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"]];
+  const tabs=[["buildings","🏗️ Bâtiments"],["barracks","⚔️ Caserne"],["commander","🎖️ Commandant"+(state.commander?(" (niv. "+state.commander.level+")"):"")],["map","🗺️ Carte"],["farm","🌾 Pillage"],["guild","👥 Guilde"+(state.guild?(" — "+state.guild.tag):"")],["market","🏪 Marché"+((state.market||[]).length?(" ("+state.market.length+")"):"")],["leaderboard","🏆 Classement"],["reports","📜 Rapports ("+state.reports.length+")"]];
   // Panneau "Empire" (gestion groupée de tous ses villages, comme le propose Tribal Wars) : n'apparaît
   // qu'à partir de 2 villages possédés — inutile (et vide) avec un seul village.
   if(state.myVillages && state.myVillages.length>=2) tabs.push(["empire","🏰 Empire ("+state.myVillages.length+")"]);
@@ -2579,6 +2653,7 @@ function renderActiveTabContent(){
   else if(activeTab==="commander") main.innerHTML=renderCommander();
   else if(activeTab==="leaderboard") main.innerHTML=renderLeaderboard();
   else if(activeTab==="map") main.innerHTML=renderMap();
+  else if(activeTab==="farm") main.innerHTML=renderFarm();
   else if(activeTab==="reports") main.innerHTML=renderReports();
   else if(activeTab==="guild") main.innerHTML=renderGuild();
   else if(activeTab==="market") main.innerHTML=renderMarket();
@@ -2586,6 +2661,7 @@ function renderActiveTabContent(){
   else main.innerHTML=renderInformation(); // "information" et tout état inconnu retombent ici (comme "help" avant)
   attachTabHandlers();
   if(activeTab==="map"){ positionMapWorld(); drawMapInfluence(); drawMapAttackLines(); attachMapHandlers(); }
+  if(activeTab==="farm") attachFarmHandlers();
   if(activeTab==="guild"){
     attachGuildHandlers();
     if(state.guild && state.guild.isLeader && guildSubTab==="diplomacy" && !guildDirectory) refreshGuildDirectory();
@@ -3695,6 +3771,141 @@ function renderMap(){
         ${influenceCanvas}${attackLinesCanvas}${decor}${pins}${playerPin}${markers}${foreignMarkers}
       </div>
     </div>`;
+}
+
+/* ============================= ASSISTANT DE PILLAGE ("Farm assistant") =============================
+   Compose UNE fois un modèle de troupes, puis l'envoie en un clic vers tous les villages barbares à
+   portée du village actif (rayon réglable) au lieu de remplir le formulaire d'attaque cible par
+   cible. Toute la logique d'éligibilité qui compte réellement (cible barbare, pas déjà en cours,
+   assez de troupes) est revalidée côté serveur (voir doFarmSend, gameLogic.js) : ce qui suit n'est
+   qu'un aperçu client pour composer confortablement l'envoi avant de cliquer. */
+let farmComposition = null;
+let farmRadius = 15;
+
+function ensureFarmComposition(){
+  if(!farmComposition){
+    farmComposition = {};
+    for(const k of TROOP_ORDER) if(k!=="noble") farmComposition[k] = 0;
+  }
+  return farmComposition;
+}
+
+function farmEligibleTargets(){
+  const v = state.village;
+  const busyTargets = new Set(
+    (state.missions||[]).filter(m=>m.kind==="attack" && !m.resolveDone && m.sourceVillageId===v.id).map(m=>m.targetId)
+  );
+  return (state.villages||[])
+    .filter(t=>t.owner==="barbarian")
+    .map(t=>{
+      const dx=t.x-v.x, dy=t.y-v.y;
+      return { ...t, dist: Math.sqrt(dx*dx+dy*dy), busy: busyTargets.has(t.id) };
+    })
+    .filter(t=>t.dist<=farmRadius)
+    .sort((a,b)=>a.dist-b.dist);
+}
+
+function renderFarm(){
+  const v = state.village;
+  const comp = ensureFarmComposition();
+  const targets = farmEligibleTargets();
+  const available = targets.filter(t=>!t.busy);
+
+  // Combien de pillages le modèle actuel permet-il d'envoyer avec les troupes DISPONIBLES là,
+  // tout de suite, dans ce village ? (le serveur revalidera de toute façon au moment de l'envoi,
+  // ceci n'est qu'un aperçu pour aider à doser le modèle avant de cliquer)
+  const compKeys = Object.keys(comp).filter(k=>comp[k]>0);
+  let maxByTroops = compKeys.length ? Infinity : 0;
+  for(const k of compKeys) maxByTroops = Math.min(maxByTroops, Math.floor((v.troops[k]||0)/comp[k]));
+  if(!Number.isFinite(maxByTroops)) maxByTroops = 0;
+  const willSend = Math.min(maxByTroops, available.length);
+
+  const compInputs = TROOP_ORDER.filter(k=>k!=="noble").map(k=>{
+    const avail=v.troops[k]||0;
+    return `<div class="inp">
+      <span>${TROOPS[k].name}</span>
+      <input type="number" min="0" max="${avail}" value="${comp[k]||0}" id="farm_${k}" data-farm-troop="${k}">
+      <a href="#" data-farm-max="${k}" style="font-size:10px;">max ${avail}</a>
+    </div>`;
+  }).join("");
+
+  const rows = targets.map(t=>{
+    const tagKey = (state.villageTags||{})[t.id];
+    const tagBadge = tagKey ? `<span class="village-tag-badge" style="position:static; display:inline-block; width:14px; height:14px; vertical-align:-2px;">${villageTagBadgeSvg(tagKey)}</span> ` : "";
+    return `<tr>
+      <td><input type="checkbox" data-farm-select="${t.id}" ${t.busy?'disabled':'checked'}></td>
+      <td>${tagBadge}${escapeHtml(t.name)} <span class="small muted">(${t.x}|${t.y})</span></td>
+      <td>${t.dist.toFixed(1)}</td>
+      <td><span class="tag ${TIER_CLASS[t.tier]}">${TIER_LABEL[t.tier]}</span></td>
+      <td>${t.busy?'<span class="small muted">🚩 pillage en cours</span>':''}</td>
+    </tr>`;
+  }).join("");
+
+  return `<h2>🌾 Assistant de pillage</h2>
+    <p class="muted small">Compose un modèle de troupes une bonne fois pour toutes, puis envoie-le en un clic vers tous les villages barbares à portée de <b>${escapeHtml(v.name)}</b> — plus besoin de remplir le formulaire d'attaque cible par cible. Ne cible jamais un autre joueur, même par erreur.</p>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:18px;">
+        <div>
+          <div class="small muted" style="margin-bottom:6px;">Modèle de pillage</div>
+          <div class="inputs">${compInputs}</div>
+        </div>
+        <div>
+          <div class="small muted" style="margin-bottom:6px;">Rayon de recherche</div>
+          <div class="inp"><input type="number" min="1" max="500" value="${farmRadius}" id="farmRadius" style="width:70px;"> champs</div>
+        </div>
+      </div>
+    </div>
+    <p class="small">${targets.length} village${targets.length>1?'s':''} barbare${targets.length>1?'s':''} à portée · ${available.length} disponible${available.length>1?'s':''} (hors pillages déjà en cours) · le modèle actuel permet d'en viser <b>${maxByTroops===Infinity?'—':maxByTroops}</b> à la fois avec les troupes présentes ici.</p>
+    <button id="btnFarmSendAll" class="primary" ${willSend<=0?'disabled':''}>🌾 Piller la sélection (${willSend})</button>
+    <table style="margin-top:12px;">
+      <thead><tr><th></th><th>Village</th><th>Distance</th><th>Rang</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="muted small">Aucun village barbare dans ce rayon — augmentez le rayon de recherche.</td></tr>`}</tbody>
+    </table>`;
+}
+
+function attachFarmHandlers(){
+  const main=document.getElementById("tabContent");
+  if(!main) return;
+  main.querySelectorAll("[data-farm-troop]").forEach(inp=>{
+    inp.onchange=()=>{
+      ensureFarmComposition()[inp.dataset.farmTroop] = Math.max(0, Math.floor(Number(inp.value)||0));
+      renderActiveTabContent();
+    };
+  });
+  main.querySelectorAll("[data-farm-max]").forEach(a=>a.onclick=(e)=>{
+    e.preventDefault();
+    const k=a.dataset.farmMax, inp=document.getElementById("farm_"+k);
+    if(inp) inp.value=inp.max;
+    ensureFarmComposition()[k] = Number(inp?inp.max:0)||0;
+    renderActiveTabContent();
+  });
+  const radiusInp=document.getElementById("farmRadius");
+  if(radiusInp) radiusInp.onchange=()=>{
+    farmRadius = Math.max(1, Math.min(500, Math.floor(Number(radiusInp.value)||15)));
+    renderActiveTabContent();
+  };
+  const btn=document.getElementById("btnFarmSendAll");
+  if(btn) btn.onclick=async ()=>{
+    const ids = Array.from(main.querySelectorAll("[data-farm-select]:checked")).map(c=>c.dataset.farmSelect);
+    if(!ids.length) return;
+    const comp={};
+    const c = ensureFarmComposition();
+    for(const k in c) if(c[k]>0) comp[k]=c[k];
+    if(!Object.keys(comp).length){ toast("Composez au moins une troupe pour le modèle de pillage."); return; }
+    btn.disabled = true;
+    try{
+      const data = await apiCall("/api/farm/send", "POST", { targetIds: ids, troops: comp });
+      applySnapshot(data.snapshot);
+      renderTabs(); renderTopBar(); rerenderPreservingInputs(document.getElementById("sidebar"), renderSidebar);
+      renderActiveTabContent();
+      const parts=[];
+      if(data.sent) parts.push(`🌾 ${data.sent} pillage${data.sent>1?'s':''} envoyé${data.sent>1?'s':''}`);
+      if(data.skippedBusy) parts.push(`${data.skippedBusy} déjà en cours`);
+      if(data.skippedTroops) parts.push(`${data.skippedTroops} faute de troupes`);
+      toast(parts.length ? parts.join(" · ") : "Aucun pillage envoyé.");
+      if(data.sent) Audio.SFX.depart();
+    }catch(err){ toast("⚠️ "+err.message); }
+  };
 }
 
 function positionMapWorld(){
