@@ -2,17 +2,23 @@
     --bg:#ecdcae; --bg2:#241a10; --panel:#2e2417; --panel2:#3c2f1c;
     --border:#6b5333; --text:#f2e6c8; --text-dim:#bfa878; --gold:#c1793e;
     --green:#6bab5e; --red:#c15b46; --blue:#5b93b0;
+    /* Bordure adoucie : le cadre de l'appli (bannière, rail de nav, colonne principale, modales)
+       garde --border pleine ; le contenu qu'il héberge (cartes, mini-panneaux, tableaux) passe à
+       cette version atténuée -- hiérarchie "cadre vs contenu" plutôt que tout encadré pareil. */
+    --border-soft:color-mix(in srgb, var(--border) 52%, transparent);
     --shadow-sm:0 2px 6px rgba(30,17,6,.32);
     --shadow-md:0 4px 16px rgba(30,17,6,.4);
     --shadow-lg:0 8px 28px rgba(30,17,6,.5);
     --ring:0 0 0 3px rgba(193,121,62,.24);
     --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+    --font-display:'Cinzel', Georgia, serif; --font-body:'Crimson Pro', Georgia, serif; --font-data:'IBM Plex Mono', ui-monospace, monospace;
   }
   *{box-sizing:border-box;}
   body{
-    margin:0; font-family:Georgia,'Times New Roman',serif; background:var(--bg);
+    margin:0; font-family:var(--font-body); background:var(--bg);
     color:var(--text); min-height:100vh; position:relative;
   }
+  .res .val, .res .rate, .village-title .coord{font-family:var(--font-data);}
   /* Fond parchemin en position fixe (au lieu de background-attachment:fixed, peu fiable sur
      mobile/Safari) : un calque décoratif derrière tout le contenu, qui ne bouge pas au défilement
      et ne déforme jamais l'image même sur une page très longue. */
@@ -25,7 +31,7 @@
   #gameRoot{display:flex; flex-direction:column; min-height:100vh;}
   .app-shell{display:flex; align-items:flex-start; flex:1 1 auto; min-height:0;}
   #app{flex:1 1 0; min-width:0; max-width:1200px; margin:0 auto; padding:10px 14px 40px;}
-  h1,h2,h3{font-family:Georgia,serif;color:var(--gold);margin:0 0 8px;}
+  h1,h2,h3{font-family:var(--font-display);color:var(--gold);margin:0 0 8px; letter-spacing:.01em;}
   a{color:var(--blue);}
   ::-webkit-scrollbar{width:11px; height:11px;}
   ::-webkit-scrollbar-track{background:var(--bg2);}
@@ -68,6 +74,15 @@
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   input[type=password]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  #authScreen .box{position:relative; overflow:hidden; box-shadow:var(--shadow-lg), 0 34px 60px -32px rgba(10,6,2,.55);}
+  #authScreen .box::before{
+    content:""; position:absolute; top:-64px; left:50%; translate:-50% 0; width:220px; height:220px; pointer-events:none;
+    background:radial-gradient(circle, color-mix(in srgb, var(--gold) 32%, transparent), transparent 68%);
+  }
+  #authScreen .box > *{position:relative;}
+  #authScreen .divider{display:flex; align-items:center; gap:9px; margin:2px 0 4px;}
+  #authScreen .divider::before, #authScreen .divider::after{content:""; flex:1; height:1px; background:var(--border-soft);}
+  #authScreen .divider .diamond{width:6px; height:6px; background:var(--gold); transform:rotate(45deg); flex:none;}
   #authScreen input[type=text]{width:100%; box-sizing:border-box;}
   #authScreen label.small{display:flex; flex-direction:column; gap:4px; color:var(--text-dim);}
   #authTabs button.ghost{background:transparent; box-shadow:none;}
@@ -83,19 +98,30 @@
     background:linear-gradient(180deg, rgba(46,36,23,.94), rgba(36,28,17,.94));
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 18px; margin:14px 0;
-    position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md);
+    position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md), 0 22px 40px -26px rgba(10,6,2,.45);
   }
-  .res-group{display:flex; gap:16px; flex-wrap:wrap;}
-  .res{display:flex; flex-direction:column; align-items:center; min-width:64px; padding:4px 8px; border-radius:8px; transition:background .15s ease;}
-  .res:hover{background:rgba(0,0,0,.15);}
+  .res-group{display:flex; gap:8px; flex-wrap:wrap;}
+  .res{
+    display:flex; flex-direction:column; align-items:center; min-width:64px; padding:5px 10px;
+    border-radius:999px; border:1px solid var(--border-soft); background:rgba(0,0,0,.14);
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .res:hover{background:rgba(0,0,0,.24); border-color:var(--border);}
   .res .val{font-weight:bold; font-size:14px;}
   .res .rate{font-size:10px; color:var(--text-dim);}
   .res.warn .val{color:var(--red);}
   .res.bonus{background:rgba(193,121,62,.16); box-shadow:inset 0 0 0 1px rgba(193,121,62,.5);}
   .res.bonus .rate{color:var(--gold);}
   .res-box .res-group{display:grid; grid-template-columns:1fr 1fr; gap:8px 6px;}
-  .res-box .res{align-items:flex-start; min-width:0; width:100%; padding:6px 8px;}
-  .res-box .res .val{font-size:13px; white-space:nowrap;}
+  /* Dans la colonne latérale (grille 2 colonnes serrée), la bordure de la pastille est superflue --
+     le panneau .box l'entoure déjà -- et grignotait juste assez de largeur pour faire déborder les
+     valeurs les plus longues (cap d'entrepôt) hors de la pastille. */
+  .res-box .res{align-items:flex-start; min-width:0; width:100%; padding:6px 8px; border:none; background:rgba(0,0,0,.12);}
+  .res-box .res:hover{border:none;}
+  /* Pas de nowrap ici : avec un entrepôt bien rempli, "12 345/31 948" peut dépasser la largeur de
+     la pastille dans cette grille 2 colonnes serrée -- un retour à la ligne propre vaut mieux qu'un
+     débordement par-dessus la pastille voisine (bug pré-existant, corrigé au passage). */
+  .res-box .res .val{font-size:13px; line-height:1.25; word-break:break-word;}
   .topbar-right{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
   .village-title{display:flex; flex-direction:column;}
   .village-title .name{font-weight:bold; color:var(--gold);}
@@ -109,17 +135,23 @@
   .top-banner{
     display:flex; align-items:center; justify-content:center; gap:12px; padding:14px 18px;
     background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(36,28,17,.97));
-    border-bottom:1px solid var(--border); box-shadow:var(--shadow-sm); position:relative; z-index:26;
+    border-bottom:1px solid #6b5333; box-shadow:var(--shadow-sm); position:relative; z-index:26;
+    isolation:isolate;
   }
-  .top-banner svg{width:34px; height:40px; flex:0 0 auto; overflow:visible;}
-  .top-banner .brand-name{font-family:Georgia,serif; color:var(--gold); font-weight:bold; font-size:20px; letter-spacing:1.5px; text-transform:uppercase;}
+  .top-banner::before{
+    content:""; position:absolute; top:-30px; left:50%; translate:-50% 0; width:200px; height:120px; z-index:-1;
+    background:radial-gradient(ellipse, color-mix(in srgb, var(--gold) 30%, transparent), transparent 70%);
+    pointer-events:none;
+  }
+  .top-banner svg{width:34px; height:40px; flex:0 0 auto; overflow:visible; filter:drop-shadow(0 3px 8px rgba(0,0,0,.35));}
+  .top-banner .brand-name{font-family:var(--font-display); color:var(--gold); font-weight:bold; font-size:20px; letter-spacing:1.5px; text-transform:uppercase; text-shadow:0 0 20px color-mix(in srgb, var(--gold) 40%, transparent);}
 
   /* ---- Barre latérale de navigation (architecture "dashboard moderne") ---- */
   .side-nav{
     flex:0 0 224px; position:sticky; top:0; align-self:flex-start; height:100%; overflow-y:auto;
     display:flex; flex-direction:column; gap:10px; padding:18px 12px 24px;
     background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(28,22,13,.97));
-    border-right:1px solid var(--border); box-shadow:var(--shadow-md); z-index:25;
+    border-right:1px solid #6b5333; box-shadow:var(--shadow-md); z-index:25;
   }
   nav#tabs{
     display:flex; flex-direction:column; gap:3px;
@@ -130,20 +162,27 @@
     padding:10px 11px; font-size:13px; width:100%;
   }
   nav#tabs button:hover:not(.active){background:rgba(193,121,62,.12); border-color:transparent; border-left-color:transparent; color:var(--text); transform:none; box-shadow:none;}
-  nav#tabs button.active{background:var(--panel2); border-color:var(--border); border-left-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
+  nav#tabs button.active{background:var(--panel2); border-color:#6b5333; border-left-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
 
   .layout{display:flex; gap:14px; align-items:flex-start;}
-  main#tabContent{flex:1 1 640px; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; box-shadow:var(--shadow-md);}
+  main#tabContent{
+    position:relative; flex:1 1 640px; min-width:0; background:var(--panel); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:18px; box-shadow:var(--shadow-md), 0 30px 54px -30px rgba(10,6,2,.5);
+  }
+  main#tabContent::before, main#tabContent::after{content:""; position:absolute; width:18px; height:18px; pointer-events:none; opacity:.55; z-index:1;}
+  main#tabContent::before{top:7px; left:7px; border-top:2px solid var(--gold); border-left:2px solid var(--gold); border-top-left-radius:5px;}
+  main#tabContent::after{bottom:7px; right:7px; border-bottom:2px solid var(--gold); border-right:2px solid var(--gold); border-bottom-right-radius:5px;}
   aside#sidebar{flex:0 0 280px; display:flex; flex-direction:column; gap:12px;}
-  .box{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm);}
-  .box h3{font-size:14px; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  .box{background:var(--panel); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm); transition:box-shadow .2s ease;}
+  .box:hover{box-shadow:var(--shadow-md);}
+  .box h3{font-size:14px; margin-bottom:8px; border-bottom:1px solid var(--border-soft); padding-bottom:6px;}
 
   .grid-buildings{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;}
 
   /* Commandant (voir renderCommander) */
   .cmd-branches{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;}
-  .cmd-branch{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:8px;}
-  .cmd-branch h3{font-size:14px; margin:0 0 4px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  .cmd-branch{background:var(--panel); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:8px;}
+  .cmd-branch h3{font-size:14px; margin:0 0 4px; border-bottom:1px solid var(--border-soft); padding-bottom:6px;}
   .cmd-tier{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; transition:background .15s ease, border-color .15s ease;}
   .cmd-tier.unlocked{border-color:var(--green,#8fd06a); background:rgba(143,208,106,.10);}
   .cmd-tier-final{border-style:dashed;}
@@ -185,8 +224,14 @@
   .building-detail .icon-big svg{ width:100%; height:100%; overflow:visible; }
   .building-detail .info{flex:1 1 240px;}
 
-  .card{background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; box-shadow:var(--shadow-sm); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;}
-  .card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--gold);}
+  .card{position:relative; background:var(--panel2); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:12px; box-shadow:var(--shadow-sm); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;}
+  /* Coins forgés : discrets, ne s'affirment qu'au survol/focus (voir la maquette de refonte) --
+     un clin d'œil aux ferrures de coffre plutôt qu'une simple bordure d'accent. */
+  .card::before, .card::after{content:""; position:absolute; width:12px; height:12px; pointer-events:none; opacity:0; transition:opacity .15s ease;}
+  .card::before{top:-1px; left:-1px; border-top:2px solid var(--gold); border-left:2px solid var(--gold); border-top-left-radius:5px;}
+  .card::after{bottom:-1px; right:-1px; border-bottom:2px solid var(--gold); border-right:2px solid var(--gold); border-bottom-right-radius:5px;}
+  .card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--border);}
+  .card:hover::before, .card:hover::after{opacity:.7;}
   .card .card-head{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
   .card .icon-mini{width:42px; height:42px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--border); border-radius:9px; padding:4px;}
   .card .icon-mini svg{width:100%; height:100%; overflow:visible;}
@@ -335,7 +380,7 @@
   .troop-marker.marker-foreign .tdot{animation:none;}
   @keyframes marchPulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.14);} }
   #villageDetail .box{margin-top:10px;}
-  .report{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; background:var(--panel2); box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, border-color .15s ease;}
+  .report{border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; background:var(--panel2); box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, border-color .15s ease;}
   .report:hover{box-shadow:var(--shadow-md);}
   .report.win{border-left:4px solid var(--green);}
   .report.lose{border-left:4px solid var(--red);}
@@ -447,14 +492,21 @@
     input[type=number], input[type=text], select{min-height:36px;}
   }
 
+  /* Fenêtres modales du jeu (tutoriel, profil joueur, actions de village) : traitement "verre" --
+     arrière-plan flouté + transparent plutôt qu'un simple voile opaque, panneau semi-transparent
+     avec liseré clair, ombre plus ample (voir la maquette de refonte visuelle). */
   .tutorial-backdrop{
-    position:fixed; inset:0; background:rgba(10,8,5,.78); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+    position:fixed; inset:0; background:color-mix(in srgb, var(--bg2) 62%, transparent);
+    backdrop-filter:blur(7px) saturate(1.15); -webkit-backdrop-filter:blur(7px) saturate(1.15);
     z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;
     animation:fadeSlideIn .2s ease;
   }
   .tutorial-card{
-    background:var(--panel); border:2px solid var(--gold); border-radius:var(--radius-lg);
-    padding:22px 26px; max-width:440px; width:100%; box-shadow:var(--shadow-lg);
+    background:color-mix(in srgb, var(--panel) 82%, transparent);
+    border:1px solid color-mix(in srgb, var(--text) 16%, var(--gold) 40%);
+    border-radius:var(--radius-lg);
+    padding:22px 26px; max-width:440px; width:100%;
+    box-shadow:var(--shadow-lg), 0 32px 60px -24px rgba(6,4,2,.55);
   }
   .tutorial-card .tstep-icon{font-size:34px; margin-bottom:6px;}
   .tutorial-card h3{font-size:19px; margin-bottom:10px;}
@@ -479,7 +531,7 @@
 
   /* ---- Boutique de guilde ---- */
   .shop-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:8px;}
-  .shop-card{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:rgba(255,255,255,.03);}
+  .shop-card{border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:10px; background:rgba(255,255,255,.03);}
   .shop-card.active{border-color:var(--gold);}
   .shop-card h4{margin:0 0 4px; font-size:14px;}
   .donation-row{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--border);}
@@ -536,6 +588,31 @@
   /* Pseudo d'administrateur : rouge vif et légèrement lumineux, partout où il apparaît */
   .admin-name{color:#ff5252; font-weight:bold; text-shadow:0 0 6px rgba(255,60,60,.55);}
 
+  /* ---- Volets déroulants (accordéon), utilisés par l'onglet Aide (voir InformationTab.jsx) :
+     plusieurs volets peuvent rester ouverts en même temps ; l'animation de hauteur passe par le
+     motif grid-template-rows 0fr→1fr (pas besoin de mesurer le contenu en JS). ---- */
+  .accordion{border:1px solid var(--border-soft); border-radius:var(--radius-md); overflow:hidden; background:var(--panel2); box-shadow:var(--shadow-sm);}
+  .acc-item{border-bottom:1px solid var(--border-soft);}
+  .acc-item:last-child{border-bottom:none;}
+  .acc-head{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:transparent; border:none; box-shadow:none; text-align:left; cursor:pointer; border-radius:0;
+    font-family:var(--font-body); font-weight:600; font-size:14px; color:var(--text); padding:12px 14px;
+    transition:background .15s ease; transform:none;
+  }
+  .accordion .acc-head:hover{background:rgba(193,121,62,.1); transform:none; box-shadow:none; border-color:transparent;}
+  .acc-head:focus-visible{outline:none; box-shadow:var(--ring); }
+  .acc-head .chev{font-family:var(--font-data); color:var(--gold); transition:transform .25s ease; flex:none;}
+  .acc-item.open .acc-head .chev{transform:rotate(180deg);}
+  .acc-body-wrap{display:grid; grid-template-rows:0fr; transition:grid-template-rows .28s ease;}
+  .acc-item.open .acc-body-wrap{grid-template-rows:1fr;}
+  .acc-body{overflow:hidden; min-height:0;}
+  .acc-body-inner{padding:0 14px 14px;}
+  .acc-body-inner p{margin:0 0 10px; font-size:13px; color:var(--text-dim); line-height:1.55;}
+  .acc-body-inner p:last-child{margin-bottom:0;}
+  body.theme-maquette .acc-head{font-size:16px;}
+  body.theme-maquette .acc-body-inner p{font-size:14.5px;}
+
   /* ---- Panneau Admin ---- */
   #tabContent tr.admin-selected{background:rgba(193,121,62,.16);}
   #tabContent tr[data-admin-select]{cursor:pointer;}
@@ -549,13 +626,14 @@
      "cadre" de l'appli, pas le contenu qu'on habille. ====================== */
   body.theme-maquette{
     --panel:#f1e5c7; --panel2:#e9dcb8; --bg:#f4e9cf;
+    --border:#b99458; --border-soft:color-mix(in srgb, #b99458 45%, transparent);
     --text:#2a1c10; --text-dim:#6b5a42; --gold:#b87a3a;
     --green:#3d6b52; --red:#7a2530; --blue:#4a5a8f;
     --shadow-sm:0 2px 6px rgba(72,48,20,.18);
     --shadow-md:0 4px 16px rgba(72,48,20,.22);
     --shadow-lg:0 8px 28px rgba(72,48,20,.28);
     --ring:0 0 0 3px rgba(184,122,58,.28);
-    font-family:'Crimson Pro', Georgia, serif;
+    font-family:var(--font-body);
     background:#f4e9cf;
   }
   body.theme-maquette::before{
@@ -592,6 +670,10 @@
 
   /* Bannière de conquête : dégradé volontairement sombre même dans ce thème (effet dramatique) */
   body.theme-maquette #battleBanner.conquest{ color:#f2e6c8; }
+
+  /* Fenêtres modales "verre" : un voile plus clair et plus chaud que le bois sombre, cohérent avec
+     le fond parchemin derrière le flou (voir .tutorial-backdrop / .tutorial-card ci-dessus). */
+  body.theme-maquette .tutorial-backdrop{ background:color-mix(in srgb, #6b5333 38%, transparent); }
 
   /* Bannière du logo + rail de navigation gauche : restent en bois sombre dans les deux thèmes,
      on ne pin que leurs libellés pour qu'ils restent lisibles sur ce fond resté sombre. */
