@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import { useGame } from "../GameContext.jsx";
-import { TROOP_ORDER, TROOPS, VILLAGE_TAGS } from "../gameData.js";
+import { TROOP_ORDER, TROOPS, VILLAGE_TAGS, PERMANENT_FACTIONS } from "../gameData.js";
 import { fmt, fmtTime, estimateNow, RES_ICON, RES_NAME } from "../formulas.js";
 import { villageTagBadgeSvg } from "../legacy/art.js";
-import { guildRelationFor, TIER_CLASS, TIER_LABEL } from "../legacy/mapRender.js";
+import { guildRelationFor, TIER_CLASS, TIER_LABEL, FACTION_PIN } from "../legacy/mapRender.js";
 
 // Porte renderVillageActionModal()/wireVillageActionModal()/sendMission()/sendGift()/
 // villageTagPickerHtml() : la fenêtre de mission ouverte en cliquant un village sur la carte (ou,
@@ -203,6 +203,8 @@ export default function VillageActionModal({
   // ---- Cas 3 : village barbare ou d'un autre joueur ----
   const intel = scoutIntel[t.id];
   const rel = t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
+  const factionInfo = !t.isPlayer && t.faction ? FACTION_PIN[t.faction] : null;
+  const raidersCfg = t.faction === "raiders" ? (PERMANENT_FACTIONS || {}).raiders : null;
   return /*#__PURE__*/React.createElement("div", {
     className: "tutorial-backdrop",
     id: "villageActionBackdrop",
@@ -234,8 +236,16 @@ export default function VillageActionModal({
   }, t.x, "|", t.y, " \xB7 \xE0 ", dist.toFixed(1), " champs"), t.isPlayer ? /*#__PURE__*/React.createElement("span", {
     className: "tag " + (rel ? rel.cls : "medium")
   }, "Joueur : ", t.owner, rel ? " · " + rel.label : "") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
     className: "tag " + TIER_CLASS[t.tier]
-  }, TIER_LABEL[t.tier])), /*#__PURE__*/React.createElement("div", {
+  }, TIER_LABEL[t.tier]), factionInfo ? /*#__PURE__*/React.createElement("span", {
+    className: "tag " + factionInfo.cls
+  }, factionInfo.icon, " ", factionInfo.label) : null)), /*#__PURE__*/React.createElement("div", {
     className: "sub small",
     style: {
       marginBottom: 8
@@ -250,7 +260,17 @@ export default function VillageActionModal({
       padding: "6px 10px",
       margin: "0 0 8px"
     }
-  }, RES_ICON[t.resourceBonus.res], " Gisement riche : ce village produit +", Math.round(t.resourceBonus.pct * 100), "% de ", RES_NAME[t.resourceBonus.res].toLowerCase(), t.isPlayer ? "" : " une fois conquis", " \u2014 le bonus reste propre \xE0 ce village.") : null, t.isPlayer ? /*#__PURE__*/React.createElement("p", {
+  }, RES_ICON[t.resourceBonus.res], " Gisement riche : ce village produit +", Math.round(t.resourceBonus.pct * 100), "% de ", RES_NAME[t.resourceBonus.res].toLowerCase(), t.isPlayer ? "" : " une fois conquis", " \u2014 le bonus reste propre \xE0 ce village.") : null, raidersCfg && raidersCfg.boostOnVictory ? /*#__PURE__*/React.createElement("p", {
+    className: "small",
+    style: {
+      color: "#f0b060",
+      background: "rgba(224,138,48,.14)",
+      border: "1px solid rgba(224,138,48,.45)",
+      borderRadius: 8,
+      padding: "6px 10px",
+      margin: "0 0 8px"
+    }
+  }, raidersCfg.boostOnVictory.icon, " Victoire = ", raidersCfg.boostOnVictory.name, " : +", Math.round((raidersCfg.boostOnVictory.multiplier - 1) * 100), "% de production pendant ", Math.round(raidersCfg.boostOnVictory.durationSec / 3600), "h sur le village attaquant.") : null, t.isPlayer ? /*#__PURE__*/React.createElement("p", {
     className: "small muted",
     style: {
       background: "rgba(0,0,0,.12)",
