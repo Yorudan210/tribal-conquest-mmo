@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import { useGame } from "../GameContext.jsx";
-import { TROOP_ORDER, TROOPS, VILLAGE_TAGS } from "../gameData.js";
+import { TROOP_ORDER, TROOPS, VILLAGE_TAGS, PERMANENT_FACTIONS } from "../gameData.js";
 import { fmt, fmtTime, estimateNow, RES_ICON, RES_NAME } from "../formulas.js";
 import { villageTagBadgeSvg } from "../legacy/art.js";
-import { guildRelationFor, TIER_CLASS, TIER_LABEL } from "../legacy/mapRender.js";
+import { guildRelationFor, TIER_CLASS, TIER_LABEL, FACTION_PIN } from "../legacy/mapRender.js";
 
 // Porte renderVillageActionModal()/wireVillageActionModal()/sendMission()/sendGift()/
 // villageTagPickerHtml() : la fenêtre de mission ouverte en cliquant un village sur la carte (ou,
@@ -126,6 +126,8 @@ export default function VillageActionModal({ onGotoTab }){
   // ---- Cas 3 : village barbare ou d'un autre joueur ----
   const intel = scoutIntel[t.id];
   const rel = t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
+  const factionInfo = !t.isPlayer && t.faction ? FACTION_PIN[t.faction] : null;
+  const raidersCfg = t.faction==="raiders" ? (PERMANENT_FACTIONS||{}).raiders : null;
 
   return (
     <div className="tutorial-backdrop" id="villageActionBackdrop" onClick={onBackdropClick}>
@@ -139,7 +141,10 @@ export default function VillageActionModal({ onGotoTab }){
           {t.isPlayer ? (
             <span className={"tag "+(rel?rel.cls:"medium")}>Joueur : {t.owner}{rel?(" · "+rel.label):""}</span>
           ) : (
-            <span className={"tag "+TIER_CLASS[t.tier]}>{TIER_LABEL[t.tier]}</span>
+            <span style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+              <span className={"tag "+TIER_CLASS[t.tier]}>{TIER_LABEL[t.tier]}</span>
+              {factionInfo ? <span className={"tag "+factionInfo.cls}>{factionInfo.icon} {factionInfo.label}</span> : null}
+            </span>
           )}
         </div>
         <div className="sub small" style={{marginBottom:8}}>
@@ -151,6 +156,11 @@ export default function VillageActionModal({ onGotoTab }){
         {t.resourceBonus ? (
           <p className="small" style={{color:"var(--gold)", background:"rgba(193,121,62,.16)", border:"1px solid rgba(193,121,62,.5)", borderRadius:8, padding:"6px 10px", margin:"0 0 8px"}}>
             {RES_ICON[t.resourceBonus.res]} Gisement riche : ce village produit +{Math.round(t.resourceBonus.pct*100)}% de {RES_NAME[t.resourceBonus.res].toLowerCase()}{t.isPlayer?"":" une fois conquis"} — le bonus reste propre à ce village.
+          </p>
+        ) : null}
+        {raidersCfg && raidersCfg.boostOnVictory ? (
+          <p className="small" style={{color:"#f0b060", background:"rgba(224,138,48,.14)", border:"1px solid rgba(224,138,48,.45)", borderRadius:8, padding:"6px 10px", margin:"0 0 8px"}}>
+            {raidersCfg.boostOnVictory.icon} Victoire = {raidersCfg.boostOnVictory.name} : +{Math.round((raidersCfg.boostOnVictory.multiplier-1)*100)}% de production pendant {Math.round(raidersCfg.boostOnVictory.durationSec/3600)}h sur le village attaquant.
           </p>
         ) : null}
         {t.isPlayer ? (

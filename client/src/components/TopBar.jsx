@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useGame } from "../GameContext.jsx";
 import Audio from "../legacy/audio.js";
+import { fmtTime } from "../formulas.js";
 
 // Porte renderTopBar() + startRenameVillage()/commitRename() + switchVillage().
 export default function TopBar(){
@@ -38,6 +39,11 @@ export default function TopBar(){
           {v.x}|{v.y} · {snapshot.isAdmin ? <span className="admin-name">{username}</span> : username}
           {snapshot.isAdmin ? <span className="tag strong" style={{marginLeft:6}}>ADMIN</span> : null}
         </span>
+        {v.activeBoosts && v.activeBoosts.length ? (
+          <span className="small" style={{color:"#f0b060", display:"block", marginTop:2}} title="Bonus temporaires actifs sur ce village">
+            {v.activeBoosts.map(b=>`${b.icon} ${b.name} (encore ${fmtTime(b.secondsLeft)})`).join(" · ")}
+          </span>
+        ) : null}
         {snapshot.myVillages && snapshot.myVillages.length>1 ? (
           <select title="Changer le village actuellement géré" style={{marginTop:4, maxWidth:240}}
             value={snapshot.myVillages.find(mv=>mv.isActive)?.id || ""}
