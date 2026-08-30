@@ -53,7 +53,7 @@ export function GameProvider({ children }){
   const closeVillageAction = useCallback(() => setSelectedVillage(null), []);
 
   // Onglet actif : vit ici (plutôt qu'en state local de GameScreen) parce que plusieurs actions
-  // profondément imbriquées doivent pouvoir en changer -- fiche joueur ("Attaquer" bascule sur la
+  // profondément imbriquées doivent pouvoir en changer -- fiche joueur ("Espionner" bascule sur la
   // Carte), Empire (gérer un village -> Bâtiments), Guilde (accéder au Hall de guilde) -- exactement
   // comme l'ancienne variable de portée module `activeTab`.
   const [activeTab, setActiveTab] = useState("buildings");
@@ -71,7 +71,7 @@ export function GameProvider({ children }){
   const closePlayerProfile = useCallback(() => setPlayerProfile(null), []);
 
   // Bascule sur l'onglet Carte, centre la vue sur un village donné et ouvre sa fenêtre de mission --
-  // utilisé par les boutons Attaquer/Espionner de la fiche joueur et par l'onglet Empire.
+  // utilisé par le bouton Espionner de la fiche joueur et par l'onglet Empire.
   const goToVillageOnMap = useCallback((villageId) => {
     const t = (snapshotRef.current?.villages||[]).find(x=>x.id===villageId);
     if(!t) return;
