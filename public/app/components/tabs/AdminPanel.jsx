@@ -99,6 +99,9 @@ export default function AdminPanel() {
     adminAction: adminAction,
     call: call,
     toast: toast
+  }), /*#__PURE__*/React.createElement(PermanentFactionsBox, {
+    adminAction: adminAction,
+    call: call
   }), /*#__PURE__*/React.createElement(MissionsBox, {
     missions: missions,
     adminAction: adminAction,
@@ -698,6 +701,27 @@ function BlackArmyBox({
     className: "primary",
     disabled: active
   }, "\uD83C\uDFF4 Lancer l'Arm\xE9e Noire")));
+}
+
+/* Peuple rétroactivement un monde déjà généré en repaires de brigands/camps de maraudeurs (Phase 1
+   "variété des cibles PvE") -- utile pour tout monde de production existant depuis avant l'ajout de
+   ces factions (spawnPermanentFactions ne s'exécute normalement qu'à l'init d'un monde neuf, voir
+   server/store.js). Action à usage unique et sans danger : le serveur refuse de dupliquer la
+   population si ces factions existent déjà (voir adminSeedPermanentFactions, server/gameLogic.js). */
+function PermanentFactionsBox({
+  adminAction,
+  call
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "box",
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDDE1\uFE0F Repaires de brigands & camps de maraudeurs"), /*#__PURE__*/React.createElement("p", {
+    className: "small muted"
+  }, "Peuple la carte en factions PvE permanentes (voir la section d'aide d\xE9di\xE9e) si ce n'est pas d\xE9j\xE0 fait -- utile une seule fois pour un monde qui existait d\xE9j\xE0 avant l'ajout de cette fonctionnalit\xE9. Sans effet si d\xE9j\xE0 peupl\xE9 (le serveur refuse toute duplication)."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => adminAction(() => call("/api/admin/factions/seed", "POST", {}), "🗡️🐎 Factions permanentes peuplées avec succès !")
+  }, "Peupler les factions permanentes"));
 }
 function MissionsBox({
   missions,
