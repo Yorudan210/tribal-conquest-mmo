@@ -446,6 +446,13 @@ let _villageIconSeq = 0;
 function villageMapIconSvg(kind, level, hasWall) {
   const barb = kind === "barbarian";
   const black = kind === "blackarmy";
+  // Repaires de brigands / camps de maraudeurs (Phase 1 "variété des cibles PvE") : deux palettes
+  // supplémentaires, sur le même modèle que "Armée Noire" ci-dessous -- brigands en violet sourd
+  // (discrets, près du centre), maraudeurs en orange/braise (campement agressif, en périphérie) --
+  // voir aussi .villagePin.bandits/.villagePin.raiders dans le CSS.
+  const bandits = kind === "bandits";
+  const raiders = kind === "raiders";
+  const campKind = barb || bandits || raiders;
   // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
   // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
   // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
@@ -453,13 +460,13 @@ function villageMapIconSvg(kind, level, hasWall) {
   // cohabitent dans le même document (tous les pins de la carte, ou toutes les cartes d'une galerie),
   // et des id de <defs> partagés entre icônes de couleurs différentes se voleraient leur dégradé.
   const uid = "vi" + _villageIconSeq++;
-  const wallTop = black ? "#26262b" : barb ? "#8c7752" : "#a8825a";
-  const wallBot = black ? "#0a0a0c" : barb ? "#544628" : "#6b4f31";
-  const roofTop = black ? "#5c1c1c" : barb ? "#5c4530" : "#82402e";
-  const roofBot = black ? "#280a0a" : barb ? "#2e2416" : "#42201a";
+  const wallTop = black ? "#26262b" : bandits ? "#5a4a63" : raiders ? "#8a5a3a" : barb ? "#8c7752" : "#a8825a";
+  const wallBot = black ? "#0a0a0c" : bandits ? "#2e2436" : raiders ? "#4a2e18" : barb ? "#544628" : "#6b4f31";
+  const roofTop = black ? "#5c1c1c" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
+  const roofBot = black ? "#280a0a" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
   const doorStroke = black ? "#0a0a0c" : "#2a1c10";
-  const windowCol = black ? "#6a1c1c" : "#e6c978";
-  const groundCol = black ? "#1c1414" : barb ? "#39431f" : "#463822";
+  const windowCol = black ? "#6a1c1c" : bandits ? "#b090d0" : raiders ? "#f0a030" : "#e6c978";
+  const groundCol = black ? "#1c1414" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
   const defs = `<defs>
     <linearGradient id="${uid}w" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${wallTop}"/><stop offset="1" stop-color="${wallBot}"/>
@@ -487,11 +494,11 @@ function villageMapIconSvg(kind, level, hasWall) {
   // Élément central du hameau/village (niveau >= 1) : un puits pour un village (le vôtre ou un
   // joueur), un petit feu de camp pour les barbares -- rien pour l'Armée Noire, dont l'ambiance
   // sombre + la lueur rouge du pin suffisent déjà à la distinguer sans surcharger l'icône.
-  const centerpiece = level >= 1 && !black ? barb ? `<g transform="translate(0,5.5)"><polygon points="-3,3 3,3 1.6,-3.5 -1.6,-3.5" fill="#2a2016" stroke="${doorStroke}" stroke-width="0.7"/><polygon points="0,-3.5 -1.6,1 1.3,0.4" fill="#e0862c" opacity="0.85"/><polygon points="0,-2 -0.9,0.8 0.8,0.5" fill="#f5c25a"/></g>` : `<g transform="translate(0,5)"><ellipse cx="0" cy="1.6" rx="3.6" ry="1.7" fill="#4a3c28" stroke="${doorStroke}" stroke-width="0.8"/><rect x="-2.6" y="-2.6" width="5.2" height="3.6" fill="#352a1a" stroke="${doorStroke}" stroke-width="0.7"/><line x1="-2.6" y1="-2.6" x2="2.6" y2="-2.6" stroke="#6b5533" stroke-width="1"/></g>` : "";
+  const centerpiece = level >= 1 && !black ? campKind ? `<g transform="translate(0,5.5)"><polygon points="-3,3 3,3 1.6,-3.5 -1.6,-3.5" fill="#2a2016" stroke="${doorStroke}" stroke-width="0.7"/><polygon points="0,-3.5 -1.6,1 1.3,0.4" fill="#e0862c" opacity="0.85"/><polygon points="0,-2 -0.9,0.8 0.8,0.5" fill="#f5c25a"/></g>` : `<g transform="translate(0,5)"><ellipse cx="0" cy="1.6" rx="3.6" ry="1.7" fill="#4a3c28" stroke="${doorStroke}" stroke-width="0.8"/><rect x="-2.6" y="-2.6" width="5.2" height="3.6" fill="#352a1a" stroke="${doorStroke}" stroke-width="0.7"/><line x1="-2.6" y1="-2.6" x2="2.6" y2="-2.6" stroke="#6b5533" stroke-width="1"/></g>` : "";
   const palisade = hasWall ? `
-    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black ? '#3a1414' : '#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
-    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
-    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black ? '#3a1414' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
   ` : "";
   const flag = kind === "mine" ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>` : kind === "player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${defs}${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
