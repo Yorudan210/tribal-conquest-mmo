@@ -93,7 +93,7 @@
     { key:"scoreChampion", name:"Roi des points", icon:"👑", stat:"points",
       desc:"Cumulez un maximum de points de village.", tiers:[100,5000,100000,10000000] },
     { key:"conquest", name:"Conquête", icon:"🏰", stat:"conquered",
-      desc:"Conquérez des villages (barbares ou ennemis).", tiers:[5,50,500,1000] },
+      desc:"Conquérez des villages barbares (dont l'Armée Noire).", tiers:[5,50,500,1000] },
     { key:"raider", name:"Pilleur", icon:"💰", stat:"totalLoot",
       desc:"Pillez un maximum de ressources au total (bois + argile + fer confondus).", tiers:[500,10000,1000000,100000000] },
     { key:"leader", name:"Chef de guerre", icon:"⚔️", stat:"unitsKilled",
@@ -106,8 +106,6 @@
       desc:"Concluez des échanges sur le Marché.", tiers:[10,100,500,1000] },
     { key:"demolisher", name:"Fléau des murailles", icon:"🧨", stat:"wallLevelsDestroyed",
       desc:"Détruisez des niveaux de muraille ennemis avec vos béliers.", tiers:[25,250,2500,10000] },
-    { key:"warlord", name:"Guerrier tous azimuts", icon:"🎯", stat:"distinctOpponents",
-      desc:"Attaquez un maximum de joueurs différents.", tiers:[10,25,100,250] },
     { key:"blackHunter", name:"Chasseur de l'Armée Noire", icon:"💀", stat:"blackArmyDefeated",
       desc:"Remportez des combats contre les campements de l'Armée Noire (évènement de lancement).", tiers:[3,10,25,60] }
   ];
