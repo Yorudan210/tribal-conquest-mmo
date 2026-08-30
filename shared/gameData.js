@@ -81,6 +81,34 @@
       desc:"Multiplie les points affichés au classement pendant la durée choisie." }
   ];
 
+  /* Factions PNJ permanentes (en plus des villages barbares classiques et de l'évènement temporaire
+     de l'Armée Noire) : des cibles PvE au profil différent, présentes en permanence sur la carte dès
+     la génération du monde (voir spawnPermanentFactions, server/store.js), pour varier les cibles
+     disponibles sur la durée. Un village de ces factions reste un village barbare ordinaire
+     (owner:"barbarian") avec juste faction+multiplicateurs en plus, exactement comme l'Armée Noire —
+     tout le moteur de combat/conquête existant s'applique sans changement.
+     - "bandits" (Repaires de brigands) : plus faibles qu'un barbare classique de même distance, et
+       concentrés près du centre. Leur population est maintenue dans le temps par un top-up
+       périodique (topUpBandits, server/store.js) : contrairement aux barbares classiques, il y en a
+       toujours de disponibles près des zones peuplées, même après plusieurs semaines de jeu.
+     - "raiders" (Camps de maraudeurs) : plus forts qu'un barbare classique, plutôt en périphérie.
+       Chaque victoire contre l'un d'eux octroie en plus au village attaquant un boost temporaire
+       (voir "boostOnVictory", même forme qu'une entrée de GUILD_BOOSTS ci-dessus mais appliquée au
+       niveau du village plutôt que de la guilde — voir villageBoostMultiplier, server/gameLogic.js). */
+  const PERMANENT_FACTIONS = {
+    bandits: {
+      key:"bandits", name:"Repaire de brigands", icon:"🗡️", pinClass:"bandits",
+      distancePreference:"near", troopMult:0.65, resMult:0.85, wallGuarantee:false,
+      desc:"Un campement de brigands, plus faible qu'un village barbare classique de même distance. De nouveaux repaires réapparaissent régulièrement près des zones peuplées."
+    },
+    raiders: {
+      key:"raiders", name:"Camp de maraudeurs", icon:"🐎", pinClass:"raiders",
+      distancePreference:"far", troopMult:1.35, resMult:1.2, wallGuarantee:true,
+      desc:"Un camp de maraudeurs aguerris, plus fort qu'un village barbare classique. Chaque victoire rapporte, en plus du pillage habituel, une Ration de guerre.",
+      boostOnVictory:{ key:"raiderRation", name:"Ration de guerre", icon:"🍖", type:"production", multiplier:1.15, durationSec:10800 }
+    }
+  };
+
   /* Succès (mêmes catégories, noms et paliers que le jeu officiel "Die Stämme / Tribal Wars",
      dans la limite des mécaniques réellement présentes dans ce clone — voir README pour le détail
      des catégories officielles volontairement omises, faute d'équivalent : pièces d'or/premium,
@@ -218,6 +246,7 @@
 
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
+    PERMANENT_FACTIONS,
     ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR,
     VILLAGE_TAGS, VILLAGE_TAG_KEYS
