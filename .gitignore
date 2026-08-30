@@ -1,0 +1,4 @@
+# État d'exécution local (secrets, comptes, parties de test) : ne doit JAMAIS être commité ni
+# poussé -- le vrai dépôt de production n'a pas de dossier data/, il est recréé au premier
+# démarrage du serveur (voir server/store.js).
+/data/
