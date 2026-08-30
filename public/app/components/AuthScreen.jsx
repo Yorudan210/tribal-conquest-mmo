@@ -163,7 +163,11 @@ export default function AuthScreen() {
       gap: 10,
       textAlign: "left"
     }
-  }, /*#__PURE__*/React.createElement("label", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "divider"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "diamond"
+  })), /*#__PURE__*/React.createElement("label", {
     className: "small"
   }, "Pseudo", /*#__PURE__*/React.createElement("input", {
     type: "text",
