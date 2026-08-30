@@ -1,0 +1,727 @@
+  :root{
+    --bg:#ecdcae; --bg2:#241a10; --panel:#2e2417; --panel2:#3c2f1c;
+    --border:#6b5333; --text:#f2e6c8; --text-dim:#bfa878; --gold:#c1793e;
+    --green:#6bab5e; --red:#c15b46; --blue:#5b93b0;
+    --shadow-sm:0 2px 6px rgba(30,17,6,.32);
+    --shadow-md:0 4px 16px rgba(30,17,6,.4);
+    --shadow-lg:0 8px 28px rgba(30,17,6,.5);
+    --ring:0 0 0 3px rgba(193,121,62,.24);
+    --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:Georgia,'Times New Roman',serif; background:var(--bg);
+    color:var(--text); min-height:100vh; position:relative;
+  }
+  /* Fond parchemin en position fixe (au lieu de background-attachment:fixed, peu fiable sur
+     mobile/Safari) : un calque décoratif derrière tout le contenu, qui ne bouge pas au défilement
+     et ne déforme jamais l'image même sur une page très longue. */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-1;
+    background-image:url('/assets/bg-parchment.jpg');
+    background-size:cover; background-position:top center; background-repeat:no-repeat;
+    background-color:var(--bg);
+  }
+  #gameRoot{display:flex; flex-direction:column; min-height:100vh;}
+  .app-shell{display:flex; align-items:flex-start; flex:1 1 auto; min-height:0;}
+  #app{flex:1 1 0; min-width:0; max-width:1200px; margin:0 auto; padding:10px 14px 40px;}
+  h1,h2,h3{font-family:Georgia,serif;color:var(--gold);margin:0 0 8px;}
+  a{color:var(--blue);}
+  ::-webkit-scrollbar{width:11px; height:11px;}
+  ::-webkit-scrollbar-track{background:var(--bg2);}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px; border:2px solid var(--bg2);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
+  button{
+    font-family:inherit; background:linear-gradient(180deg,#453626,#2e2417); color:var(--text);
+    border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 14px; cursor:pointer;
+    font-size:13px; font-weight:600; letter-spacing:.2px;
+    box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.05);
+    transition:transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  }
+  button:hover:not(:disabled){
+    background:linear-gradient(180deg,#5a4936,#3d3020); border-color:var(--gold);
+    transform:translateY(-1px); box-shadow:var(--shadow-md);
+  }
+  button:active:not(:disabled){transform:translateY(0); box-shadow:var(--shadow-sm);}
+  button:focus-visible{outline:none; box-shadow:var(--shadow-sm), var(--ring);}
+  button:disabled{opacity:.4; cursor:not-allowed; transform:none;}
+  button.primary{background:linear-gradient(180deg,#a3703c,#7d5228); border-color:var(--gold); font-weight:bold;}
+  button.danger{background:linear-gradient(180deg,#7a2e24,#5c2018); border-color:#a55;}
+  input[type=number]{
+    width:70px; background:var(--bg2); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=number]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  input[type=text]{
+    background:var(--bg2); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  input[type=password]{
+    background:var(--bg2); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 8px; font-family:inherit; width:100%; box-sizing:border-box;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input[type=password]:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+  #authScreen input[type=text]{width:100%; box-sizing:border-box;}
+  #authScreen label.small{display:flex; flex-direction:column; gap:4px; color:var(--text-dim);}
+  #authTabs button.ghost{background:transparent; box-shadow:none;}
+  select{
+    background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  select:focus{outline:none; border-color:var(--gold); box-shadow:inset 0 1px 4px rgba(0,0,0,.4), var(--ring);}
+
+  header#topbar{
+    display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between;
+    background:linear-gradient(180deg, rgba(46,36,23,.94), rgba(36,28,17,.94));
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 18px; margin:14px 0;
+    position:sticky; top:6px; z-index:20; box-shadow:var(--shadow-md);
+  }
+  .res-group{display:flex; gap:16px; flex-wrap:wrap;}
+  .res{display:flex; flex-direction:column; align-items:center; min-width:64px; padding:4px 8px; border-radius:8px; transition:background .15s ease;}
+  .res:hover{background:rgba(0,0,0,.15);}
+  .res .val{font-weight:bold; font-size:14px;}
+  .res .rate{font-size:10px; color:var(--text-dim);}
+  .res.warn .val{color:var(--red);}
+  .res.bonus{background:rgba(193,121,62,.16); box-shadow:inset 0 0 0 1px rgba(193,121,62,.5);}
+  .res.bonus .rate{color:var(--gold);}
+  .res-box .res-group{display:grid; grid-template-columns:1fr 1fr; gap:8px 6px;}
+  .res-box .res{align-items:flex-start; min-width:0; width:100%; padding:6px 8px;}
+  .res-box .res .val{font-size:13px; white-space:nowrap;}
+  .topbar-right{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .village-title{display:flex; flex-direction:column;}
+  .village-title .name{font-weight:bold; color:var(--gold);}
+  .village-title .coord{font-size:11px; color:var(--text-dim);}
+  .village-title .name-row{display:flex; align-items:center; gap:6px;}
+  .btn-rename{background:transparent; border:none; box-shadow:none; padding:2px 4px; font-size:12px; opacity:.6; cursor:pointer;}
+  .btn-rename:hover{opacity:1; transform:none; background:transparent; box-shadow:none;}
+  .village-title input[type=text]{font-weight:bold; color:var(--gold); padding:2px 6px; width:160px; font-size:14px;}
+
+  /* ---- Logo centré en haut de page ---- */
+  .top-banner{
+    display:flex; align-items:center; justify-content:center; gap:12px; padding:14px 18px;
+    background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(36,28,17,.97));
+    border-bottom:1px solid var(--border); box-shadow:var(--shadow-sm); position:relative; z-index:26;
+  }
+  .top-banner svg{width:34px; height:40px; flex:0 0 auto; overflow:visible;}
+  .top-banner .brand-name{font-family:Georgia,serif; color:var(--gold); font-weight:bold; font-size:20px; letter-spacing:1.5px; text-transform:uppercase;}
+
+  /* ---- Barre latérale de navigation (architecture "dashboard moderne") ---- */
+  .side-nav{
+    flex:0 0 224px; position:sticky; top:0; align-self:flex-start; height:100%; overflow-y:auto;
+    display:flex; flex-direction:column; gap:10px; padding:18px 12px 24px;
+    background:linear-gradient(180deg, rgba(46,36,23,.97), rgba(28,22,13,.97));
+    border-right:1px solid var(--border); box-shadow:var(--shadow-md); z-index:25;
+  }
+  nav#tabs{
+    display:flex; flex-direction:column; gap:3px;
+  }
+  nav#tabs button{
+    border-radius:var(--radius-sm); border-color:transparent; border-left:3px solid transparent; background:transparent; box-shadow:none;
+    color:var(--text-dim); text-align:left; justify-content:flex-start; display:flex; align-items:center; gap:8px;
+    padding:10px 11px; font-size:13px; width:100%;
+  }
+  nav#tabs button:hover:not(.active){background:rgba(193,121,62,.12); border-color:transparent; border-left-color:transparent; color:var(--text); transform:none; box-shadow:none;}
+  nav#tabs button.active{background:var(--panel2); border-color:var(--border); border-left-color:var(--gold); color:var(--gold); font-weight:bold; box-shadow:var(--shadow-sm);}
+
+  .layout{display:flex; gap:14px; align-items:flex-start;}
+  main#tabContent{flex:1 1 640px; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; box-shadow:var(--shadow-md);}
+  aside#sidebar{flex:0 0 280px; display:flex; flex-direction:column; gap:12px;}
+  .box{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm);}
+  .box h3{font-size:14px; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+
+  .grid-buildings{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;}
+
+  /* Commandant (voir renderCommander) */
+  .cmd-branches{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;}
+  .cmd-branch{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:8px;}
+  .cmd-branch h3{font-size:14px; margin:0 0 4px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  .cmd-tier{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; transition:background .15s ease, border-color .15s ease;}
+  .cmd-tier.unlocked{border-color:var(--green,#8fd06a); background:rgba(143,208,106,.10);}
+  .cmd-tier-final{border-style:dashed;}
+  .cmd-tier-head{display:flex; align-items:flex-start; gap:8px;}
+  .cmd-tier-num{flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--gold); color:#241a0d; font-size:11px; font-weight:bold; display:flex; align-items:center; justify-content:center;}
+  .cmd-tier.unlocked .cmd-tier-num{background:var(--green,#8fd06a);}
+  .cmd-tier-desc{font-size:12px; color:var(--text); flex:1;}
+  .cmd-tier-status{font-size:11px;}
+  .cmd-status-done{color:var(--green,#8fd06a); font-weight:bold;}
+  body.theme-maquette .cmd-branch h3{ font-size:16px; }
+  body.theme-maquette .cmd-tier-desc{ font-size:13.5px; }
+  body.theme-maquette .cmd-tier-status{ font-size:12.5px; }
+
+  .village-scene{
+    position:relative; width:100%; aspect-ratio:16/10;
+    border:2px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:14px;
+    box-shadow:inset 0 0 50px rgba(0,0,0,.55), var(--shadow-md); background:#212c14;
+  }
+  .village-svg{width:100%; height:100%; display:block;}
+  .plot{cursor:pointer;}
+  .plot .groundmark{ fill:rgba(0,0,0,.3); transition:fill .15s, filter .15s; }
+  .plot:hover .groundmark{ fill:rgba(193,121,62,.22); }
+  .plot.selected .groundmark{ fill:rgba(193,121,62,.4); filter:drop-shadow(0 0 8px rgba(193,121,62,.8)); }
+  .plot .art{ transition:filter .15s; }
+  .plot:hover .art{ filter:brightness(1.14); }
+  .plot .empty-art{ filter:grayscale(85%) brightness(.8); opacity:.6; }
+  .plot .badge-bg{ fill:var(--gold); stroke:#2a1c10; stroke-width:1.5; }
+  .plot .badge-text{ fill:#2a1c10; font-size:15px; font-weight:bold; font-family:Georgia,serif; }
+  .plot .label-bg{ fill:rgba(18,14,9,.82); }
+  .plot .label-text{ fill:#f0e4cc; font-size:14px; font-weight:bold; font-family:Georgia,serif; }
+  .plot .hammer{ font-size:24px; animation:bounce 1s infinite; }
+  .dirt-path{ stroke:#8a6a3f; stroke-width:13; stroke-linecap:round; opacity:.45; }
+  .wall-ring{ cursor:pointer; transition:filter .15s; }
+  .wall-ring:hover{ filter:brightness(1.08); }
+  .wall-ring.selected{ filter:drop-shadow(0 0 12px rgba(193,121,62,.7)); }
+  @keyframes bounce{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
+  .building-detail{ display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
+  .building-detail .icon-big{ width:78px; height:78px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--gold); border-radius:var(--radius-md); flex:0 0 auto; padding:6px; box-shadow:var(--shadow-sm);}
+  .building-detail .icon-big svg{ width:100%; height:100%; overflow:visible; }
+  .building-detail .info{flex:1 1 240px;}
+
+  .card{background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; box-shadow:var(--shadow-sm); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;}
+  .card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--gold);}
+  .card .card-head{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .card .icon-mini{width:42px; height:42px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#5c4832,#3d2e1e); border:2px solid var(--border); border-radius:9px; padding:4px;}
+  .card .icon-mini svg{width:100%; height:100%; overflow:visible;}
+  .card .icon-mini.shop-icon{font-size:22px;}
+  .free-tag{color:var(--green); font-weight:bold;}
+  .card.quest-done{border-color:var(--green); opacity:.75;}
+  .tier-pip{display:inline-block; width:11px; height:11px; border-radius:50%; background:#2a2116; border:1px solid var(--border); margin-left:3px; vertical-align:middle;}
+  .tier-pip.reached{border-color:rgba(0,0,0,.5); box-shadow:0 0 4px rgba(255,255,255,.3);}
+  .card h4{margin:0; color:var(--gold); font-size:15px; display:flex; flex-direction:column; gap:2px;}
+  .card .desc{font-size:11px; color:var(--text-dim); margin-bottom:6px; min-height:28px;}
+  .card .cost{font-size:11px; margin-bottom:6px;}
+  .cost span{margin-right:8px;}
+  .cost span.short{color:var(--red);}
+  .queue-item, .mission-item{
+    border-bottom:1px dashed var(--border); padding:8px 2px; font-size:12px; border-radius:6px; transition:background .15s ease;
+  }
+  .queue-item:hover, .mission-item:hover{background:rgba(0,0,0,.14);}
+  .queue-item:last-child, .mission-item:last-child{border-bottom:none;}
+  .bar-bg{background:var(--bg2); border:1px solid var(--border); border-radius:6px; height:9px; overflow:hidden; margin-top:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .bar-fill{background:linear-gradient(90deg, var(--green), #8fd06a); height:100%; transition:width .2s ease;}
+  .troop-row{display:flex; flex-wrap:wrap; row-gap:6px; align-items:center; justify-content:space-between; gap:8px; padding:8px 4px; border-bottom:1px dashed var(--border); font-size:12px; border-radius:6px; transition:background .15s ease;}
+  .troop-row:hover{background:rgba(0,0,0,.14);}
+  .troop-row:last-child{border-bottom:none;}
+  .troop-row .tname{font-weight:bold; color:var(--gold); width:110px;}
+  .disband-row{display:flex; align-items:center; gap:6px; padding-left:8px; margin-left:4px; border-left:1px dashed var(--border);}
+  .stats-mini{font-size:10px; color:var(--text-dim);}
+  /* Triangle de contre-unités lisible (voir renderBarracks/troopTypeChip/troopTriangleBars) */
+  .type-chip{display:inline-block; padding:2px 7px; border-radius:20px; font-size:9.5px; font-weight:bold; letter-spacing:.2px; white-space:nowrap; border:1px solid var(--border);}
+  .type-chip.type-inf{background:rgba(150,110,60,.22); color:#d8b98a;}
+  .type-chip.type-cav{background:rgba(60,110,150,.22); color:#8ac2e0;}
+  .type-chip.type-arch{background:rgba(90,150,70,.22); color:#a8d98a;}
+  .ttriangle{display:flex; flex-direction:column; gap:2px; min-width:130px;}
+  .ttri-row{display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--text-dim);}
+  .ttri-lbl{width:58px; flex-shrink:0;}
+  .ttri-bar{flex:1 1 auto; height:6px; background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .ttri-fill{height:100%; border-radius:4px 0 0 4px;}
+  .ttri-fill.inf{background:linear-gradient(90deg,#8a6a3c,#d8b98a);}
+  .ttri-fill.cav{background:linear-gradient(90deg,#3c6a8a,#8ac2e0);}
+  .ttri-fill.arch{background:linear-gradient(90deg,#4a7a3c,#a8d98a);}
+  .ttri-val{width:22px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums;}
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
+  tr{transition:background .15s ease;}
+  tbody tr:hover{background:rgba(0,0,0,.14);}
+  .tag{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:bold; letter-spacing:.3px;}
+  .tag.weak{background:#2c4a22;color:#a8d98a;}
+  .tag.medium{background:#4a3f22;color:#e0c98a;}
+  .tag.strong{background:#4a2222;color:#e0a0a0;}
+  .tag.ally{background:#1f4a3a;color:#8ad9c0;}
+  .tag.pact{background:#22384a;color:#8ac0e0;}
+  .tag.war{background:#4a2222;color:#e0a0a0;}
+  .event-badges{display:flex; flex-wrap:wrap; gap:8px;}
+  .event-badge{position:relative; display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:10px; background:rgba(193,121,62,.16); border:1px solid var(--gold); font-size:18px; cursor:default; transition:transform .15s ease, background .15s ease;}
+  .event-badge:hover{background:rgba(193,121,62,.32); transform:translateY(-1px);}
+  .event-badge .event-badge-mult{position:absolute; right:-5px; bottom:-5px; background:var(--gold); color:#1a1108; font-size:9px; font-weight:bold; line-height:1; padding:2px 4px; border-radius:8px; box-shadow:0 0 0 2px var(--panel);}
+  .event-badge.admin{cursor:pointer;}
+  .event-badge .event-badge-stop{position:absolute; top:-6px; right:-6px; width:16px; height:16px; border-radius:50%; background:#4a2222; color:#e0a0a0; font-size:10px; line-height:16px; text-align:center; display:none; padding:0;}
+  .event-badge.admin:hover .event-badge-stop{display:block;}
+  .send-form{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none;}
+  .send-form.open{display:block; animation:fadeSlideIn .2s ease;}
+  @keyframes fadeSlideIn{ 0%{opacity:0; transform:translateY(-4px);} 100%{opacity:1; transform:translateY(0);} }
+  .send-form .inputs{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+  .send-form .inp{display:flex; flex-direction:column; align-items:center; font-size:10px;}
+
+  .map-toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;
+    background:rgba(0,0,0,.16); border:1px solid var(--border); border-radius:var(--radius-md); padding:8px 10px;
+  }
+  .map-toolbar .group{display:flex; gap:6px; align-items:center;}
+  .map-toolbar input[type=number]{width:58px;}
+  #mapCanvas{
+    position:relative; width:100%; height:520px; overflow:hidden; touch-action:none;
+    border:2px solid var(--border); border-radius:var(--radius-lg); cursor:grab;
+    background:#182210 radial-gradient(ellipse at 50% 40%, #223318 0%, #131b0c 80%);
+    box-shadow:inset 0 0 60px rgba(0,0,0,.5), var(--shadow-md);
+  }
+  #mapCanvas.dragging{cursor:grabbing;}
+  #mapWorld{position:absolute;}
+  #mapInfluence{position:absolute; left:0; top:0; pointer-events:none;}
+  #mapAttackLines{position:absolute; left:0; top:0; pointer-events:none;}
+  .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
+  .villagePin .dot{
+    position:relative; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:15px; border:2px solid #1a140d; box-shadow:0 2px 5px rgba(0,0,0,.6);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .resbonus-badge{
+    position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%;
+    background:var(--gold); border:1px solid #1a140d; font-size:9px; line-height:1;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.6);
+  }
+  /* Badge de marqueur personnel (voir VILLAGE_TAGS / villageTagBadgeSvg) : coin OPPOSÉ du badge de
+     gisement riche ci-dessus pour ne jamais se chevaucher, les deux pouvant apparaître ensemble. */
+  .village-tag-badge{
+    position:absolute; bottom:-5px; left:-5px; width:15px; height:15px; border-radius:50%;
+    display:block; box-shadow:0 1px 3px rgba(0,0,0,.6);
+  }
+  .village-tag-badge svg{ display:block; width:100%; height:100%; }
+  /* Assistant de pillage : lignes cliquables (voir renderFarm/attachFarmHandlers) — toute la ligne
+     est une cible pour cocher/décocher, pas seulement la petite case à cocher. */
+  tr.farm-row{cursor:pointer; transition:background-color .12s ease;}
+  tr.farm-row:hover{background:rgba(193,121,62,.10);}
+  tr.farm-row.farm-row-selected{background:rgba(154,117,38,.16);}
+  tr.farm-row.farm-row-selected:hover{background:rgba(193,121,62,.22);}
+  tr.farm-row.farm-row-busy{cursor:default; opacity:.55;}
+  tr.farm-row.farm-row-busy:hover{background:none;}
+  tr.farm-row td:first-child{width:30px; text-align:center;}
+  tr.farm-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
+  tr.farm-row.farm-row-busy input[type=checkbox]{cursor:not-allowed;}
+  .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
+  .villagePin.weak .dot{background:#4d7a37;}
+  .villagePin.medium .dot{background:#9a7526;}
+  .villagePin.strong .dot{background:#8a3226;}
+  .villagePin.ally .dot{background:#2c6a4a; border-color:#8ad9c0;}
+  .villagePin.pact .dot{background:#22506a; border-color:#8ac0e0;}
+  .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
+  .villagePin.blackarmy .dot{background:#0c0c10; border-color:#9a2b2b; box-shadow:0 0 9px rgba(154,43,43,.85);}
+  .villagePin.blackarmy:hover .dot{box-shadow:0 0 14px rgba(210,60,60,.95);}
+  .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
+  .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
+  .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
+  .mapDecor{position:absolute; transform:translate(-50%,-100%); pointer-events:none; opacity:.88;}
+  .mapDecor svg{display:block; width:100%; height:100%; overflow:visible;}
+  .villagePin .plabel{
+    position:absolute; top:32px; font-size:9px; white-space:nowrap; background:rgba(20,16,10,.85);
+    padding:2px 6px; border-radius:6px; color:var(--text); pointer-events:none;
+  }
+  .troop-marker{
+    position:absolute; transform:translate(-50%,-50%); pointer-events:none; z-index:6;
+    transition:left 0.95s linear, top 0.95s linear;
+  }
+  .troop-marker .tdot{
+    width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:11px; border:2px solid #1a140d; box-shadow:0 2px 6px rgba(0,0,0,.65);
+    animation:marchPulse 1s ease-in-out infinite;
+  }
+  .troop-marker.marker-attack .tdot{background:linear-gradient(180deg,#c95c4a,#8a3226);}
+  .troop-marker.marker-scout .tdot{background:linear-gradient(180deg,#5a9ac0,#2f5f7a);}
+  .troop-marker.marker-returning{opacity:.72;}
+  /* Mission d'un AUTRE joueur (attaque/reconnaissance en approche) : plus petite, plus discrète et
+     bordure pointillée grisée, pour bien la distinguer visuellement des missions du joueur actif
+     tout en la gardant lisible (aucune identité ni composition de troupes n'est révélée, voir
+     buildSnapshot côté serveur). */
+  .troop-marker.marker-foreign{opacity:.6;}
+  .troop-marker.marker-foreign .tdot{width:15px; height:15px; font-size:9px; border:2px dashed #cfae7a;}
+  .troop-marker.marker-foreign .tdot{animation:none;}
+  @keyframes marchPulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.14);} }
+  #villageDetail .box{margin-top:10px;}
+  .report{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; background:var(--panel2); box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, border-color .15s ease;}
+  .report:hover{box-shadow:var(--shadow-md);}
+  .report.win{border-left:4px solid var(--green);}
+  .report.lose{border-left:4px solid var(--red);}
+  .report.scout{border-left:4px solid var(--blue);}
+  .report.raid{border-left:4px solid #a5761f;}
+  .report .title{font-weight:bold; display:flex; justify-content:space-between;}
+  .report .details{font-size:11px; color:var(--text-dim); margin-top:4px; display:none;}
+  .report .details.open{display:block; animation:fadeSlideIn .2s ease;}
+  #toasts{position:fixed; bottom:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:100;}
+  .toast{background:var(--panel2); border:1px solid var(--gold); color:var(--text); padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; max-width:280px; box-shadow:var(--shadow-lg);}
+  .muted{color:var(--text-dim); font-size:12px;}
+  .flex-between{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;}
+  .small{font-size:11px;}
+  footer{margin-top:20px; text-align:center; color:var(--text-dim); font-size:11px;}
+  .req-note{font-size:10px; color:var(--red); margin-top:4px;}
+  .unit-note{font-size:10px; color:var(--gold); margin-top:4px;}
+  .loyalty-bar{width:120px;}
+  .report.defense{border-left:4px solid #7a3fae;}
+  .report.announcement{border-left:4px solid var(--gold);}
+  .report.support{border-left:4px solid var(--green);}
+  .report.gift{border-left:4px solid var(--gold);}
+  .report.market{border-left:4px solid var(--blue);}
+  .report.guild{border-left:4px solid #7a3fae;}
+  .report .title .actions{display:flex; align-items:center; gap:8px; font-weight:normal;}
+  .report-del{background:none; border:none; cursor:pointer; font-size:13px; opacity:.55; padding:2px 5px; border-radius:4px; line-height:1;}
+  .report-del:hover{opacity:1; background:rgba(255,255,255,.08);}
+  .combat-chart{display:flex; flex-direction:column; gap:12px; margin:4px 0 8px;}
+  .chart-block{background:rgba(0,0,0,.16); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px;}
+  .chart-title{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); margin-bottom:6px; font-weight:bold;}
+  .report-filters{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .filter-btn{background:var(--panel2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; padding:4px 12px; font-size:11px; cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;}
+  .filter-btn:hover{color:var(--text);}
+  .filter-btn.active{background:var(--gold); border-color:var(--gold); color:#2a1c07; font-weight:bold;}
+
+  /* Sélecteur de marqueur personnel (panoplie d'icônes, voir villageTagPickerHtml) : une rangée de
+     petits boutons circulaires reprenant chacun le badge exact posé sur le pin de la carte, pour
+     que le choix dans le popup corresponde visuellement à ce qu'on verra ensuite sur la carte. */
+  .village-tag-picker{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);}
+  .tag-chip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  .tag-chip{
+    width:28px; height:28px; padding:0; border-radius:50%; cursor:pointer; flex:none;
+    background:var(--panel2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+    transition:transform .12s ease, border-color .12s ease;
+  }
+  .tag-chip svg{width:22px; height:22px; display:block;}
+  .tag-chip:hover{transform:scale(1.1);}
+  .tag-chip.active{border:2px solid var(--gold); box-shadow:0 0 0 2px rgba(193,121,62,.35);}
+  .tag-chip-clear{font-size:13px; color:var(--text-dim); font-weight:bold;}
+  .tag-chip-clear.active{border-color:var(--text-dim); box-shadow:none;}
+
+  #battleBanner{
+    position:fixed; top:76px; left:50%; transform:translateX(-50%) translateY(-16px);
+    background:var(--panel2); border:2px solid var(--gold); border-radius:var(--radius-md); padding:12px 26px;
+    font-size:17px; font-weight:bold; color:var(--text); box-shadow:var(--shadow-lg);
+    opacity:0; pointer-events:none; z-index:200; transition:opacity .35s, transform .35s; text-align:center;
+    max-width:90vw;
+  }
+  #battleBanner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #battleBanner.victory{ border-color:var(--green); }
+  #battleBanner.defeat{ border-color:var(--red); }
+  #battleBanner.raid{ border-color:#7a3fae; }
+  #battleBanner.conquest{ border-color:var(--gold); background:linear-gradient(#4a3a1a,#3d2e1e); animation:conquestGlow 2.4s ease; }
+  @keyframes conquestGlow{ 0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.6);} 50%{box-shadow:0 6px 34px rgba(193,121,62,.75);} }
+  .sparkle{ font-size:26px; animation:sparklePop 1.4s ease-out forwards; }
+  @keyframes sparklePop{ 0%{opacity:0; transform:translateY(0) scale(.6);} 30%{opacity:1; transform:translateY(-10px) scale(1.25);} 100%{opacity:0; transform:translateY(-42px) scale(.9);} }
+  #btnMute{font-size:15px;}
+  @media(max-width:820px){
+    .app-shell{flex-direction:column;}
+    .side-nav{
+      position:relative; top:auto; height:auto; width:100%; flex-direction:row; align-items:center;
+      border-right:none; border-bottom:1px solid var(--border); overflow-x:hidden; overflow-y:visible;
+      padding:10px 12px; gap:12px;
+    }
+    .top-banner{padding:10px 14px;}
+    .top-banner svg{width:26px; height:31px;}
+    .top-banner .brand-name{font-size:15px; letter-spacing:1px;}
+    nav#tabs{flex:1 1 0; min-width:0; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;}
+    nav#tabs button{white-space:nowrap; flex:0 0 auto; width:auto; border-left:none; border-bottom:3px solid transparent;}
+    nav#tabs button.active{border-left-color:transparent; border-bottom-color:var(--gold);}
+    #app{max-width:100%;}
+    /* align-items:flex-start (hérité de la règle desktop) ne s'applique normalement qu'à l'axe
+       vertical ; mais une fois flex-direction basculé en column ici, cet axe devient horizontal,
+       et sans stretch le contenu principal ne s'étire plus sur toute la largeur : il reprend sa
+       largeur intrinsèque (parfois plus large que l'écran), ce qui provoquait un débordement
+       horizontal de toute la page sur mobile (bug corrigé). */
+    .layout{flex-direction:column; align-items:stretch;}
+    aside#sidebar{flex:1 1 auto; width:100%;}
+    main#tabContent{padding:12px; width:100%;}
+    .troop-row{flex-wrap:wrap; row-gap:6px;}
+    .troop-row .tname{width:auto; flex:1 1 100%;}
+    #mapCanvas{height:400px;}
+  }
+  @media(max-width:480px){
+    #app{padding:8px 8px 30px;}
+    header#topbar{padding:8px 10px; gap:8px; border-radius:var(--radius-md);}
+    .res{min-width:0; padding:2px 5px;}
+    .res .val{font-size:12px;}
+    .topbar-right{gap:6px;}
+    button{padding:9px 12px; font-size:12.5px;}
+    .card .desc{min-height:0;}
+    .grid-buildings{grid-template-columns:1fr;}
+    #mapCanvas{height:320px;}
+    .building-detail{gap:10px;}
+  }
+  /* Cible tactile confortable sur mobile/tablette même si l'écran est large (ex: iPad) */
+  @media(pointer:coarse){
+    button{min-height:38px;}
+    nav#tabs button{min-height:36px;}
+    input[type=number], input[type=text], select{min-height:36px;}
+  }
+
+  .tutorial-backdrop{
+    position:fixed; inset:0; background:rgba(10,8,5,.78); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+    z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;
+    animation:fadeSlideIn .2s ease;
+  }
+  .tutorial-card{
+    background:var(--panel); border:2px solid var(--gold); border-radius:var(--radius-lg);
+    padding:22px 26px; max-width:440px; width:100%; box-shadow:var(--shadow-lg);
+  }
+  .tutorial-card .tstep-icon{font-size:34px; margin-bottom:6px;}
+  .tutorial-card h3{font-size:19px; margin-bottom:10px;}
+  .tutorial-card p{font-size:13px; line-height:1.5; color:var(--text-dim); margin:0 0 16px;}
+  .tutorial-dots{display:flex; gap:6px; margin-bottom:16px;}
+  .tutorial-dots span{width:8px; height:8px; border-radius:50%; background:var(--border); transition:background .15s ease;}
+  .tutorial-dots span.active{background:var(--gold);}
+  .tutorial-actions{display:flex; justify-content:space-between; align-items:center; gap:10px;}
+  .tutorial-skip{background:transparent; border:none; box-shadow:none; color:var(--text-dim); font-weight:normal; text-decoration:underline; padding:8px 4px;}
+  .tutorial-skip:hover{background:transparent; box-shadow:none; color:var(--text); transform:none;}
+
+  /* ---- Descriptif joueur (modale, ouverte depuis la guilde ou le classement) ---- */
+  .player-link{cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;}
+  .player-link:hover{color:var(--gold);}
+  #playerProfileModal:empty{display:none;}
+  #villageActionModal:empty{display:none;}
+  .village-action-card{max-width:460px;}
+  .village-action-card .send-form{border-top:none; padding-top:0; margin-top:0;}
+  .player-card-actions button{width:100%;}
+  .profile-village-row{width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;}
+  .profile-village-row:hover{border-color:var(--gold); background:rgba(255,255,255,.06);}
+
+  /* ---- Boutique de guilde ---- */
+  .shop-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:8px;}
+  .shop-card{border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:rgba(255,255,255,.03);}
+  .shop-card.active{border-color:var(--gold);}
+  .shop-card h4{margin:0 0 4px; font-size:14px;}
+  .donation-row{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--border);}
+  .donation-row:last-child{border-bottom:none;}
+
+  /* ---- Chat (widget flottant, salons Mondial / Guilde) ---- */
+  #chatWidget{position:fixed; bottom:14px; left:14px; z-index:150; font-size:13px;}
+  .chat-bubble{
+    width:50px; height:50px; border-radius:50%; font-size:22px;
+    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-lg);
+  }
+  .chat-panel{
+    width:320px; max-width:calc(100vw - 28px); max-height:72vh;
+    background:var(--panel); border:1px solid var(--gold); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .chat-head{
+    display:flex; justify-content:space-between; align-items:center; padding:8px 12px;
+    background:var(--panel2); border-bottom:1px solid var(--border); font-weight:bold; color:var(--gold);
+  }
+  .chat-head .chat-toggle{background:transparent; border:none; box-shadow:none; padding:2px 6px; font-size:12px;}
+  .chat-head .chat-toggle:hover{background:rgba(193,121,62,.15); transform:none; box-shadow:none;}
+  .chat-tabs{display:flex; border-bottom:1px solid var(--border); background:rgba(0,0,0,.15);}
+  .chat-tab{
+    flex:1; background:transparent; border:none; border-radius:0; box-shadow:none;
+    color:var(--text-dim); font-size:11.5px; font-weight:bold; padding:6px 8px;
+    border-bottom:2px solid transparent;
+  }
+  .chat-tab:hover{background:rgba(193,121,62,.1); color:var(--text); transform:none; box-shadow:none;}
+  .chat-tab.active{color:var(--gold); border-bottom-color:var(--gold); background:rgba(193,121,62,.08);}
+  .chat-messages{max-height:260px; min-height:120px; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:7px;}
+  .chat-msg{font-size:12px; line-height:1.4; word-break:break-word;}
+  .chat-msg .chat-time{color:var(--text-dim); font-size:10px; margin-right:5px;}
+  .chat-msg .chat-user{font-weight:bold; color:var(--gold); margin-right:5px; cursor:pointer;}
+  .chat-msg .chat-user:hover{text-decoration:underline;}
+  .chat-msg.me .chat-user{color:var(--green);}
+  .chat-msg .chat-user.admin-name{color:#ff5252; text-shadow:0 0 6px rgba(255,60,60,.55);}
+  .chat-msg.announce{background:rgba(193,121,62,.14); border:1px solid rgba(193,121,62,.4); border-radius:var(--radius-sm); padding:6px 8px;}
+  .chat-msg.announce .chat-user{color:var(--gold);}
+  .chat-msg .chat-announce-icon{margin-right:4px;}
+  .chat-form{display:flex; align-items:center; border-top:1px solid var(--border); gap:0;}
+  .chat-form input{flex:1; border:none; border-radius:0; background:var(--bg2); padding:8px 10px; box-shadow:none;}
+  .chat-charcount{font-size:9.5px; color:var(--text-dim); padding:0 6px; white-space:nowrap;}
+  .chat-form button{border:none; border-radius:0; box-shadow:none; background:var(--panel2); padding:8px 12px;}
+  @media(max-width:480px){
+    #chatWidget{left:8px; bottom:8px;}
+    /* Le panneau ouvert reste volontairement compact sur mobile (au lieu de prendre jusqu'à 72vh) :
+       assez petit pour ne pas recouvrir la barre du haut (nom du village, son, déconnexion) même sur
+       un petit écran, tout en restant assez grand pour lire quelques messages sans excès de défilement. */
+    .chat-panel{width:calc(100vw - 16px); max-height:38vh;}
+    .chat-messages{max-height:16vh; min-height:70px;}
+  }
+
+  /* Pseudo d'administrateur : rouge vif et légèrement lumineux, partout où il apparaît */
+  .admin-name{color:#ff5252; font-weight:bold; text-shadow:0 0 6px rgba(255,60,60,.55);}
+
+  /* ---- Panneau Admin ---- */
+  #tabContent tr.admin-selected{background:rgba(193,121,62,.16);}
+  #tabContent tr[data-admin-select]{cursor:pointer;}
+
+  /* ======================================================================
+     THÈME ALTERNATIF "PARCHEMIN" — reprend la palette/typo des maquettes
+     (fond crème, encre sombre, Cinzel/Crimson Pro). Activé/désactivé par
+     le bouton en bas de page (voir #btnThemeToggle / applyTheme()).
+     La bannière du logo et la barre de navigation de gauche restent
+     volontairement en bois sombre dans les deux thèmes : c'est le
+     "cadre" de l'appli, pas le contenu qu'on habille. ====================== */
+  body.theme-maquette{
+    --panel:#f1e5c7; --panel2:#e9dcb8; --bg:#f4e9cf;
+    --text:#2a1c10; --text-dim:#6b5a42; --gold:#b87a3a;
+    --green:#3d6b52; --red:#7a2530; --blue:#4a5a8f;
+    --shadow-sm:0 2px 6px rgba(72,48,20,.18);
+    --shadow-md:0 4px 16px rgba(72,48,20,.22);
+    --shadow-lg:0 8px 28px rgba(72,48,20,.28);
+    --ring:0 0 0 3px rgba(184,122,58,.28);
+    font-family:'Crimson Pro', Georgia, serif;
+    background:#f4e9cf;
+  }
+  body.theme-maquette::before{
+    background-image:none;
+    background:radial-gradient(ellipse at top, #f7ecd2 0%, #ecdcb4 55%, #ddc691 100%);
+  }
+  body.theme-maquette h1, body.theme-maquette h2, body.theme-maquette h3{
+    font-family:'Cinzel', Georgia, serif; color:#241708;
+  }
+  body.theme-maquette .res .val, body.theme-maquette .res .rate,
+  body.theme-maquette .village-title .coord{ font-family:'IBM Plex Mono', ui-monospace, monospace; }
+
+  /* Boutons/champs : les dégradés d'origine supposaient un texte clair — on leur donne
+     leur propre traitement clair plutôt que de s'appuyer sur --text (repris par le cadre sombre). */
+  body.theme-maquette button{
+    background:linear-gradient(180deg,#efe2bd,#ddc999); color:#2a1c10; border-color:#8f5c26;
+    box-shadow:0 2px 6px rgba(72,48,20,.16), inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  body.theme-maquette button:hover:not(:disabled){
+    background:linear-gradient(180deg,#f7ecd2,#e6d3a1); border-color:#b87a3a;
+  }
+  body.theme-maquette button.primary{ background:linear-gradient(180deg,#c78a48,#a3703c); color:#fbf3dd; }
+  body.theme-maquette button.danger{ background:linear-gradient(180deg,#a4453a,#7a2530); color:#fbf3dd; border-color:#5c2018; }
+  body.theme-maquette input[type=number], body.theme-maquette input[type=text],
+  body.theme-maquette input[type=password], body.theme-maquette select{
+    background:#fbf3dd; color:#2a1c10; border-color:#8f5c26;
+    box-shadow:inset 0 1px 4px rgba(72,48,20,.15);
+  }
+
+  /* Barre du village (nom/coordonnées) : devient une carte claire, comme dans les maquettes */
+  body.theme-maquette header#topbar{
+    background:linear-gradient(180deg, rgba(241,229,199,.95), rgba(233,215,176,.95));
+  }
+
+  /* Bannière de conquête : dégradé volontairement sombre même dans ce thème (effet dramatique) */
+  body.theme-maquette #battleBanner.conquest{ color:#f2e6c8; }
+
+  /* Bannière du logo + rail de navigation gauche : restent en bois sombre dans les deux thèmes,
+     on ne pin que leurs libellés pour qu'ils restent lisibles sur ce fond resté sombre. */
+  body.theme-maquette nav#tabs button{ color:#c9b489; }
+  body.theme-maquette nav#tabs button:hover:not(.active){ color:#f2e6c8; }
+
+  /* Texte agrandi dans ce thème (lisibilité façon manuscrit) : le thème "Bois sombre" garde ses
+     tailles d'origine à l'identique, seules ces règles plus spécifiques (activées par la classe
+     body.theme-maquette) s'appliquent en plus. Le texte incrusté dans les SVG (carte, rapports de
+     combat) est volontairement laissé de côté : il est positionné au pixel près dans des viewBox
+     de taille fixe et déborderait si on l'agrandissait. */
+  body.theme-maquette button{ font-size:14.5px; }
+  body.theme-maquette input[type=number], body.theme-maquette input[type=text],
+  body.theme-maquette input[type=password], body.theme-maquette select{ font-size:14.5px; }
+  body.theme-maquette .res .val{ font-size:16px; }
+  body.theme-maquette .res .rate{ font-size:12px; }
+  body.theme-maquette .res-box .res .val{ font-size:15px; }
+  body.theme-maquette .village-title .name{ font-size:15px; }
+  body.theme-maquette .village-title .coord{ font-size:13px; }
+  body.theme-maquette .village-title input[type=text]{ font-size:16px; }
+  body.theme-maquette .box h3{ font-size:16px; }
+  body.theme-maquette .card h4{ font-size:17px; }
+  body.theme-maquette .card .desc, body.theme-maquette .card .cost{ font-size:13px; }
+  body.theme-maquette .queue-item, body.theme-maquette .mission-item{ font-size:14px; }
+  body.theme-maquette .troop-row{ font-size:14px; }
+  body.theme-maquette .stats-mini{ font-size:12px; }
+  body.theme-maquette table{ font-size:14px; }
+  body.theme-maquette .tag{ font-size:11px; }
+  body.theme-maquette .report .title{ font-size:15px; }
+  body.theme-maquette .report .details{ font-size:13px; }
+  body.theme-maquette .toast{ font-size:13.5px; }
+  body.theme-maquette .muted{ font-size:13.5px; }
+  body.theme-maquette .small{ font-size:12.5px; }
+  body.theme-maquette footer{ font-size:12.5px; }
+  body.theme-maquette .chart-title{ font-size:11px; }
+  body.theme-maquette .filter-btn{ font-size:12.5px; }
+  body.theme-maquette .shop-card h4{ font-size:16px; }
+  body.theme-maquette .donation-row{ font-size:14px; }
+  body.theme-maquette #chatWidget{ font-size:14.5px; }
+  body.theme-maquette .chat-tab{ font-size:12.5px; }
+  body.theme-maquette .chat-msg{ font-size:13.5px; }
+  body.theme-maquette .chat-msg .chat-time{ font-size:11px; }
+  body.theme-maquette .tutorial-card h3{ font-size:21px; }
+  body.theme-maquette .tutorial-card p{ font-size:14.5px; }
+  body.theme-maquette .type-chip{ font-size:11.5px; }
+  body.theme-maquette .ttri-row{ font-size:11.5px; }
+  body.theme-maquette .ttri-lbl{ width:66px; }
+  body.theme-maquette .ttri-val{ width:26px; }
+
+  .theme-toggle-btn{ font-size:11.5px; padding:6px 12px; }
+
+  /* ----------------------------------------------------------------------
+     Détails repris des maquettes, écran par écran. Toujours présents dans
+     le HTML (structure additive, jamais retirée) mais visuellement inertes
+     tant que le thème Parchemin n'est pas actif — le thème Bois sombre
+     garde son rendu d'origine à l'identique. -------------------------- */
+
+  /* Carte : légende sous forme de puces (remplace visuellement les "■" en ligne) */
+  .legend-chip i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:3px; vertical-align:1px; }
+  body.theme-maquette .legend-row{ display:flex; flex-wrap:wrap; gap:8px; margin:6px 0; }
+  body.theme-maquette .legend-chip{ display:inline-flex; align-items:center; gap:5px; padding:4px 10px; background:var(--panel2); border:1px solid var(--border); border-radius:999px; font-size:13px; color:var(--text); }
+  body.theme-maquette .legend-chip i{ width:9px; height:9px; border-radius:50%; }
+
+  /* Caserne : badge illustré par unité (masqué en Bois sombre, la ligne reste identique) */
+  .troop-row .thead{ display:contents; }
+  .troop-row .ticon{ display:none; }
+  body.theme-maquette .troops-list{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; margin-top:8px; }
+  body.theme-maquette .troop-row{ display:flex; flex-direction:column; align-items:stretch; gap:8px; background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; }
+  body.theme-maquette .troop-row .thead{ display:flex; align-items:center; gap:12px; }
+  body.theme-maquette .troop-row .ticon{ display:block; flex-shrink:0; }
+  body.theme-maquette .troop-row .tname{ width:auto; font-size:16px; }
+
+  /* Classement : médaille dégradée pour le podium (nombre seul au-delà) */
+  .rank-medal{ display:none; }
+  body.theme-maquette .rank-medal{ display:block; }
+  body.theme-maquette .rank-plain{ display:none; }
+
+  /* Guilde : bannière illustrée au-dessus du contenu (le titre texte reste inchangé) */
+  .guild-banner{ display:none; }
+  body.theme-maquette .guild-banner{
+    display:block; position:relative; border-radius:var(--radius-lg); overflow:hidden;
+    margin-bottom:14px; border:1px solid var(--border); box-shadow:var(--shadow-sm);
+  }
+  .guild-banner svg.guild-banner-bg{ display:block; width:100%; height:96px; }
+  .guild-banner-content{
+    position:absolute; inset:0; display:flex; align-items:center; gap:16px; padding:0 22px;
+  }
+  .guild-banner-title{ font-family:'Cinzel', Georgia, serif; font-size:17px; color:#f6ecd3; }
+  .guild-banner-sub{ font-size:13.5px; color:#e6cfd4; margin-top:2px; }
+
+  /* Rapports : pastille victoire/défaite (le texte reste identique en Bois sombre) */
+  .report-pill{ display:inline; }
+  body.theme-maquette .report-pill{
+    display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px;
+    font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-right:8px;
+  }
+  body.theme-maquette .report-pill.win{ background:rgba(61,107,82,.18); color:var(--green); border:1px solid var(--green); }
+  body.theme-maquette .report-pill.lose{ background:rgba(122,37,48,.15); color:var(--red); border:1px solid var(--red); }
+
+  /* Village : liste compacte des bâtiments à côté de la scène (maquette "Direction A", le tout
+     premier écran choisi en début de session). En Bois sombre, .village-blist reste masquée et
+     .village-top garde son comportement de bloc d'origine — la scène occupe donc toute la largeur
+     exactement comme avant. */
+  .village-blist{ display:none; }
+  body.theme-maquette .village-top{ display:flex; gap:16px; align-items:stretch; margin-bottom:14px; }
+  body.theme-maquette .village-scene{ width:42%; flex:0 0 42%; margin-bottom:0; }
+  body.theme-maquette .village-blist{
+    display:flex; flex-direction:column; flex:1 1 0; min-width:0; overflow-y:auto; padding:6px 12px;
+  }
+  .blist-row{ display:none; }
+  body.theme-maquette .blist-row{
+    display:flex; align-items:center; gap:10px; padding:7px 2px; border-bottom:1px solid var(--border);
+    cursor:pointer; border-radius:6px; transition:background .15s ease;
+  }
+  body.theme-maquette .blist-row:last-child{ border-bottom:none; }
+  body.theme-maquette .blist-row:hover{ background:rgba(184,122,58,.14); }
+  body.theme-maquette .blist-row.selected{ background:rgba(184,122,58,.2); }
+  body.theme-maquette .blist-row .bname{ font-weight:600; font-size:14px; color:var(--text); flex-grow:1; }
+  body.theme-maquette .blist-row .bname.locked{ color:var(--text-dim); font-weight:normal; }
+  body.theme-maquette .blist-row .blevel{
+    font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:12.5px; color:var(--gold); white-space:nowrap;
+  }
+  body.theme-maquette .blist-row .blevel.muted{ color:var(--text-dim); font-size:11px; }
+  body.theme-maquette .blist-row .bup{
+    width:22px; height:22px; border-radius:5px; background:var(--gold); color:#fbf3dd;
+    display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0;
+  }
+  body.theme-maquette .blist-row .bup.disabled{ background:var(--border); color:var(--text-dim); }
+  @media(max-width:820px){
+    body.theme-maquette .village-top{ flex-direction:column; }
+    body.theme-maquette .village-scene{ width:100%; flex:1 1 auto; }
+    body.theme-maquette .village-blist{ max-height:320px; }
+  }
