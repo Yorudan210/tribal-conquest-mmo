@@ -522,6 +522,71 @@ function doMission(db, username, targetId, kind, troopsWanted){
   return { ok:true, travel };
 }
 
+/* ------------------------- Assistant de pillage ------------------------- *
+ * Envoie automatiquement UNE MÊME composition de troupes vers plusieurs villages BARBARES proches
+ * en un seul appel, pour éviter de remplir le formulaire d'attaque à la main pour chaque pillage
+ * (corvée répétitive typique de ce genre de jeu). Toujours depuis le village ACTIF (même convention
+ * que doMission/doSendSupport ci-dessus, qui n'acceptent pas non plus de villageId).
+ *
+ * Volontairement restreint aux villages barbares, même si l'id d'un joueur figure dans la liste
+ * envoyée par erreur (ex. bug client, ou liste construite à la main) : c'est un outil de confort
+ * pour le pillage répétitif, jamais un raccourci pour déclarer une vraie attaque sur un joueur --
+ * toute cible qui n'est pas barbare est silencieusement ignorée plutôt que de provoquer un incident
+ * diplomatique non voulu.
+ *
+ * Envoie la même composition à chaque cible retenue, DANS L'ORDRE fourni par le client (déjà trié
+ * par distance croissante côté client, voir renderFarm/public/index.html) ; s'arrête dès que le
+ * village actif n'a plus assez de troupes pour compléter un envoi entier (jamais d'envoi partiel
+ * amputé). Ignore aussi toute cible vers laquelle une attaque depuis CE village est déjà en cours
+ * (resolveDone:false), pour ne pas empiler plusieurs pillages simultanés sur la même cible. */
+function doFarmSend(db, username, targetIds, troopsWanted){
+  const v = villageByUser(db, username);
+  if(!v) return { error: "Village introuvable." };
+  if(!Array.isArray(targetIds) || !targetIds.length) return { error: "Aucune cible sélectionnée." };
+
+  const composition = {};
+  let any=false, maxSpeed=0;
+  for(const k of TROOP_ORDER){
+    if(k==="noble") continue; // un noble ne part jamais dans un pillage automatisé
+    let n = Math.floor(Number(troopsWanted[k])||0);
+    n = Math.max(0, n);
+    if(n>0){ composition[k]=n; any=true; maxSpeed=Math.max(maxSpeed, TROOPS[k].speed); }
+  }
+  if(!any) return { error: "Composez au moins une troupe pour le modèle de pillage." };
+
+  const busyTargets = new Set(
+    db.missions
+      .filter(m => m.kind==="attack" && !m.resolveDone && m.sourceVillageId===v.id)
+      .map(m => m.targetId)
+  );
+
+  let sent=0, skippedBusy=0, skippedNotBarbarian=0, skippedTroops=0;
+  const t = now();
+  for(let idx=0; idx<targetIds.length; idx++){
+    const target = db.villages[String(targetIds[idx])];
+    if(!target) continue;
+    if(target.owner!=="barbarian"){ skippedNotBarbarian++; continue; }
+    if(busyTargets.has(target.id)){ skippedBusy++; continue; }
+    let enough = true;
+    for(const k in composition) if((v.troops[k]||0) < composition[k]){ enough=false; break; }
+    if(!enough){ skippedTroops += (targetIds.length-idx); break; } // même composition partout : inutile de continuer
+
+    for(const k in composition) v.troops[k] -= composition[k];
+    const dx=target.x-v.x, dy=target.y-v.y, dist=Math.sqrt(dx*dx+dy*dy);
+    const travel = Math.max(4, Math.round(dist*maxSpeed/serverEventMultiplier(db,"move")));
+    db.missions.push({
+      id: "m"+Date.now()+"_"+sent+"_"+Math.floor(Math.random()*100000),
+      kind:"attack", attackerUsername: username, sourceVillageId: v.id, targetId: target.id, troops: {...composition},
+      departAt: t, arriveAt: t+travel, travel, resolveDone:false, returnAt:null, completed:false
+    });
+    if(!target.aggro || typeof target.aggro !== "object") target.aggro = {};
+    target.aggro[username] = (target.aggro[username]||0) + 1;
+    busyTargets.add(target.id);
+    sent++;
+  }
+  return { ok:true, sent, skippedBusy, skippedNotBarbarian, skippedTroops };
+}
+
 /* Envoie des troupes en renfort dans un village allié (joueur) : elles voyagent puis se stationnent
    là-bas (v.support) où elles comptent pour la défense, jusqu'à un rappel explicite. */
 function doSendSupport(db, username, targetId, troopsWanted){
@@ -2472,5 +2537,5 @@ module.exports = {
   doGuildDonate, doGuildDisband, doGuildBuyBoost, publicPlayerView,
   doDiplomacyPropose, doDiplomacyRespond, doDiplomacyCancel, doDiplomacyDeclareWar, listGuildsPublic,
   doCommanderUpgrade, publicCommanderView,
-  doSetVillageTag
+  doSetVillageTag, doFarmSend
 };

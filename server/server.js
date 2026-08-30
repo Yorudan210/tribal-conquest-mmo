@@ -10,6 +10,7 @@ const crypto = require("crypto");
 const auth = require("./auth.js");
 const store = require("./store.js");
 const game = require("./gameLogic.js");
+const ws = require("./ws.js");
 
 const PORT = process.env.PORT || 3000;
 // Code secret à saisir dans le jeu (onglet Aide) pour débloquer le panneau Admin sur son compte.
@@ -52,7 +53,18 @@ async function startServer(){
   db = store.load();
 
   setInterval(()=>{
-    try{ game.runTick(db); store.scheduleSave(); }
+    try{
+      game.runTick(db);
+      store.scheduleSave();
+      // Diffusion temps réel (voir ws.js) : un instantané frais poussé à chaque tick vers tout
+      // client déjà connecté en WebSocket, à la place (ou plutôt en plus, en secours) du sondage
+      // HTTP périodique côté client. Ne calcule un instantané QUE pour les utilisateurs réellement
+      // connectés (isConnected), pour ne pas payer ce coût pour des comptes inactifs.
+      for(const uname of wsHub.connectedUsernames()){
+        if(!db.users[uname]) continue; // compte supprimé entre-temps par un admin
+        wsHub.sendTo(uname, { type:"snapshot", snapshot: game.buildSnapshot(db, uname) });
+      }
+    }
     catch(e){ console.error("[tick] erreur:", e); }
   }, 2000);
 
@@ -185,6 +197,17 @@ async function handleApi(req, res, pathname, url){
     store.scheduleSave();
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
+  if(pathname==="/api/farm/send" && req.method==="POST"){
+    // Assistant de pillage (voir doFarmSend, gameLogic.js) : envoie la même composition de troupes
+    // vers plusieurs villages barbares en un seul appel, au lieu d'un /api/mission par cible.
+    const body = await readBody(req);
+    const result = game.doFarmSend(db, username, body.targetIds||[], body.troops||{});
+    if(result.error) return sendJson(res, 400, result);
+    store.scheduleSave();
+    return sendJson(res, 200, { ok:true, sent:result.sent, skippedBusy:result.skippedBusy,
+      skippedNotBarbarian:result.skippedNotBarbarian, skippedTroops:result.skippedTroops,
+      snapshot: game.buildSnapshot(db, username) });
+  }
   if(pathname==="/api/mission/cancel" && req.method==="POST"){
     const body = await readBody(req);
     const result = game.doCancelMission(db, username, body.missionId);
@@ -211,6 +234,16 @@ async function handleApi(req, res, pathname, url){
     const result = game.doChatSend(db, username, body.text, body.channel);
     if(result.error) return sendJson(res, 400, result);
     store.scheduleSave();
+    // Diffusion WebSocket immédiate (voir ws.js) : contrairement au reste du jeu, qui profite déjà
+    // du push périodique toutes les 2s (voir le tick ci-dessus), le chat se ressent bien plus d'une
+    // attente jusqu'au prochain tick pour voir un nouveau message apparaître chez les autres.
+    const guildId = body.channel==="guild" ? (db.users[username] && db.users[username].guildId) : null;
+    for(const uname of wsHub.connectedUsernames()){
+      if(uname===username) continue; // cet onglet a déjà la réponse HTTP ci-dessous
+      if(!db.users[uname]) continue;
+      if(guildId && db.users[uname].guildId!==guildId) continue;
+      wsHub.sendTo(uname, { type:"snapshot", snapshot: game.buildSnapshot(db, uname) });
+    }
     return sendJson(res, 200, { ok:true, snapshot: game.buildSnapshot(db, username) });
   }
   if(pathname==="/api/reports/delete" && req.method==="POST"){
@@ -620,6 +653,23 @@ const server = http.createServer((req, res)=>{
   }
   serveStatic(req, res, pathname);
 });
+
+/* Canal WebSocket temps réel (voir ws.js) : pousse un instantané frais vers chaque client déjà
+   connecté à chaque tick (setInterval ci-dessous) et immédiatement après un message de chat,
+   au lieu de le laisser attendre son prochain sondage HTTP (voir startPolling, public/index.html).
+   L'API HTTP reste le SEUL chemin d'écriture -- ce canal ne pousse jamais que de la lecture. */
+const wsHub = ws.attach(server, {
+  onAuth: (token) => {
+    const payload = auth.verifyToken(token, SECRET);
+    if(!payload || !payload.username) return null;
+    if(!db || !db.users[payload.username]) return null;
+    return payload.username;
+  }
+});
+// wsHub est une const de MODULE (portée sur tout ce fichier), donc déjà visible depuis handleApi()
+// et la route /api/chat/send définies plus haut : une fonction ne capture les variables englobantes
+// qu'à son EXÉCUTION, pas à sa déclaration, et aucune requête n'arrive avant server.listen() dans
+// startServer() ci-dessous -- wsHub est donc toujours initialisé avant le premier appel réel.
 
 startServer().catch(err=>{
   console.error("[startup] erreur fatale au démarrage:", err);
