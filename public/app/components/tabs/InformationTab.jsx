@@ -73,7 +73,7 @@ function HelpBox({
     style: {
       margin: 0
     }
-  }, "Conqu\xEAte Tribale est un jeu de gestion de village m\xE9di\xE9val type ", /*#__PURE__*/React.createElement("i", null, "Tribal Wars"), ", qui tourne d\xE9sormais dans un ", /*#__PURE__*/React.createElement("b", null, "monde partag\xE9 en temps r\xE9el"), " : les autres joueurs sont de vraies personnes, connect\xE9es avec leur propre compte, et vous pouvez les attaquer comme ils peuvent vous attaquer. Les \xAB villages barbares \xBB de la carte restent contr\xF4l\xE9s par le jeu et servent de cibles faciles pour d\xE9marrer."), /*#__PURE__*/React.createElement("button", {
+  }, "Conqu\xEAte Tribale est un jeu de gestion de village m\xE9di\xE9val type ", /*#__PURE__*/React.createElement("i", null, "Tribal Wars"), ", qui tourne d\xE9sormais dans un ", /*#__PURE__*/React.createElement("b", null, "monde partag\xE9 en temps r\xE9el"), " : les autres joueurs sont de vraies personnes, connect\xE9es avec leur propre compte. Ce monde est int\xE9gralement ", /*#__PURE__*/React.createElement("b", null, "JcE"), " (joueur contre environnement) : aucune attaque n'est possible entre joueurs, seulement la reconnaissance et le soutien. Les \xAB villages barbares \xBB de la carte (dont ceux de l'Arm\xE9e Noire) restent contr\xF4l\xE9s par le jeu et sont les seules cibles d'attaque."), /*#__PURE__*/React.createElement("button", {
     onClick: replayTutorial
   }, "\uD83D\uDD30 Revoir le tutoriel")), /*#__PURE__*/React.createElement("div", {
     className: "accordion"
