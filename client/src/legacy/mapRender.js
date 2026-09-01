@@ -17,7 +17,8 @@ export const BLACK_ARMY_RANK_LABEL = ["I","II","III","IV","V"];
 export const FACTION_PIN = {
   blackArmy: {cls:"blackarmy", icon:"🏴", label:"Armée Noire"},
   bandits: {cls:"bandits", icon:"🗡️", label:"Repaire de brigands"},
-  raiders: {cls:"raiders", icon:"🐎", label:"Camp de maraudeurs"}
+  raiders: {cls:"raiders", icon:"🐎", label:"Camp de maraudeurs"},
+  legendary: {cls:"legendary", icon:"👑", label:"Campement légendaire"}
 };
 export const DIPLOMACY_LABEL = {pact:"Pacte de non-agression", alliance:"Alliance", war:"Guerre"};
 export const VILLAGE_TAG_MAP = Object.fromEntries(VILLAGE_TAGS.map(t=>[t.key, t]));
