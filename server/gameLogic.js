@@ -289,14 +289,24 @@ function topUpBandits(db){
    risque, car cette fonction n'est appelée que depuis une route admin ponctuelle avec le "db" du
    serveur en cours (le même objet), jamais depuis runTick (voir le commentaire au-dessus de
    topUpBandits). */
+/* Ne (re)peuple QUE les factions encore absentes de ce monde (counts[key]===0) -- pas "tout ou
+   rien" comme la version Phase 1 : un monde de production ayant déjà été peuplé en bandits/raiders
+   doit quand même pouvoir rattraper une NOUVELLE faction ajoutée plus tard (ex. "legendary", Phase 2)
+   sans que le peuplement existant ne soit refusé/dupliqué. Toujours sans risque de duplication : une
+   faction déjà présente (count>0) est simplement ignorée, jamais re-semée. */
 function adminSeedPermanentFactions(db){
   const counts = {};
   for(const key in GameData.PERMANENT_FACTIONS) counts[key] = countActiveFaction(db, key);
-  if(Object.values(counts).some(n=>n>0)){
-    return { error:"Des campements de factions permanentes existent déjà sur la carte (bandits : "+(counts.bandits||0)+", raiders : "+(counts.raiders||0)+"). Rien à faire." };
+  const missingKeys = Object.keys(GameData.PERMANENT_FACTIONS).filter(k=>!counts[k]);
+  if(!missingKeys.length){
+    const detail = Object.keys(GameData.PERMANENT_FACTIONS)
+      .map(k=>(GameData.PERMANENT_FACTIONS[k].name+" : "+(counts[k]||0))).join(", ");
+    return { error:"Toutes les factions permanentes sont déjà présentes sur la carte ("+detail+"). Rien à faire." };
   }
-  store.spawnPermanentFactions();
-  return { ok:true, counts: { bandits: countActiveFaction(db,"bandits"), raiders: countActiveFaction(db,"raiders") } };
+  store.spawnPermanentFactions(missingKeys);
+  const after = {};
+  for(const key in GameData.PERMANENT_FACTIONS) after[key] = countActiveFaction(db, key);
+  return { ok:true, seeded: missingKeys, counts: after };
 }
 
 // Nombre maximum de nobles vivants qu'un même village peut entretenir à la fois.
@@ -1231,6 +1241,23 @@ function resolveAttack(db, m){
   bumpStat(db, m.attackerUsername, "unitsKilled", defenderLossesTotal); // troupes (et renforts) adverses détruites
   if(target.owner!=="barbarian") bumpStat(db, target.owner, "unitsKilled", attackerLossesTotal); // troupes attaquantes détruites en défense
 
+  // Campement légendaire (faction "legendary", voir PERMANENT_FACTIONS) : imbattable en solo et sans
+  // aucune régénération (voir runTick) -- on crédite donc chaque attaquant des pertes qu'il lui a
+  // personnellement infligées, qu'il gagne ou perde ce combat précis (même dict que v.aggro, mais
+  // jamais réinitialisé par une conquête classique puisqu'il n'appartient qu'aux campements légendaires).
+  // À la chute du camp (conquered ci-dessus, décidé plus haut par la réduction de loyauté), TOUS les
+  // contributeurs enregistrés reçoivent le succès dédié -- pas seulement le noble qui a porté le coup
+  // de grâce, puisque le combat qui l'a rendu vulnérable a pu être mené par d'autres joueurs avant lui.
+  if(target.faction==="legendary"){
+    if(!target.contributors || typeof target.contributors!=="object") target.contributors = {};
+    if(defenderLossesTotal>0 || conquered){
+      target.contributors[m.attackerUsername] = (target.contributors[m.attackerUsername]||0) + defenderLossesTotal;
+    }
+    if(conquered){
+      for(const contributorName in target.contributors) bumpStat(db, contributorName, "legendaryDefeated", 1);
+    }
+  }
+
   // XP de Commandant : chaque camp gagne de l'XP en fonction des pertes qu'il a INFLIGÉES à l'autre
   // (pas celles qu'il a subies), qu'il soit vainqueur ou non — un défenseur qui repousse une attaque
   // en infligeant de lourdes pertes progresse tout autant qu'un attaquant qui perce une défense.
@@ -1441,7 +1468,11 @@ function runTick(db){
   if(t >= db.nextWorldGrowthAt){
     db.nextWorldGrowthAt = t + 180 + Math.random()*180;
     topUpBandits(db);
-    const growable = Object.values(db.villages).filter(v=>v.owner==="barbarian");
+    // Un campement légendaire (faction "legendary") ne grandit JAMAIS et ne riposte jamais (voir
+    // PERMANENT_FACTIONS.legendary) : c'est précisément ce qui garantit qu'il finit par tomber sous
+    // l'effet d'attaques répétées -- ses défenses ne sont entamées durablement QUE par le combat
+    // (growVillage/ripostes ci-dessous restent réservés aux barbares classiques et bandits/raiders).
+    const growable = Object.values(db.villages).filter(v=>v.owner==="barbarian" && v.faction!=="legendary");
     const growCount = Math.max(1, Math.round(growable.length*0.06));
     for(let i=0;i<growCount;i++){
       const v = growable[Math.floor(Math.random()*growable.length)];
@@ -1514,7 +1545,7 @@ function doRename(db, username, name){
 /*  Succès (mêmes catégories/paliers que le jeu officiel — voir ACHIEVEMENTS) */
 /* ---------------------------------------------------------------------- */
 
-const EMPTY_STATS = ()=>({ totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, opponents:[] });
+const EMPTY_STATS = ()=>({ totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, legendaryDefeated:0, opponents:[] });
 
 /* Incrémente un compteur de succès pour un joueur (no-op silencieux si le compte n'existe pas —
    ex. cible barbare — pour ne jamais avoir à vérifier "est-ce un vrai joueur ?" à chaque appel). */
@@ -1553,7 +1584,8 @@ function computeAchievements(db, username){
     marketTrades: stats.marketTrades||0,
     wallLevelsDestroyed: stats.wallLevelsDestroyed||0,
     distinctOpponents: (stats.opponents||[]).length,
-    blackArmyDefeated: stats.blackArmyDefeated||0
+    blackArmyDefeated: stats.blackArmyDefeated||0,
+    legendaryDefeated: stats.legendaryDefeated||0
   };
   return ACHIEVEMENTS.map(a=>{
     const value = values[a.stat]||0;
@@ -2520,7 +2552,12 @@ function publicVillageView(v, db){
     // uniquement à colorer son pin en noir sur la carte, pour ne jamais le confondre avec un
     // barbare ordinaire. Une fois conquis, owner change et isPlayer redevient true : le champ
     // survit sur l'objet mais n'a alors plus aucun effet visuel (pin normal du nouveau propriétaire).
-    faction: v.faction || null
+    faction: v.faction || null,
+    // Nombre de joueurs DISTINCTS ayant déjà infligé des pertes à ce campement légendaire (voir
+    // v.contributors dans resolveAttack) -- jamais les pseudos eux-mêmes, juste un compteur, affiché
+    // dans VillageActionModal pour donner une idée de la progression collective vers sa chute. Vide
+    // (0) pour tout autre village, y compris les campements légendaires pas encore attaqués.
+    contributorCount: v.contributors ? Object.keys(v.contributors).length : 0
   };
 }
 

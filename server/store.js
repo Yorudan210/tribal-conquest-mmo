@@ -246,7 +246,10 @@ function generateBarbarians(count){
  * ci-dessus) mais avec les multiplicateurs de la config, un flag "faction", et un
  * choix de coordonnées biaisé (proche du centre pour "bandits", proche de la
  * périphérie pour "raiders") plutôt qu'uniformément aléatoire sur toute la carte. */
-const PERMANENT_FACTION_COUNTS = { bandits: 60, raiders: 45 };
+// "legendary" reste volontairement rare (voir PERMANENT_FACTIONS.legendary, shared/gameData.js) --
+// contrairement aux bandits/raiders, ces campements ne sont ni topUp-és ni renouvelés : le nombre
+// fixé ici (à l'init du monde, ou via une seed rétroactive) est tout ce qui existera sur ce monde.
+const PERMANENT_FACTION_COUNTS = { bandits: 60, raiders: 45, legendary: 6 };
 // Le top-up périodique des repaires de brigands (topUpBandits) qui garantit qu'il en
 // reste toujours près des joueurs, même après plusieurs semaines de jeu, vit dans
 // gameLogic.js (runTick) et NON ici : runTick(db) reçoit son "db" en paramètre (celui
@@ -282,7 +285,10 @@ function spawnFactionVillage(cfg, coordFn){
   const cx = (WORLD.minX+WORLD.maxX)/2, cy = (WORLD.minY+WORLD.maxY)/2;
   const dist = Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));
   const maxDist = Math.sqrt(2)*(WORLD.maxX-cx);
-  const tier = Math.max(0, Math.min(4, Math.floor((dist/maxDist)*5)));
+  // "legendary" force son tier au maximum (voir PERMANENT_FACTIONS.legendary) plutôt que de le
+  // dériver de la distance au centre comme bandits/raiders -- ces campements doivent rester
+  // redoutables même quand ils apparaissent près du centre de la carte (placement "éparse").
+  const tier = cfg.forceTier!=null ? cfg.forceTier : Math.max(0, Math.min(4, Math.floor((dist/maxDist)*5)));
   const troopBase = (tier*7+Math.random()*8)*cfg.troopMult;
   const troops = {
     spear: Math.round(troopBase*(0.3+Math.random()*0.4)),
@@ -308,8 +314,14 @@ function spawnFactionVillage(cfg, coordFn){
   return db.villages[id];
 }
 
-function spawnPermanentFactions(){
+/* "onlyKeys" (optionnel) restreint le peuplement à un sous-ensemble de PERMANENT_FACTIONS -- utilisé
+   par adminSeedPermanentFactions (gameLogic.js) pour ne (re)peupler QUE les factions absentes d'un
+   monde donné (ex. un monde de production déjà peuplé en bandits/raiders avant l'ajout d'une
+   nouvelle faction comme "legendary" : sans ce filtre, la route admin refuserait tout peuplement dès
+   qu'UNE SEULE faction est déjà présente, empêchant à jamais de rattraper les nouvelles). */
+function spawnPermanentFactions(onlyKeys){
   for(const key in GameData.PERMANENT_FACTIONS){
+    if(onlyKeys && !onlyKeys.includes(key)) continue;
     const cfg = GameData.PERMANENT_FACTIONS[key];
     const count = PERMANENT_FACTION_COUNTS[key] || 30;
     for(let i=0;i<count;i++) spawnFactionVillage(cfg, ()=>findFreeCoordBiased(cfg.distancePreference));
