@@ -2,7 +2,7 @@ import { useRef, useMemo } from "react";
 import { useGame } from "../GameContext.jsx";
 import { TROOP_ORDER, TROOPS, VILLAGE_TAGS, PERMANENT_FACTIONS } from "../gameData.js";
 import { fmt, fmtTime, estimateNow, RES_ICON, RES_NAME } from "../formulas.js";
-import { villageTagBadgeSvg, legendaryCampSceneSvg } from "../legacy/art.js";
+import { villageTagBadgeSvg, legendaryCampSceneSvg, villageSceneSvg } from "../legacy/art.js";
 import { guildRelationFor, TIER_CLASS, TIER_LABEL, FACTION_PIN } from "../legacy/mapRender.js";
 
 // Porte renderVillageActionModal()/wireVillageActionModal()/sendMission()/sendGift()/
@@ -209,6 +209,12 @@ export default function VillageActionModal({
   // Illustration isométrique de la citadelle légendaire (Phase 2) -- mémoïsée sur l'id du village
   // ciblé pour ne pas régénérer ce gros bloc de markup SVG à chaque rafraîchissement du polling.
   const legendarySceneSvg = useMemo(() => legendaryCfg ? legendaryCampSceneSvg() : null, [legendaryCfg, t.id]);
+  // Même traitement pour tout autre campement ciblé (barbare simple, Armée Noire, brigands,
+  // maraudeurs) : une scène isométrique générique choisie selon t.tier (0 à 4, voir
+  // TIER_CLASS/TIER_LABEL) -- villageSceneSvg()/art.js, portée depuis la maquette de concept
+  // "Villages modulables" validée séparément avec l'utilisateur. Jamais affichée pour un village
+  // de joueur (t.isPlayer) : ces scènes racontent la croissance d'un campement, pas un foyer.
+  const tierSceneSvg = useMemo(() => !t.isPlayer && !legendaryCfg ? villageSceneSvg(t.tier) : null, [t.isPlayer, legendaryCfg, t.tier, t.id]);
   return /*#__PURE__*/React.createElement("div", {
     className: "tutorial-backdrop",
     id: "villageActionBackdrop",
@@ -234,6 +240,11 @@ export default function VillageActionModal({
     className: "legendary-camp-scene",
     dangerouslySetInnerHTML: {
       __html: legendarySceneSvg
+    }
+  }) : tierSceneSvg ? /*#__PURE__*/React.createElement("div", {
+    className: "village-scene" + (factionInfo ? " " + factionInfo.cls : ""),
+    dangerouslySetInnerHTML: {
+      __html: tierSceneSvg
     }
   }) : null, /*#__PURE__*/React.createElement("div", {
     className: "flex-between",
