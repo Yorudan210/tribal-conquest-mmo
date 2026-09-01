@@ -286,6 +286,7 @@
   .tag.blackarmy{background:#1c1c22;color:#e08a8a;}
   .tag.bandits{background:#2e2436;color:#c9a8e8;}
   .tag.raiders{background:#3a2110;color:#f0b060;}
+  .tag.legendary{background:#3a2708;color:#f2c94c;}
   .event-badges{display:flex; flex-wrap:wrap; gap:8px;}
   .event-badge{position:relative; display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:10px; background:rgba(193,121,62,.16); border:1px solid var(--gold); font-size:18px; cursor:default; transition:transform .15s ease, background .15s ease;}
   .event-badge:hover{background:rgba(193,121,62,.32); transform:translateY(-1px);}
@@ -357,6 +358,8 @@
   .villagePin.bandits:hover .dot{box-shadow:0 0 12px rgba(190,140,224,.8);}
   .villagePin.raiders .dot{background:#3a2110; border-color:#e08a30; box-shadow:0 0 7px rgba(224,138,48,.6);}
   .villagePin.raiders:hover .dot{box-shadow:0 0 12px rgba(240,160,60,.8);}
+  .villagePin.legendary .dot{background:#1a1006; border-color:#f2c94c; box-shadow:0 0 11px rgba(242,201,76,.85);}
+  .villagePin.legendary:hover .dot{box-shadow:0 0 18px rgba(255,215,90,1);}
   .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
   .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
@@ -532,6 +535,13 @@
   #villageActionModal:empty{display:none;}
   .village-action-card{max-width:460px;}
   .village-action-card .send-form{border-top:none; padding-top:0; margin-top:0;}
+  /* Illustration du campement légendaire (Phase 2), voir legendaryCampSceneSvg() dans legacy/art.js */
+  .legendary-camp-scene{
+    margin:2px 0 10px; border-radius:10px; overflow:hidden; border:1px solid rgba(242,201,76,.45);
+    background:radial-gradient(ellipse at 50% 30%, #241a08 0%, #0e0a02 75%);
+    box-shadow:0 0 0 1px rgba(242,201,76,.12), 0 0 20px rgba(242,201,76,.18), inset 0 0 18px rgba(0,0,0,.5);
+  }
+  .legendary-camp-scene svg{display:block; width:100%; height:auto;}
   .player-card-actions button{width:100%;}
   .profile-village-row{width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;}
   .profile-village-row:hover{border-color:var(--gold); background:rgba(255,255,255,.06);}
