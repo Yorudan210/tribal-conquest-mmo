@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { apiCall } from "./api.js";
 import { villageResourceBonus } from "./formulas.js";
 import Audio from "./legacy/audio.js";
@@ -311,15 +311,32 @@ export function GameProvider({ children }){
 
   useEffect(() => () => { stopPolling(); disconnectWs(); }, [stopPolling, disconnectWs]);
 
-  const value = {
+  const getVillageResourceBonus = useCallback((r) => snapshot ? villageResourceBonus(snapshot, r) : null, [snapshot]);
+
+  // Mémorisé : sans ça, GameProvider recréait un nouvel objet `value` à CHAQUE rendu (donc à chaque
+  // setMapView pendant un zoom de carte, voir MapTab.jsx), ce qui force TOUS les composants abonnés à
+  // useGame() -- TopBar/Sidebar/ChatWidget/VillageActionModal etc., montés en permanence dans
+  // GameScreen.jsx quel que soit l'onglet actif -- à se re-rendre, même ceux qui ne lisent aucun des
+  // champs ayant changé. Ne supprime pas le re-rendu quand un champ RÉELLEMENT utilisé par `value`
+  // change (mapView y figure toujours), mais évite le travail superflu sur tout changement de state
+  // qui ne touche aucun de ces champs.
+  const value = useMemo(() => ({
     authToken, username, snapshot, serverTimeOffset, adminSpeed,
     sparkleUntil, scoutIntel, banner, setBanner, resuming, authError, setAuthError,
     call, doAction, applySnapshot, login, register, logout,
     mapView, setMapView, selectedVillage, openVillageAction, closeVillageAction,
     activeTab, setActiveTab, playerProfile, openPlayerProfile, closePlayerProfile, goToVillageOnMap,
     tutorialOpen, closeTutorial, replayTutorial,
-    villageResourceBonus: (r) => snapshot ? villageResourceBonus(snapshot, r) : null,
-  };
+    villageResourceBonus: getVillageResourceBonus,
+  }), [
+    authToken, username, snapshot, serverTimeOffset, adminSpeed,
+    sparkleUntil, scoutIntel, banner, resuming, authError,
+    call, doAction, applySnapshot, login, register, logout,
+    mapView, selectedVillage, openVillageAction, closeVillageAction,
+    activeTab, playerProfile, openPlayerProfile, closePlayerProfile, goToVillageOnMap,
+    tutorialOpen, closeTutorial, replayTutorial,
+    getVillageResourceBonus,
+  ]);
 
   return <GameCtx.Provider value={value}>{children}</GameCtx.Provider>;
 }
