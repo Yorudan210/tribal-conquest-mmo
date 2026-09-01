@@ -106,6 +106,19 @@
       distancePreference:"far", troopMult:1.35, resMult:1.2, wallGuarantee:true,
       desc:"Un camp de maraudeurs aguerris, plus fort qu'un village barbare classique. Chaque victoire rapporte, en plus du pillage habituel, une Ration de guerre.",
       boostOnVictory:{ key:"raiderRation", name:"Ration de guerre", icon:"🍖", type:"production", multiplier:1.15, durationSec:10800 }
+    },
+    // "legendary" (campements légendaires, Phase 2 "variété des cibles PvE") : quelques campements
+    // très rares, dispersés sur toute la carte (distancePreference "any" -> tirage uniforme, voir
+    // findFreeCoordBiased) et systématiquement au tier maximum (forceTier -- lu par spawnFactionVillage,
+    // server/store.js, à la place du tier habituellement dérivé de la distance au centre). Avec un
+    // troopMult très supérieur à celui de l'Armée Noire au rang V (BLACK_ARMY_TROOP_MULT=1.8), un seul
+    // village ne peut pas les vaincre : voir la règle de non-régénération dans runTick (server/
+    // gameLogic.js, bloc "villages barbares : régénération... croissance") qui exclut faction==="legendary"
+    // de la croissance périodique (murs/troupes) -- seul le combat use durablement leurs défenses.
+    legendary: {
+      key:"legendary", name:"Campement légendaire", icon:"👑", pinClass:"legendary",
+      distancePreference:"any", troopMult:4.2, resMult:3, wallGuarantee:true, forceTier:4,
+      desc:"Un campement retranché redoutable, hors de portée d'un seul village même bien développé. Ses défenses ne se régénèrent jamais : chaque assaut, gagné ou perdu, les use un peu plus -- il finit par tomber sous l'effet d'attaques répétées, éventuellement menées par plusieurs joueurs différents. Sa chute compte pour le succès Chasseur de légende, pour tous ceux qui y auront pris part."
     }
   };
 
@@ -135,7 +148,9 @@
     { key:"demolisher", name:"Fléau des murailles", icon:"🧨", stat:"wallLevelsDestroyed",
       desc:"Détruisez des niveaux de muraille ennemis avec vos béliers.", tiers:[25,250,2500,10000] },
     { key:"blackHunter", name:"Chasseur de l'Armée Noire", icon:"💀", stat:"blackArmyDefeated",
-      desc:"Remportez des combats contre les campements de l'Armée Noire (évènement de lancement).", tiers:[3,10,25,60] }
+      desc:"Remportez des combats contre les campements de l'Armée Noire (évènement de lancement).", tiers:[3,10,25,60] },
+    { key:"legendHunter", name:"Chasseur de légende", icon:"👑", stat:"legendaryDefeated",
+      desc:"Participez à la chute d'un campement légendaire, seul ou aux côtés d'autres joueurs.", tiers:[1,3,8,20] }
   ];
 
   // Temps de base (baseTime, en secondes, au niveau 0 de Caserne — voir trainTime() ci-dessous) calés
