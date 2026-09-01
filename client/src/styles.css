@@ -542,6 +542,20 @@
     box-shadow:0 0 0 1px rgba(242,201,76,.12), 0 0 20px rgba(242,201,76,.18), inset 0 0 18px rgba(0,0,0,.5);
   }
   .legendary-camp-scene svg{display:block; width:100%; height:auto;}
+  /* Scène de village générique (tiers 0-4, VillageActionModal) -- même cadre que
+     .legendary-camp-scene ci-dessus mais neutre par défaut ; un liseré/lueur discret reprend la
+     couleur de faction déjà utilisée pour le pin de la carte et le badge (.tag.bandits/.raiders)
+     quand la cible est un campement de brigands/maraudeurs/Armée Noire, pour que scène + pin + badge
+     se lisent comme une seule identité plutôt que trois styles différents. */
+  .village-scene{
+    margin:2px 0 10px; border-radius:10px; overflow:hidden; border:1px solid var(--border-soft);
+    background:radial-gradient(ellipse at 50% 30%, #2a2013 0%, #120c02 75%);
+    box-shadow:inset 0 0 18px rgba(0,0,0,.5);
+  }
+  .village-scene svg{display:block; width:100%; height:auto;}
+  .village-scene.bandits{border-color:rgba(168,120,208,.45); box-shadow:0 0 0 1px rgba(168,120,208,.12), 0 0 16px rgba(168,120,208,.16), inset 0 0 18px rgba(0,0,0,.5);}
+  .village-scene.raiders{border-color:rgba(224,138,48,.45); box-shadow:0 0 0 1px rgba(224,138,48,.12), 0 0 16px rgba(224,138,48,.16), inset 0 0 18px rgba(0,0,0,.5);}
+  .village-scene.blackarmy{border-color:rgba(154,43,43,.5); box-shadow:0 0 0 1px rgba(154,43,43,.14), 0 0 16px rgba(154,43,43,.18), inset 0 0 18px rgba(0,0,0,.5);}
   .player-card-actions button{width:100%;}
   .profile-village-row{width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;}
   .profile-village-row:hover{border-color:var(--gold); background:rgba(255,255,255,.06);}
