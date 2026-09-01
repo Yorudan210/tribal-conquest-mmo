@@ -368,9 +368,9 @@ function BlackArmyBox({ snapshot, adminAction, call, toast }){
 function PermanentFactionsBox({ adminAction, call }){
   return (
     <div className="box" style={{marginBottom:14}}>
-      <h3>🗡️ Repaires de brigands &amp; camps de maraudeurs</h3>
-      <p className="small muted">Peuple la carte en factions PvE permanentes (voir la section d'aide dédiée) si ce n'est pas déjà fait -- utile une seule fois pour un monde qui existait déjà avant l'ajout de cette fonctionnalité. Sans effet si déjà peuplé (le serveur refuse toute duplication).</p>
-      <button onClick={()=>adminAction(()=>call("/api/admin/factions/seed","POST",{}), "🗡️🐎 Factions permanentes peuplées avec succès !")}>
+      <h3>🗡️ Factions PvE permanentes</h3>
+      <p className="small muted">Peuple la carte en factions PvE permanentes -- repaires de brigands, camps de maraudeurs, et campements légendaires (voir les sections d'aide dédiées) -- si ce n'est pas déjà fait, utile une seule fois pour un monde qui existait déjà avant l'ajout de ces fonctionnalités. Sans effet si déjà peuplé (le serveur refuse toute duplication).</p>
+      <button onClick={()=>adminAction(()=>call("/api/admin/factions/seed","POST",{}), "🗡️🐎👑 Factions permanentes peuplées avec succès !")}>
         Peupler les factions permanentes
       </button>
     </div>
