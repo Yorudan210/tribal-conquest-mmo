@@ -28,6 +28,11 @@ export const FACTION_PIN = {
     cls: "raiders",
     icon: "🐎",
     label: "Camp de maraudeurs"
+  },
+  legendary: {
+    cls: "legendary",
+    icon: "👑",
+    label: "Campement légendaire"
   }
 };
 export const DIPLOMACY_LABEL = {

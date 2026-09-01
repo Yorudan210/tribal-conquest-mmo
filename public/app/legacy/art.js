@@ -452,7 +452,12 @@ function villageMapIconSvg(kind, level, hasWall) {
   // voir aussi .villagePin.bandits/.villagePin.raiders dans le CSS.
   const bandits = kind === "bandits";
   const raiders = kind === "raiders";
-  const campKind = barb || bandits || raiders;
+  // Campement légendaire (Phase 2 "variété des cibles PvE") : palette délibérément la plus intense
+  // des quatre (or/vermillon sur obsidienne quasi noire) pour se distinguer au premier coup d'oeil
+  // de l'Armée Noire (gris/rouge sombre) comme des deux autres factions permanentes -- voir aussi
+  // .villagePin.legendary dans le CSS (lueur dorée, plus large que les autres factions).
+  const legendary = kind === "legendary";
+  const campKind = barb || bandits || raiders || legendary;
   // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
   // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
   // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
@@ -460,13 +465,13 @@ function villageMapIconSvg(kind, level, hasWall) {
   // cohabitent dans le même document (tous les pins de la carte, ou toutes les cartes d'une galerie),
   // et des id de <defs> partagés entre icônes de couleurs différentes se voleraient leur dégradé.
   const uid = "vi" + _villageIconSeq++;
-  const wallTop = black ? "#26262b" : bandits ? "#5a4a63" : raiders ? "#8a5a3a" : barb ? "#8c7752" : "#a8825a";
-  const wallBot = black ? "#0a0a0c" : bandits ? "#2e2436" : raiders ? "#4a2e18" : barb ? "#544628" : "#6b4f31";
-  const roofTop = black ? "#5c1c1c" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
-  const roofBot = black ? "#280a0a" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
-  const doorStroke = black ? "#0a0a0c" : "#2a1c10";
-  const windowCol = black ? "#6a1c1c" : bandits ? "#b090d0" : raiders ? "#f0a030" : "#e6c978";
-  const groundCol = black ? "#1c1414" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
+  const wallTop = black ? "#26262b" : legendary ? "#4a3510" : bandits ? "#5a4a63" : raiders ? "#8a5a3a" : barb ? "#8c7752" : "#a8825a";
+  const wallBot = black ? "#0a0a0c" : legendary ? "#160e02" : bandits ? "#2e2436" : raiders ? "#4a2e18" : barb ? "#544628" : "#6b4f31";
+  const roofTop = black ? "#5c1c1c" : legendary ? "#9a2210" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
+  const roofBot = black ? "#280a0a" : legendary ? "#380803" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
+  const doorStroke = black ? "#0a0a0c" : legendary ? "#160e02" : "#2a1c10";
+  const windowCol = black ? "#6a1c1c" : legendary ? "#ffd54a" : bandits ? "#b090d0" : raiders ? "#f0a030" : "#e6c978";
+  const groundCol = black ? "#1c1414" : legendary ? "#1e1404" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
   const defs = `<defs>
     <linearGradient id="${uid}w" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${wallTop}"/><stop offset="1" stop-color="${wallBot}"/>
@@ -496,9 +501,9 @@ function villageMapIconSvg(kind, level, hasWall) {
   // sombre + la lueur rouge du pin suffisent déjà à la distinguer sans surcharger l'icône.
   const centerpiece = level >= 1 && !black ? campKind ? `<g transform="translate(0,5.5)"><polygon points="-3,3 3,3 1.6,-3.5 -1.6,-3.5" fill="#2a2016" stroke="${doorStroke}" stroke-width="0.7"/><polygon points="0,-3.5 -1.6,1 1.3,0.4" fill="#e0862c" opacity="0.85"/><polygon points="0,-2 -0.9,0.8 0.8,0.5" fill="#f5c25a"/></g>` : `<g transform="translate(0,5)"><ellipse cx="0" cy="1.6" rx="3.6" ry="1.7" fill="#4a3c28" stroke="${doorStroke}" stroke-width="0.8"/><rect x="-2.6" y="-2.6" width="5.2" height="3.6" fill="#352a1a" stroke="${doorStroke}" stroke-width="0.7"/><line x1="-2.6" y1="-2.6" x2="2.6" y2="-2.6" stroke="#6b5533" stroke-width="1"/></g>` : "";
   const palisade = hasWall ? `
-    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black ? '#3a1414' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
-    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
-    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black ? '#3a1414' : legendary ? '#6b4a12' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : legendary ? '#3a2708' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
+    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : legendary ? '#3a2708' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
   ` : "";
   const flag = kind === "mine" ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>` : kind === "player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${defs}${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
@@ -669,4 +674,292 @@ function villageWallRing(level) {
     ${towers.join("")}
   `;
 }
-export { BUILDING_ART, TIER2_EXTRAS, TIER3_EXTRAS, MATERIAL, materialTier, buildingTierExtra, buildingIconSvg, getBuildingArt, TROOP_ICON_PATHS, TROOP_TEX, troopBadgeSvg, rankBadgeSvg, rankCell, BUILDING_TEX, buildingBadgeSvg, treeSvg, tinyHouseSvg, villageIconLevel, villageMapIconSvg, villageTagGlyphSvg, villageTagBadgeSvg, mapPseudoRandom, MAP_DECOR_TYPES, mapDecorSvg, mapDecorHtml, wallArt, villageWallRing };
+
+/* ------------------------- Scène du campement légendaire (Phase 2) ------------------------- *
+ * Illustration isométrique affichée dans la fiche d'un campement légendaire (VillageActionModal,
+ * cas 3, quand t.faction==="legendary") -- reprend EXACTEMENT la palette obsidienne + or/vermillon
+ * déjà utilisée par villageMapIconSvg() pour kind==="legendary" (mêmes teintes que le pin sur la
+ * carte : voir wallTop/wallBot/roofTop/roofBot/windowCol ci-dessus, et le glyphe 👑 doré #f2c94c
+ * déjà utilisé pour cette faction dans mapRender.js/styles.css), pour que ce grand rendu et le
+ * petit pin se lisent comme la même faction plutôt que comme deux styles différents.
+ * Technique de rendu (mur en véritable extrusion : courtine + chemin de ronde + créneaux en
+ * relief, portail à vantaux cloutés, tours à toit pointu, donjon, douves) reprise d'une maquette
+ * de concept validée séparément avec l'utilisateur -- fonction pure, un seul appel par ouverture
+ * de fenêtre, volontairement PAS branchée sur villageMapIconSvg (qui doit rester une icône légère
+ * de 20px répétée pour chaque pin de la carte : cette scène est réservée aux endroits qui ont la
+ * place de l'afficher en grand). */
+const LC_ISO_X = 0.87,
+  LC_ISO_Y = 0.5;
+const lcIsoRight = n => ({
+  x: n * LC_ISO_X,
+  y: -n * LC_ISO_Y
+});
+const lcIsoLeft = n => ({
+  x: -n * LC_ISO_X,
+  y: -n * LC_ISO_Y
+});
+const lcAdd = (a, b) => ({
+  x: a.x + b.x,
+  y: a.y + b.y
+});
+const lcRaise = (p, dy) => ({
+  x: p.x,
+  y: p.y - dy
+});
+const lcLerp = (a, b, t) => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t
+});
+const lcPoly = (pts, fill, stroke) => `<polygon points="${pts.map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ")}" fill="${fill}"${stroke ? ` stroke="${stroke}" stroke-width="1"` : ""}/>`;
+function lcPt(cx, cy, rx, ry, deg) {
+  const a = deg * Math.PI / 180;
+  return {
+    x: cx + rx * Math.cos(a),
+    y: cy + ry * Math.sin(a)
+  };
+}
+function lcGateAngles(gapDeg) {
+  return {
+    start: 90 + gapDeg / 2,
+    end: 90 + gapDeg / 2 + (360 - gapDeg)
+  };
+}
+function lcBuilding(x, y, s, roofLit, roofShade, wallLit, wallShade, doorCol, opts) {
+  opts = opts || {};
+  const W = (opts.w || 24) * s,
+    D = (opts.d || 20) * s,
+    H = (opts.h || 16) * s,
+    RH = (opts.roofH == null ? 15 : opts.roofH) * s;
+  const edge = opts.edge || "#160f08";
+  // x,y = centre de l'empreinte au sol (pas le coin avant) -- sans ce recentrage chaque bâtiment
+  // se lit visuellement décalé en haut à gauche du point où il est posé.
+  const fx = x - 0.435 * (W - D),
+    fy = y + 0.25 * (W + D);
+  const F = {
+      x: fx,
+      y: fy
+    },
+    R = lcAdd(F, lcIsoRight(W)),
+    L = lcAdd(F, lcIsoLeft(D)),
+    K = lcAdd(R, lcIsoLeft(D));
+  const Ft = lcRaise(F, H),
+    Rt = lcRaise(R, H),
+    Lt = lcRaise(L, H),
+    Kt = lcRaise(K, H);
+  let out = "";
+  out += lcPoly([F, R, Rt, Ft], wallLit, edge);
+  out += lcPoly([F, L, Lt, Ft], wallShade, edge);
+  if (opts.door !== false) {
+    const d0 = lcLerp(F, R, .16),
+      d1 = lcLerp(F, R, .42),
+      dh = H * 0.52;
+    out += lcPoly([d0, d1, lcRaise(d1, dh), lcRaise(d0, dh)], doorCol, edge);
+  }
+  if (opts.window !== false) {
+    const w0 = lcLerp(F, L, .5),
+      w1 = lcLerp(F, L, .76),
+      wy0 = H * .4,
+      wy1 = H * .72;
+    out += lcPoly([lcRaise(w0, wy0), lcRaise(w1, wy0), lcRaise(w1, wy1), lcRaise(w0, wy1)], opts.windowCol || "#f0cd7c", edge);
+  }
+  if (RH > 0) {
+    const apex = {
+      x: (Ft.x + Kt.x) / 2,
+      y: (Ft.y + Kt.y) / 2 - RH
+    };
+    out += lcPoly([Ft, Rt, apex], roofLit, edge);
+    out += lcPoly([Ft, Lt, apex], roofShade, edge);
+    out += `<line x1="${Ft.x.toFixed(1)}" y1="${Ft.y.toFixed(1)}" x2="${apex.x.toFixed(1)}" y2="${apex.y.toFixed(1)}" stroke="${edge}" stroke-width=".7" opacity=".5"/>`;
+    if (opts.banner) {
+      const bx = apex.x,
+        by = apex.y;
+      out += `<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${(by - 13 * s).toFixed(1)}" stroke="#3a2814" stroke-width="${(1.6 * s).toFixed(2)}"/>`;
+      out += lcPoly([{
+        x: bx,
+        y: by - 13 * s
+      }, {
+        x: bx + 10 * s,
+        y: by - 8 * s
+      }, {
+        x: bx,
+        y: by - 4 * s
+      }], opts.banner);
+    }
+    return {
+      svg: out,
+      anchor: Ft
+    };
+  }
+  out += lcPoly([Ft, Rt, Kt, Lt], wallShade, edge);
+  return {
+    svg: out,
+    anchor: Ft
+  };
+}
+function lcHut(x, y, s, roofA, roofB, wallA, wallB, doorCol) {
+  return lcBuilding(x, y, s, roofA, roofB, wallA, wallB, doorCol, {
+    w: 23,
+    d: 19,
+    h: 15,
+    roofH: 15
+  }).svg;
+}
+function lcKeep(x, y, s, roofA, roofB, wallA, wallB, bannerCol) {
+  const base = lcBuilding(x, y, s, roofA, roofB, wallA, wallB, "#1c130a", {
+    w: 32,
+    d: 25,
+    h: 16,
+    roofH: 0,
+    window: false
+  });
+  const upperS = s * 0.6;
+  const upper = lcBuilding(base.anchor.x, base.anchor.y, upperS, roofA, roofB, wallA, wallB, "#1c130a", {
+    w: 32 * 0.62,
+    d: 25 * 0.62,
+    h: 16 * 1.35,
+    roofH: 19,
+    window: false,
+    banner: bannerCol
+  });
+  return base.svg + upper.svg;
+}
+function lcTower(x, y, s, wallCol, wallEdge, roofCol, bannerCol) {
+  return lcBuilding(x, y, s, roofCol, roofCol, wallCol, wallEdge, "#160f08", {
+    w: 19,
+    d: 17,
+    h: 34,
+    roofH: 16,
+    door: false,
+    window: true,
+    windowCol: "#ffd54a",
+    edge: wallEdge,
+    banner: bannerCol
+  }).svg;
+}
+function lcPine(x, y, s) {
+  return `<g transform="translate(${x},${y}) scale(${s})">
+    <polygon points="0,-27 9,-6 -9,-6" fill="#182a14"/>
+    <polygon points="0,-19 7.5,3 -7.5,3" fill="#213a1b"/>
+    <rect x="-1.8" y="3" width="3.6" height="6" fill="#2c2013"/>
+  </g>`;
+}
+function lcGateDoor(bs, be, h, ironCol) {
+  const x0 = Math.min(bs.x, be.x),
+    x1 = Math.max(bs.x, be.x),
+    w = x1 - x0;
+  const yBase = (bs.y + be.y) / 2,
+    dh = Math.min(h * 0.85, 30);
+  const woodA = "#3a280f",
+    woodB = "#1c1206";
+  let out = `<rect x="${x0.toFixed(1)}" y="${(yBase - dh).toFixed(1)}" width="${w.toFixed(1)}" height="${dh.toFixed(1)}" fill="${woodA}" stroke="${woodB}" stroke-width="1.2"/>`;
+  out += `<line x1="${(x0 + w / 2).toFixed(1)}" y1="${(yBase - dh).toFixed(1)}" x2="${(x0 + w / 2).toFixed(1)}" y2="${yBase.toFixed(1)}" stroke="${woodB}" stroke-width="1.4"/>`;
+  for (let i = 1; i < 4; i++) {
+    const px = x0 + w * i / 4;
+    out += `<line x1="${px.toFixed(1)}" y1="${(yBase - dh).toFixed(1)}" x2="${px.toFixed(1)}" y2="${yBase.toFixed(1)}" stroke="${woodB}" stroke-width=".6" opacity=".55"/>`;
+  }
+  [x0 + w * 0.22, x0 + w * 0.5, x0 + w * 0.78].forEach(cx2 => {
+    [yBase - dh * 0.78, yBase - dh * 0.36].forEach(cy2 => {
+      out += `<circle cx="${cx2.toFixed(1)}" cy="${cy2.toFixed(1)}" r="1.3" fill="${ironCol}"/>`;
+    });
+  });
+  out += `<rect x="${(x0 - 3).toFixed(1)}" y="${(yBase - dh - 4.5).toFixed(1)}" width="${(w + 6).toFixed(1)}" height="5" fill="${woodB}" stroke="#0a0603" stroke-width="1"/>`;
+  return out;
+}
+function lcWallToppers(cx, topCy, rx, ry, gapDeg, count, colBase, colShade, colRim) {
+  const startA = 90 + gapDeg / 2,
+    span = 360 - gapDeg,
+    pairSpan = span / count,
+    tooth = pairSpan * 0.56;
+  const depth = Math.max(2.4, rx * 0.05),
+    mh = Math.max(7, ry * 0.12);
+  let out = "";
+  for (let i = 0; i < count; i++) {
+    const a0 = startA + i * pairSpan,
+      a1 = a0 + tooth;
+    const bo0 = lcPt(cx, topCy, rx, ry, a0),
+      bo1 = lcPt(cx, topCy, rx, ry, a1);
+    const to0 = lcRaise(bo0, mh),
+      to1 = lcRaise(bo1, mh);
+    const ti0 = lcPt(cx, topCy - mh, rx - depth, ry - depth, a0),
+      ti1 = lcPt(cx, topCy - mh, rx - depth, ry - depth, a1);
+    out += lcPoly([bo0, bo1, to1, to0], colBase, colShade); // face avant du créneau
+    out += lcPoly([to0, to1, ti1, ti0], colRim, colShade); // dessus, le plus lumineux
+  }
+  return out;
+}
+function lcWallBand(cx, cy, rx, ry, gapDeg, h, colBase, colShade, colRim, gateBanner) {
+  const g = lcGateAngles(gapDeg);
+  const topCy = cy - h;
+  const thick = Math.max(7, h * 0.42);
+  const irx = Math.max(4, rx - thick),
+    iry = Math.max(4, ry - thick);
+  const ts = lcPt(cx, topCy, rx, ry, g.start),
+    te = lcPt(cx, topCy, rx, ry, g.end);
+  const bs = lcPt(cx, cy, rx, ry, g.start),
+    be = lcPt(cx, cy, rx, ry, g.end);
+  const its = lcPt(cx, topCy, irx, iry, g.start),
+    ite = lcPt(cx, topCy, irx, iry, g.end);
+  const gradId = "lcwg" + Math.abs(cx * 1000 + cy * 7 + rx * 13 + ry * 17 + h * 31 | 0).toString(36);
+  let out = `<defs><linearGradient id="${gradId}" x1="0" y1="${topCy.toFixed(1)}" x2="0" y2="${cy.toFixed(1)}" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${colBase}"/><stop offset="1" stop-color="${colShade}"/>
+    </linearGradient></defs>`;
+  // ombre portée au sol, courtine (extrusion réelle sol -> chemin de ronde), lignes d'assise pour
+  // vendre le volume, chemin de ronde (anneau donut), créneaux en relief, portail + tours.
+  out += `<path d="M ${bs.x.toFixed(1)} ${bs.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${be.x.toFixed(1)} ${be.y.toFixed(1)}" fill="none" stroke="rgba(0,0,0,.32)" stroke-width="${(thick * 0.6).toFixed(1)}" stroke-linecap="round" transform="translate(0,2)"/>`;
+  out += `<path d="M ${ts.x.toFixed(1)} ${ts.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${te.x.toFixed(1)} ${te.y.toFixed(1)} L ${be.x.toFixed(1)} ${be.y.toFixed(1)} A ${rx} ${ry} 0 1 0 ${bs.x.toFixed(1)} ${bs.y.toFixed(1)} Z" fill="url(#${gradId})" stroke="${colShade}" stroke-width="1"/>`;
+  for (let k = 1; k <= 2; k++) {
+    const yy = topCy + h * (k / 3);
+    const cA = lcPt(cx, yy, rx, ry, g.start),
+      cB = lcPt(cx, yy, rx, ry, g.end);
+    out += `<path d="M ${cA.x.toFixed(1)} ${cA.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${cB.x.toFixed(1)} ${cB.y.toFixed(1)}" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="1"/>`;
+  }
+  out += `<path d="M ${ts.x.toFixed(1)} ${ts.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${te.x.toFixed(1)} ${te.y.toFixed(1)} L ${ite.x.toFixed(1)} ${ite.y.toFixed(1)} A ${irx} ${iry} 0 1 0 ${its.x.toFixed(1)} ${its.y.toFixed(1)} Z" fill="${colBase}" stroke="${colRim}" stroke-width="1" opacity=".97"/>`;
+  out += `<path d="M ${its.x.toFixed(1)} ${its.y.toFixed(1)} A ${irx} ${iry} 0 1 1 ${ite.x.toFixed(1)} ${ite.y.toFixed(1)}" fill="none" stroke="${colShade}" stroke-width="1.3" opacity=".55"/>`;
+  const topperCount = Math.max(5, Math.round((360 - gapDeg) / 15));
+  out += lcWallToppers(cx, topCy, rx, ry, gapDeg, topperCount, colBase, colShade, colRim);
+  out += lcGateDoor(bs, be, h, colRim);
+  const ts_ = Math.max(0.55, Math.min(1.15, h / 24));
+  out += lcTower(bs.x, bs.y, ts_, colBase, colShade, colShade, gateBanner);
+  out += lcTower(be.x, be.y, ts_, colBase, colShade, colShade, gateBanner);
+  return out;
+}
+function legendaryCampSceneSvg() {
+  // Mêmes teintes que villageMapIconSvg(kind="legendary") : wallTop/wallBot, roofTop/roofBot,
+  // windowCol -- voir plus haut dans ce fichier.
+  const wallBase = "#4a3510",
+    wallShade = "#160e02",
+    gold = "#f2c94c",
+    roofA = "#9a2210",
+    roofB = "#380803";
+  const wallA = "#2a1f10",
+    wallB = "#160e02",
+    groundA = "#241a06",
+    groundB = "#120c02";
+  const CX = 160,
+    CY = 150;
+  const gradId = "lcground" + Math.round(Math.random() * 1e6);
+  let out = `<svg viewBox="0 0 320 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">`;
+  out += `<defs>
+    <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${groundA}"/><stop offset="1" stop-color="${groundB}"/></linearGradient>
+    <radialGradient id="lcglow" cx="50%" cy="55%" r="60%"><stop offset="0" stop-color="${gold}" stop-opacity=".38"/><stop offset="1" stop-color="${gold}" stop-opacity="0"/></radialGradient>
+    <linearGradient id="lcmoat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4a4e"/><stop offset="1" stop-color="#0e2224"/></linearGradient>
+  </defs>`;
+  out += lcPine(24, 166, 0.72) + lcPine(300, 144, 0.7);
+  out += `<ellipse cx="${CX}" cy="${CY - 6}" rx="150" ry="108" fill="url(#lcglow)"/>`;
+  out += `<ellipse cx="${CX}" cy="${CY}" rx="146" ry="92" fill="url(#lcmoat)" stroke="#081617" stroke-width="1.5"/>`;
+  out += `<rect x="${CX - 9}" y="${CY + 60}" width="18" height="36" fill="#2a1c10" stroke="#160e02" stroke-width="1"/>`;
+  out += `<ellipse cx="${CX}" cy="${CY}" rx="116" ry="70" fill="url(#${gradId})" stroke="#0c0800" stroke-width="1.5" opacity=".96"/>`;
+  out += lcWallBand(CX, CY, 106, 64, 32, 29, wallBase, wallShade, gold, gold);
+  out += lcHut(CX - 42, CY - 14, 0.66, roofA, roofB, wallA, wallB, "#0e0904");
+  out += lcHut(CX + 40, CY - 8, 0.66, roofA, roofB, wallA, wallB, "#0e0904");
+  out += lcHut(CX - 42, CY - 38, 0.58, roofA, roofB, wallA, wallB, "#0e0904");
+  out += lcHut(CX + 40, CY - 40, 0.58, roofA, roofB, wallA, wallB, "#0e0904");
+  out += lcKeep(CX, CY - 22, 1.05, roofA, roofB, "#3a2a12", wallB, gold);
+  [132, 48, 164, 16].forEach((ang, i) => {
+    const p = lcPt(CX, CY - 29, 106, 64, ang);
+    out += lcTower(p.x, p.y, i < 2 ? 0.8 : 0.68, wallA, wallB, roofB, gold);
+  });
+  out += `</svg>`;
+  return out;
+}
+export { BUILDING_ART, TIER2_EXTRAS, TIER3_EXTRAS, MATERIAL, materialTier, buildingTierExtra, buildingIconSvg, getBuildingArt, TROOP_ICON_PATHS, TROOP_TEX, troopBadgeSvg, rankBadgeSvg, rankCell, BUILDING_TEX, buildingBadgeSvg, treeSvg, tinyHouseSvg, villageIconLevel, villageMapIconSvg, villageTagGlyphSvg, villageTagBadgeSvg, mapPseudoRandom, MAP_DECOR_TYPES, mapDecorSvg, mapDecorHtml, wallArt, villageWallRing, legendaryCampSceneSvg };

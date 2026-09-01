@@ -31,6 +31,12 @@ export function helpSections(ironIcon) {
       <p>🐎 <b>Camps de maraudeurs</b> (pin orange) : plus loin du centre, plus forts qu'un barbare classique de même distance. Chaque victoire contre un camp de maraudeurs octroie en plus du butin habituel une <b>Ration de guerre</b> : un bonus de production temporaire (quelques heures) sur le village qui a attaqué, visible en haut de l'écran tant qu'il est actif. De quoi donner une bonne raison de les traquer spécifiquement plutôt que de piller au hasard.</p>
       <p>Ces deux types de campement sont des villages barbares ordinaires pour tout le reste (combat, conquête par un Noble, gisement riche possible) — seuls leur force et, pour les maraudeurs, la récompense de victoire diffèrent.</p>`
   }, {
+    id: "helpLegendary",
+    title: "👑 Campements légendaires",
+    html: `<p>Une poignée de <b>campements légendaires</b> (pin doré, lueur intense) sont dispersés sur toute la carte — reconnaissables entre tous, y compris face à l'Armée Noire. Leur garnison dépasse largement tout ce qu'un seul village, même très développé, peut espérer vaincre en une seule attaque.</p>
+      <p>Contrairement à tout autre village barbare, un campement légendaire <b>ne se renforce jamais</b> : pas de nouvelle troupe, pas de muraille reconstruite avec le temps. Chaque attaque qu'il subit — gagnée ou perdue — use un peu plus durablement sa garnison, exactement comme contre n'importe quel village. Il finit donc immanquablement par tomber, à condition d'être attaqué assez de fois, potentiellement par plusieurs joueurs différents au fil du temps plutôt que par un seul assaut massif.</p>
+      <p>Sa chute (par conquête au Noble, comme pour tout barbare) récompense le succès <b>Chasseur de légende</b> pour <b>chaque joueur</b> ayant contribué à l'affaiblir, pas seulement celui qui porte le coup de grâce. La fenêtre d'un campement légendaire indique le nombre de joueurs l'ayant déjà entamé.</p>`
+  }, {
     title: "Gisements riches",
     html: `<p>Environ 1 village barbare sur 8 recèle un <b>gisement riche</b> en une ressource tirée au hasard (bois, argile ou fer), repérable sur la Carte par un petit badge ${ironIcon} sur son pin (survolez ou touchez le pin pour voir laquelle). Une fois ce village conquis par un Noble, il produit <b>+10%</b> de cette ressource — un bonus propre à ce village précis, qui ne s'applique jamais à vos autres villages.</p>`
   }, {
