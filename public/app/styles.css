@@ -318,19 +318,20 @@
   #mapAttackLines{position:absolute; left:0; top:0; pointer-events:none;}
   .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
   .villagePin .dot{
-    position:relative; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    font-size:15px; border:2px solid #1a140d; box-shadow:0 2px 5px rgba(0,0,0,.6);
+    position:relative; width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:15px; border:2px solid rgba(26,20,13,.9); box-shadow:0 2px 6px rgba(0,0,0,.6);
+    background-color:#181209;
     transition:transform .15s ease, box-shadow .15s ease;
   }
   .resbonus-badge{
-    position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%;
-    background:var(--gold); border:1px solid #1a140d; font-size:9px; line-height:1;
+    position:absolute; top:-6px; right:-6px; width:17px; height:17px; border-radius:50%;
+    background:var(--gold); border:1px solid #1a140d; font-size:10px; line-height:1;
     display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.6);
   }
   /* Badge de marqueur personnel (voir VILLAGE_TAGS / villageTagBadgeSvg) : coin OPPOSÉ du badge de
      gisement riche ci-dessus pour ne jamais se chevaucher, les deux pouvant apparaître ensemble. */
   .village-tag-badge{
-    position:absolute; bottom:-5px; left:-5px; width:15px; height:15px; border-radius:50%;
+    position:absolute; bottom:-6px; left:-6px; width:17px; height:17px; border-radius:50%;
     display:block; box-shadow:0 1px 3px rgba(0,0,0,.6);
   }
   .village-tag-badge svg{ display:block; width:100%; height:100%; }
@@ -345,28 +346,32 @@
   tr.farm-row td:first-child{width:30px; text-align:center;}
   tr.farm-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
   tr.farm-row.farm-row-busy input[type=checkbox]{cursor:not-allowed;}
-  .villagePin:hover .dot{transform:scale(1.12); box-shadow:0 4px 10px rgba(0,0,0,.7);}
-  .villagePin.weak .dot{background:#4d7a37;}
-  .villagePin.medium .dot{background:#9a7526;}
-  .villagePin.strong .dot{background:#8a3226;}
-  .villagePin.ally .dot{background:#2c6a4a; border-color:#8ad9c0;}
-  .villagePin.pact .dot{background:#22506a; border-color:#8ac0e0;}
-  .villagePin.war .dot{background:#8a3226; border-color:#e0a0a0; box-shadow:0 0 8px rgba(224,80,80,.6);}
-  .villagePin.blackarmy .dot{background:#0c0c10; border-color:#9a2b2b; box-shadow:0 0 9px rgba(154,43,43,.85);}
-  .villagePin.blackarmy:hover .dot{box-shadow:0 0 14px rgba(210,60,60,.95);}
-  .villagePin.bandits .dot{background:#2e2436; border-color:#a878d0; box-shadow:0 0 7px rgba(168,120,208,.6);}
-  .villagePin.bandits:hover .dot{box-shadow:0 0 12px rgba(190,140,224,.8);}
-  .villagePin.raiders .dot{background:#3a2110; border-color:#e08a30; box-shadow:0 0 7px rgba(224,138,48,.6);}
-  .villagePin.raiders:hover .dot{box-shadow:0 0 12px rgba(240,160,60,.8);}
-  .villagePin.legendary .dot{background:#1a1006; border-color:#f2c94c; box-shadow:0 0 11px rgba(242,201,76,.85);}
-  .villagePin.legendary:hover .dot{box-shadow:0 0 18px rgba(255,215,90,1);}
-  .villagePin.player .dot{background:linear-gradient(180deg,#f0cd7c,#b3831f); border-color:var(--gold); font-size:17px;}
+  .villagePin:hover .dot{transform:scale(1.1); box-shadow:0 4px 11px rgba(0,0,0,.7);}
+  /* Contour recalibré : au lieu d'un aplat de couleur plein qui écrasait le dessin de la hutte à
+     l'intérieur, chaque teinte de faction/relation n'est plus qu'un léger voile transparent
+     (background-image, ~30-38% d'opacité) posé sur une base neutre sombre commune -- la couleur
+     reste identifiable au premier coup d'oeil sans rivaliser avec les détails de l'icône. */
+  .villagePin.weak .dot{background-image:linear-gradient(rgba(77,122,55,.34), rgba(77,122,55,.34));}
+  .villagePin.medium .dot{background-image:linear-gradient(rgba(154,117,38,.34), rgba(154,117,38,.34));}
+  .villagePin.strong .dot{background-image:linear-gradient(rgba(138,50,38,.34), rgba(138,50,38,.34));}
+  .villagePin.ally .dot{background-image:linear-gradient(rgba(44,106,74,.36), rgba(44,106,74,.36)); border-color:rgba(138,217,192,.85);}
+  .villagePin.pact .dot{background-image:linear-gradient(rgba(34,80,106,.36), rgba(34,80,106,.36)); border-color:rgba(138,192,224,.85);}
+  .villagePin.war .dot{background-image:linear-gradient(rgba(138,50,38,.4), rgba(138,50,38,.4)); border-color:rgba(224,160,160,.85); box-shadow:0 0 9px rgba(224,80,80,.55);}
+  .villagePin.blackarmy .dot{background-image:linear-gradient(rgba(60,20,20,.4), rgba(60,20,20,.4)); border-color:rgba(154,43,43,.85); box-shadow:0 0 10px rgba(154,43,43,.75);}
+  .villagePin.blackarmy:hover .dot{box-shadow:0 0 16px rgba(210,60,60,.9);}
+  .villagePin.bandits .dot{background-image:linear-gradient(rgba(168,120,208,.32), rgba(168,120,208,.32)); border-color:rgba(168,120,208,.85); box-shadow:0 0 8px rgba(168,120,208,.55);}
+  .villagePin.bandits:hover .dot{box-shadow:0 0 14px rgba(190,140,224,.75);}
+  .villagePin.raiders .dot{background-image:linear-gradient(rgba(224,138,48,.32), rgba(224,138,48,.32)); border-color:rgba(224,138,48,.85); box-shadow:0 0 8px rgba(224,138,48,.55);}
+  .villagePin.raiders:hover .dot{box-shadow:0 0 14px rgba(240,160,60,.75);}
+  .villagePin.legendary .dot{background-image:linear-gradient(rgba(242,201,76,.34), rgba(242,201,76,.34)); border-color:rgba(242,201,76,.9); box-shadow:0 0 13px rgba(242,201,76,.8);}
+  .villagePin.legendary:hover .dot{box-shadow:0 0 20px rgba(255,215,90,.95);}
+  .villagePin.player .dot{background-image:linear-gradient(180deg,rgba(240,205,124,.5),rgba(179,131,31,.5)); border-color:var(--gold); font-size:17px;}
   .villagePin.selected .dot{outline:3px solid var(--gold); outline-offset:2px;}
-  .villagePin .dot svg{width:27px; height:23px; overflow:visible; display:block;}
+  .villagePin .dot svg{width:38px; height:32px; overflow:visible; display:block;}
   .mapDecor{position:absolute; transform:translate(-50%,-100%); pointer-events:none; opacity:.88;}
   .mapDecor svg{display:block; width:100%; height:100%; overflow:visible;}
   .villagePin .plabel{
-    position:absolute; top:32px; font-size:9px; white-space:nowrap; background:rgba(20,16,10,.85);
+    position:absolute; top:44px; font-size:9px; white-space:nowrap; background:rgba(20,16,10,.85);
     padding:2px 6px; border-radius:6px; color:var(--text); pointer-events:none;
   }
   .troop-marker{
