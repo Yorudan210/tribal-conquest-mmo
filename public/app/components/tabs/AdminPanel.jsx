@@ -717,10 +717,10 @@ function PermanentFactionsBox({
     style: {
       marginBottom: 14
     }
-  }, /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDDE1\uFE0F Repaires de brigands & camps de maraudeurs"), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDDE1\uFE0F Factions PvE permanentes"), /*#__PURE__*/React.createElement("p", {
     className: "small muted"
-  }, "Peuple la carte en factions PvE permanentes (voir la section d'aide d\xE9di\xE9e) si ce n'est pas d\xE9j\xE0 fait -- utile une seule fois pour un monde qui existait d\xE9j\xE0 avant l'ajout de cette fonctionnalit\xE9. Sans effet si d\xE9j\xE0 peupl\xE9 (le serveur refuse toute duplication)."), /*#__PURE__*/React.createElement("button", {
-    onClick: () => adminAction(() => call("/api/admin/factions/seed", "POST", {}), "🗡️🐎 Factions permanentes peuplées avec succès !")
+  }, "Peuple la carte en factions PvE permanentes -- repaires de brigands, camps de maraudeurs, et campements l\xE9gendaires (voir les sections d'aide d\xE9di\xE9es) -- si ce n'est pas d\xE9j\xE0 fait, utile une seule fois pour un monde qui existait d\xE9j\xE0 avant l'ajout de ces fonctionnalit\xE9s. Sans effet si d\xE9j\xE0 peupl\xE9 (le serveur refuse toute duplication)."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => adminAction(() => call("/api/admin/factions/seed", "POST", {}), "🗡️🐎👑 Factions permanentes peuplées avec succès !")
   }, "Peupler les factions permanentes"));
 }
 function MissionsBox({
