@@ -460,91 +460,48 @@ function villageMapIconSvg(kind, level, hasWall) {
   // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
   // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
   // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
-  const wallTop = black ? "#26262b" : legendary ? "#4a3510" : bandits ? "#5a4a63" : raiders ? "#8a5a3a" : barb ? "#8c7752" : "#a8825a";
-  const wallBot = black ? "#0a0a0c" : legendary ? "#160e02" : bandits ? "#2e2436" : raiders ? "#4a2e18" : barb ? "#544628" : "#6b4f31";
   const roofTop = black ? "#5c1c1c" : legendary ? "#9a2210" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
   const roofBot = black ? "#280a0a" : legendary ? "#380803" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
   const doorStroke = black ? "#0a0a0c" : legendary ? "#160e02" : "#2a1c10";
-  const windowCol = black ? "#6a1c1c" : legendary ? "#ffd54a" : bandits ? "#b090d0" : raiders ? "#f0a030" : "#e6c978";
   const groundCol = black ? "#1c1414" : legendary ? "#1e1404" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
-  // Chaque hutte : VRAIE projection isométrique (deux pans de mur + toit à deux pans, faces
-  // éclairée/ombrée distinctes) -- même primitive géométrique que villageSceneSvg()/legendaryCampSceneSvg
-  // ci-dessous (isoBuilding), simplement réduite à une seule hutte sans muraille/donjon pour rester
-  // légère à la petite taille réelle d'un pin de carte (voir note perf de ces fonctions-là) --
-  // remplace l'ancien rendu "rectangle + triangle" en élévation plate, pour que le pin et les grandes
-  // scènes de VillageActionModal se lisent comme un seul et même style de bâtiment.
-  const hut = (x, s, chimney) => {
-    const W = 15,
-      D = 12,
-      H = 10,
-      RH = 9;
-    const F = {
-      x: -0.435 * (W - D),
-      y: 0.25 * (W + D)
-    };
-    const R = {
-        x: F.x + W * 0.87,
-        y: F.y - W * 0.5
-      },
-      L = {
-        x: F.x - D * 0.87,
-        y: F.y - D * 0.5
-      };
-    const K = {
-      x: R.x - D * 0.87,
-      y: R.y - D * 0.5
-    };
-    const raise = (p, dy) => ({
-      x: p.x,
-      y: p.y - dy
-    });
-    const Ft = raise(F, H),
-      Rt = raise(R, H),
-      Lt = raise(L, H),
-      Kt = raise(K, H);
-    const lerp = (a, b, t) => ({
-      x: a.x + (b.x - a.x) * t,
-      y: a.y + (b.y - a.y) * t
-    });
-    const poly = (pts, fill, sw) => `<polygon points="${pts.map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ")}" fill="${fill}" stroke="${doorStroke}" stroke-width="${sw}"/>`;
-    const apex = {
-      x: (Ft.x + Kt.x) / 2,
-      y: (Ft.y + Kt.y) / 2 - RH
-    };
-    const d0 = lerp(F, R, .18),
-      d1 = lerp(F, R, .52),
-      dh = H * 0.55;
-    const w0 = lerp(F, L, .46),
-      w1 = lerp(F, L, .78),
-      wy0 = H * .4,
-      wy1 = H * .76;
-    const cx = 3.6,
-      cy = apex.y + 2.5;
-    return `<g transform="translate(${x},2) scale(${s})">
-      ${poly([F, R, Rt, Ft], wallTop, 1.2)}
-      ${poly([F, L, Lt, Ft], wallBot, 1.2)}
-      ${poly([d0, d1, raise(d1, dh), raise(d0, dh)], doorStroke, 0)}
-      ${poly([raise(w0, wy0), raise(w1, wy0), raise(w1, wy1), raise(w0, wy1)], windowCol, 0.6)}
-      ${poly([Ft, Rt, apex], roofTop, 1.2)}
-      ${poly([Ft, Lt, apex], roofBot, 1.2)}
-      <line x1="${Ft.x.toFixed(1)}" y1="${Ft.y.toFixed(1)}" x2="${apex.x.toFixed(1)}" y2="${apex.y.toFixed(1)}" stroke="${doorStroke}" stroke-width="0.6" opacity="0.5"/>
-      ${chimney ? `<rect x="${(cx - 1.5).toFixed(1)}" y="${(cy - 6).toFixed(1)}" width="3" height="6" fill="${doorStroke}"/><circle cx="${(cx + 1.2).toFixed(1)}" cy="${(cy - 8).toFixed(1)}" r="2.1" fill="#d8d2c2" opacity="0.45"/><circle cx="${(cx + 2.4).toFixed(1)}" cy="${(cy - 11).toFixed(1)}" r="2.6" fill="#d8d2c2" opacity="0.28"/>` : ""}
+  // Chaque hutte vue du dessus (vue à la verticale, comme sur la carte elle-même) : un simple
+  // rectangle de toiture scindé par le faîtage en deux pans éclairé/ombré -- plus lisible à la
+  // petite taille réelle d'un pin de carte que l'ancienne projection isométrique (qui restait
+  // pensée pour l'angle de caméra des grandes scènes de VillageActionModal, pas pour une icône
+  // regardée droit dessus sur la carte). Pas de mur/porte/fenêtre visibles d'en haut : seuls le
+  // toit et la cheminée dépassent.
+  const hut = (cx, cy, s, rot, chimney) => {
+    const W = 13,
+      D = 10,
+      hw = W / 2,
+      hd = D / 2;
+    const chx = hw * 0.42,
+      chy = -hd * 0.32;
+    return `<g transform="translate(${cx},${cy}) rotate(${rot}) scale(${s})">
+      <rect x="${-hw}" y="${-hd}" width="${W}" height="${D}" fill="${roofTop}"/>
+      <rect x="${-hw}" y="0" width="${W}" height="${hd}" fill="${roofBot}"/>
+      <rect x="${-hw}" y="${-hd}" width="${W}" height="${D}" fill="none" stroke="${doorStroke}" stroke-width="1"/>
+      <line x1="${-hw}" y1="0" x2="${hw}" y2="0" stroke="${doorStroke}" stroke-width="0.7" opacity="0.55"/>
+      ${chimney ? `<rect x="${(chx - 1.3).toFixed(1)}" y="${(chy - 1.3).toFixed(1)}" width="2.6" height="2.6" fill="${doorStroke}"/><circle cx="${(chx - 1.3).toFixed(1)}" cy="${(chy - 2.6).toFixed(1)}" r="1.6" fill="#d8d2c2" opacity="0.4"/><circle cx="${(chx - 2.3).toFixed(1)}" cy="${(chy - 4.1).toFixed(1)}" r="2" fill="#d8d2c2" opacity="0.24"/>` : ""}
     </g>`;
   };
-  const huts = level <= 0 ? hut(0, 1, true) : level === 1 ? hut(-9, 0.82, false) + hut(9, 0.9, true) : hut(-14, 0.78, false) + hut(0, 0.95, true) + hut(14, 0.78, false);
+  // Regroupement en petit amas (décalés en x ET en y, avec une légère rotation chacune) plutôt
+  // qu'en simple rangée horizontale : une rangée se lit comme une façade vue de côté, un amas se
+  // lit comme un hameau vu du ciel.
+  const huts = level <= 0 ? hut(0, 2, 1, 0, true) : level === 1 ? hut(-8, -2, 0.85, -10, false) + hut(7, 5, 0.95, 8, true) : hut(-1, -7, 0.85, -4, true) + hut(-11, 5, 0.78, -14, false) + hut(10, 4, 0.82, 12, false);
   // Parcelle de terre battue sous les huttes : ancre visuellement le groupe au sol (au lieu de
   // huttes qui semblaient "flotter") et grandit avec le niveau, comme le hameau lui-même.
-  const groundRx = level <= 0 ? 13 : level === 1 ? 19 : 23;
-  const ground = `<ellipse cx="0" cy="6" rx="${groundRx}" ry="4" fill="${groundCol}" opacity="0.55"/>`;
-  // Élément central du hameau/village (niveau >= 1) : un puits pour un village (le vôtre ou un
-  // joueur), un petit feu de camp pour les barbares -- rien pour l'Armée Noire, dont l'ambiance
-  // sombre + la lueur rouge du pin suffisent déjà à la distinguer sans surcharger l'icône.
-  const centerpiece = level >= 1 && !black ? campKind ? `<g transform="translate(0,5.5)"><polygon points="-3,3 3,3 1.6,-3.5 -1.6,-3.5" fill="#2a2016" stroke="${doorStroke}" stroke-width="0.7"/><polygon points="0,-3.5 -1.6,1 1.3,0.4" fill="#e0862c" opacity="0.85"/><polygon points="0,-2 -0.9,0.8 0.8,0.5" fill="#f5c25a"/></g>` : `<g transform="translate(0,5)"><ellipse cx="0" cy="1.6" rx="3.6" ry="1.7" fill="#4a3c28" stroke="${doorStroke}" stroke-width="0.8"/><rect x="-2.6" y="-2.6" width="5.2" height="3.6" fill="#352a1a" stroke="${doorStroke}" stroke-width="0.7"/><line x1="-2.6" y1="-2.6" x2="2.6" y2="-2.6" stroke="#6b5533" stroke-width="1"/></g>` : "";
-  const palisade = hasWall ? `
-    <path d="M -22 4 Q 0 12 22 4" fill="none" stroke="${black ? '#3a1414' : legendary ? '#6b4a12' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
-    <rect x="-24.6" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : legendary ? '#3a2708' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
-    <rect x="21.8" y="-3.5" width="2.8" height="8.5" fill="${black ? '#2a0e0e' : legendary ? '#3a2708' : raiders ? '#432612' : bandits ? '#382a44' : '#48331e'}" stroke="${doorStroke}" stroke-width="0.6"/>
-  ` : "";
+  const groundRx = level <= 0 ? 14 : level === 1 ? 19 : 23;
+  const groundRy = level <= 0 ? 10 : level === 1 ? 13 : 15;
+  const groundCy = level <= 0 ? 3 : level === 1 ? 2 : 1;
+  const ground = `<ellipse cx="0" cy="${groundCy}" rx="${groundRx}" ry="${groundRy}" fill="${groundCol}" opacity="0.55"/>`;
+  // Élément central du hameau/village (niveau >= 1), vu du dessus lui aussi : cercle de pierres
+  // avec la flamme au centre pour un feu de camp, margelle circulaire avec son puits sombre au
+  // centre pour un village -- rien pour l'Armée Noire, dont l'ambiance sombre + la lueur rouge du
+  // pin suffisent déjà à la distinguer sans surcharger l'icône.
+  const centerY = level === 1 ? 9 : 11;
+  const centerpiece = level >= 1 && !black ? campKind ? `<g transform="translate(0,${centerY})"><circle r="3.6" fill="none" stroke="${doorStroke}" stroke-width="1.3"/><circle r="2" fill="#e0862c" opacity="0.85"/><circle r="1" fill="#f5c25a"/></g>` : `<g transform="translate(0,${centerY})"><circle r="4.2" fill="none" stroke="#6b5533" stroke-width="1.3"/><circle r="3.1" fill="#241c10" stroke="${doorStroke}" stroke-width="0.6"/></g>` : "";
+  const palisade = hasWall ? `<ellipse cx="0" cy="${groundCy}" rx="${groundRx + 4}" ry="${groundRy + 4}" fill="none" stroke="${black ? '#3a1414' : legendary ? '#6b4a12' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="2.2" stroke-dasharray="3.5 3" opacity="0.85"/>` : "";
   const flag = kind === "mine" ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>` : kind === "player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
 }
@@ -718,9 +675,9 @@ function villageWallRing(level) {
 /* ------------------------- Scène du campement légendaire (Phase 2) ------------------------- *
  * Illustration isométrique affichée dans la fiche d'un campement légendaire (VillageActionModal,
  * cas 3, quand t.faction==="legendary") -- reprend EXACTEMENT la palette obsidienne + or/vermillon
- * déjà utilisée par villageMapIconSvg() pour kind==="legendary" (mêmes teintes que le pin sur la
- * carte : voir wallTop/wallBot/roofTop/roofBot/windowCol ci-dessus, et le glyphe 👑 doré #f2c94c
- * déjà utilisé pour cette faction dans mapRender.js/styles.css), pour que ce grand rendu et le
+ * déjà utilisée par villageMapIconSvg() pour kind==="legendary" (mêmes teintes de toit que le pin
+ * sur la carte : voir roofTop/roofBot/doorStroke ci-dessus, et le glyphe 👑 doré #f2c94c déjà
+ * utilisé pour cette faction dans mapRender.js/styles.css), pour que ce grand rendu et le
  * petit pin se lisent comme la même faction plutôt que comme deux styles différents.
  * Technique de rendu (mur en véritable extrusion : courtine + chemin de ronde + créneaux en
  * relief, portail à vantaux cloutés, tours à toit pointu, donjon, douves) reprise d'une maquette
@@ -964,8 +921,8 @@ function lcWallBand(cx, cy, rx, ry, gapDeg, h, colBase, colShade, colRim, gateBa
   return out;
 }
 function legendaryCampSceneSvg() {
-  // Mêmes teintes que villageMapIconSvg(kind="legendary") : wallTop/wallBot, roofTop/roofBot,
-  // windowCol -- voir plus haut dans ce fichier.
+  // Mêmes teintes de toit que villageMapIconSvg(kind="legendary") : roofTop/roofBot -- voir plus
+  // haut dans ce fichier.
   const wallBase = "#4a3510",
     wallShade = "#160e02",
     gold = "#f2c94c",
