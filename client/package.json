@@ -1,0 +1,20 @@
+{
+  "name": "conquete-tribale-client",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Conquête Tribale — client React (build Vite). Le serveur (../server) reste du Node natif sans dépendance ; ce dossier est le seul endroit du dépôt où des dépendances npm sont utilisées, uniquement au moment du build (le bundle produit est du JS/CSS statique, servi tel quel par le serveur).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
