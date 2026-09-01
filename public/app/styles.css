@@ -313,7 +313,10 @@
     box-shadow:inset 0 0 60px rgba(0,0,0,.5), var(--shadow-md);
   }
   #mapCanvas.dragging{cursor:grabbing;}
-  #mapWorld{position:absolute;}
+  /* will-change: promeut #mapWorld sur son propre calque de composition -- son left/top change à
+     chaque glisser/zoom (voir MapTab.jsx), et sans cet indice le navigateur peut choisir de repeindre
+     au lieu de simplement recomposer ce calque, plus coûteux pendant un geste de zoom. */
+  #mapWorld{position:absolute; will-change:transform, left, top;}
   #mapInfluence{position:absolute; left:0; top:0; pointer-events:none;}
   #mapAttackLines{position:absolute; left:0; top:0; pointer-events:none;}
   .villagePin{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer;}
