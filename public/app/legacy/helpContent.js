@@ -51,5 +51,18 @@ export function helpSections(ironIcon) {
   }, {
     title: "Compte et progression",
     html: `<p>Votre village est sauvegardé automatiquement sur le serveur à chaque action : aucune sauvegarde manuelle n'est nécessaire, et vous pouvez vous reconnecter à tout moment avec votre pseudo et votre mot de passe, depuis n'importe quel appareil.</p>`
+  }, {
+    id: "helpInstall",
+    title: "📱 Installer l'application",
+    // Le bouton "Installer" natif (Chrome/Edge desktop et Android, via l'évènement
+    // beforeinstallprompt capté dans public/index.html) est inséré en vraie JSX par
+    // InformationTab.jsx/HelpBox juste après cette section -- ce paragraphe couvre la procédure
+    // manuelle, seule option sur Safari/iOS (qui n'a pas cette API) et filet de secours partout
+    // ailleurs si le bouton ne s'affiche pas encore (le navigateur ne propose l'installation
+    // qu'après quelques visites, selon ses propres critères).
+    html: `<p>Conquête Tribale peut s'installer comme une vraie application, sur téléphone comme sur ordinateur : icône sur l'écran d'accueil, ouverture en plein écran sans barre d'adresse, chargement plus rapide. Gratuit, sans passer par l'App Store ni le Google Play Store.</p>
+      <p><b>📱 iPhone/iPad (Safari) :</b> ouvrez ce site dans <b>Safari</b> (pas Chrome, qui n'a pas cette fonction sur iOS) → appuyez sur l'icône <b>Partager</b> (le carré avec une flèche vers le haut, en bas de l'écran) → <b>Sur l'écran d'accueil</b> → <b>Ajouter</b>.</p>
+      <p><b>🤖 Android (Chrome) :</b> le bouton <b>Installer</b> ci-dessous apparaît automatiquement dès que Chrome le propose. À défaut, ouvrez le menu <b>⋮</b> en haut à droite → <b>Installer l'application</b> (ou <b>Ajouter à l'écran d'accueil</b>).</p>
+      <p><b>💻 Ordinateur (Chrome/Edge) :</b> même bouton <b>Installer</b> ci-dessous, ou l'icône d'installation (⊕) directement dans la barre d'adresse.</p>`
   }];
 }
