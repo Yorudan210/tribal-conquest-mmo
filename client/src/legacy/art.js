@@ -801,6 +801,265 @@ function legendaryCampSceneSvg(){
   return out;
 }
 
+/* ------------------------- Scènes de village par palier (tier 0-4) ------------------------- *
+ * Grande illustration isométrique affichée dans VillageActionModal pour n'importe quel campement
+ * ciblé (barbare simple, Armée Noire, brigands, maraudeurs) qui n'est PAS un campement légendaire --
+ * celui-ci garde sa propre scène dédiée, legendaryCampSceneSvg() ci-dessus. Les 5 paliers
+ * correspondent 1-pour-1 à TIER_CLASS/TIER_LABEL (mapRender.js, 0="Très faible" à 4="Très fort") :
+ * plus le village est fort, plus la palissade grandit (bois -> bois+pierre -> pierre crénelée),
+ * jusqu'au donjon et aux quatre tours d'angle du palier 4. Même technique de rendu que
+ * legendaryCampSceneSvg (mur en véritable extrusion, portail à vantaux + tours de guet, donjon en
+ * isométrique) -- réutilisée depuis la maquette de concept validée séparément avec l'utilisateur
+ * ("Villages modulables"), avec ses propres primitives préfixées vs* pour ne pas interférer avec
+ * les fonctions lc* / MATERIAL déjà utilisées ailleurs dans ce fichier (building tiers du joueur).
+ * L'identité de faction (brigands/maraudeurs/Armée Noire) reste portée par le pin de la carte, le
+ * badge de la fiche et le liseré coloré de son cadre (.village-scene.<faction>, styles.css) --
+ * volontairement PAS injectée dans le SVG lui-même pour garder une seule scène par palier, simple
+ * à mettre en cache (VILLAGE_SCENE_STAGES est calculé une seule fois, au chargement du module). */
+const VILLAGE_SCENE_STAGES = (function(){
+  function vsPt(cx,cy,rx,ry,deg){ const a=deg*Math.PI/180; return { x: cx+rx*Math.cos(a), y: cy+ry*Math.sin(a) }; }
+  function vsRingAngles(count, gapDeg){
+    const usable = 360-gapDeg, start = 90+gapDeg/2, out=[];
+    for(let i=0;i<count;i++) out.push(start + usable*(i/(count-1)));
+    return out;
+  }
+  const VS_ISO_X = 0.87, VS_ISO_Y = 0.5;
+  const vsIsoRight = n => ({x:n*VS_ISO_X, y:-n*VS_ISO_Y});
+  const vsIsoLeft  = n => ({x:-n*VS_ISO_X, y:-n*VS_ISO_Y});
+  const vsAdd = (a,b) => ({x:a.x+b.x, y:a.y+b.y});
+  const vsRaise = (p,dy) => ({x:p.x, y:p.y-dy});
+  const vsLerp = (a,b,t) => ({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t});
+  const vsPoly = (pts,fill,stroke) => `<polygon points="${pts.map(p=>p.x.toFixed(1)+","+p.y.toFixed(1)).join(" ")}" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="1"`:""}/>`;
+
+  function vsIsoBuilding(x,y,s,roofLit,roofShade,wallLit,wallShade,doorCol,opts){
+    opts = opts||{};
+    const W=(opts.w||24)*s, D=(opts.d||20)*s, H=(opts.h||16)*s, RH=(opts.roofH==null?15:opts.roofH)*s;
+    const edge = opts.edge || "#160f08";
+    const fx = x - 0.435*(W-D), fy = y + 0.25*(W+D);
+    const F=  {x:fx,y:fy}, R = vsAdd(F,vsIsoRight(W)), L = vsAdd(F,vsIsoLeft(D)), K = vsAdd(R,vsIsoLeft(D));
+    const Ft = vsRaise(F,H), Rt = vsRaise(R,H), Lt = vsRaise(L,H), Kt = vsRaise(K,H);
+    let out = "";
+    out += vsPoly([F,R,Rt,Ft], wallLit, edge);
+    out += vsPoly([F,L,Lt,Ft], wallShade, edge);
+    if(opts.door!==false){
+      const d0=vsLerp(F,R,.16), d1=vsLerp(F,R,.42), dh=H*0.52;
+      out += vsPoly([d0,d1,vsRaise(d1,dh),vsRaise(d0,dh)], doorCol, edge);
+    }
+    if(opts.window!==false){
+      const w0=vsLerp(F,L,.5), w1=vsLerp(F,L,.76), wy0=H*.4, wy1=H*.72;
+      out += vsPoly([vsRaise(w0,wy0),vsRaise(w1,wy0),vsRaise(w1,wy1),vsRaise(w0,wy1)], opts.windowCol||"#f0cd7c", edge);
+    }
+    if(RH>0){
+      const apex = { x:(Ft.x+Kt.x)/2, y:(Ft.y+Kt.y)/2 - RH };
+      out += vsPoly([Ft,Rt,apex], roofLit, edge);
+      out += vsPoly([Ft,Lt,apex], roofShade, edge);
+      out += `<line x1="${Ft.x.toFixed(1)}" y1="${Ft.y.toFixed(1)}" x2="${apex.x.toFixed(1)}" y2="${apex.y.toFixed(1)}" stroke="${edge}" stroke-width=".7" opacity=".5"/>`;
+      if(opts.banner){
+        const bx=apex.x, by=apex.y;
+        out += `<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${(by-13*s).toFixed(1)}" stroke="#3a2814" stroke-width="${(1.6*s).toFixed(2)}"/>`;
+        out += vsPoly([{x:bx,y:by-13*s},{x:bx+10*s,y:by-8*s},{x:bx,y:by-4*s}], opts.banner);
+      }
+      return { svg: out, topY: apex.y - (opts.banner?13*s:0), anchor: Ft };
+    }
+    out += vsPoly([Ft,Rt,Kt,Lt], wallShade, edge);
+    return { svg: out, topY: Ft.y, anchor: Ft };
+  }
+  function vsHut(x,y,s,roofA,roofB,wallA,wallB,doorCol){
+    return vsIsoBuilding(x,y,s,roofA,roofB,wallA,wallB,doorCol,{w:23,d:19,h:15,roofH:15}).svg;
+  }
+  function vsLonghouse(x,y,s,roofA,roofB,wallA,wallB,doorCol){
+    return vsIsoBuilding(x,y,s,roofA,roofB,wallA,wallB,doorCol,{w:40,d:21,h:17,roofH:15}).svg;
+  }
+  function vsKeep(x,y,s,roofA,roofB,wallA,wallB,bannerCol){
+    const base = vsIsoBuilding(x,y,s,roofA,roofB,wallA,wallB,"#1c130a",{w:32,d:25,h:16,roofH:0,window:false});
+    const upperS = s*0.6;
+    const upper = vsIsoBuilding(base.anchor.x, base.anchor.y, upperS, roofA,roofB,wallA,wallB,"#1c130a",
+      {w:32*0.62,d:25*0.62,h:16*1.35,roofH:19,window:false,banner:bannerCol});
+    return base.svg + upper.svg;
+  }
+  function vsPine(x,y,s){
+    return `<g transform="translate(${x},${y}) scale(${s})">
+      <polygon points="0,-27 9,-6 -9,-6" fill="#213a1b"/>
+      <polygon points="0,-19 7.5,3 -7.5,3" fill="#2c4a24"/>
+      <rect x="-1.8" y="3" width="3.6" height="6" fill="#42311d"/>
+    </g>`;
+  }
+  function vsTower(x,y,s,wallCol,wallEdge,roofCol,bannerCol){
+    return vsIsoBuilding(x,y,s,roofCol,roofCol,wallCol,wallEdge,"#160f08",
+      {w:15,d:13,h:29,roofH:17,door:false,window:false,edge:wallEdge,banner:bannerCol}).svg;
+  }
+  function vsGateTower(x,y,s,wallCol,wallEdge,roofCol,accentCol){
+    return vsIsoBuilding(x,y,s,roofCol,roofCol,wallCol,wallEdge,"#160f08",
+      {w:19,d:17,h:34,roofH:16,door:false,window:true,windowCol:"#2a1c10",edge:wallEdge,banner:accentCol}).svg;
+  }
+  function vsGateDoor(bs,be,h,ironCol){
+    const x0=Math.min(bs.x,be.x), x1=Math.max(bs.x,be.x), w=x1-x0;
+    const yBase=(bs.y+be.y)/2, dh=Math.min(h*0.85, 30);
+    const woodA="#5c4025", woodB="#33220f";
+    let out = `<rect x="${x0.toFixed(1)}" y="${(yBase-dh).toFixed(1)}" width="${w.toFixed(1)}" height="${dh.toFixed(1)}" fill="${woodA}" stroke="${woodB}" stroke-width="1.2"/>`;
+    out += `<line x1="${(x0+w/2).toFixed(1)}" y1="${(yBase-dh).toFixed(1)}" x2="${(x0+w/2).toFixed(1)}" y2="${yBase.toFixed(1)}" stroke="${woodB}" stroke-width="1.4"/>`;
+    for(let i=1;i<4;i++){
+      const px=x0+w*i/4;
+      out += `<line x1="${px.toFixed(1)}" y1="${(yBase-dh).toFixed(1)}" x2="${px.toFixed(1)}" y2="${yBase.toFixed(1)}" stroke="${woodB}" stroke-width=".6" opacity=".55"/>`;
+    }
+    [x0+w*0.22, x0+w*0.5, x0+w*0.78].forEach(cx2=>{
+      [yBase-dh*0.78, yBase-dh*0.36].forEach(cy2=>{
+        out += `<circle cx="${cx2.toFixed(1)}" cy="${cy2.toFixed(1)}" r="1.3" fill="${ironCol}"/>`;
+      });
+    });
+    out += `<rect x="${(x0-3).toFixed(1)}" y="${(yBase-dh-4.5).toFixed(1)}" width="${(w+6).toFixed(1)}" height="5" fill="${woodB}" stroke="#160f08" stroke-width="1"/>`;
+    return out;
+  }
+  function vsGateAngles(gapDeg){ return { start: 90+gapDeg/2, end: 90+gapDeg/2+(360-gapDeg) }; }
+  function vsWallToppers(cx,topCy,rx,ry,gapDeg,count,style,colBase,colShade,colRim){
+    if(style==="spike"){
+      return vsRingAngles(count,gapDeg).map(a=>{
+        const p = vsPt(cx,topCy,rx,ry,a);
+        return `<polygon points="${(p.x-2.6).toFixed(1)},${p.y.toFixed(1)} ${p.x.toFixed(1)},${(p.y-10).toFixed(1)} ${(p.x+2.6).toFixed(1)},${p.y.toFixed(1)}" fill="${colRim}" stroke="${colShade}" stroke-width=".6"/>`;
+      }).join("");
+    }
+    const startA = 90+gapDeg/2, span = 360-gapDeg, pairSpan = span/count, tooth = pairSpan*0.56;
+    const depth = Math.max(2.4, rx*0.05), mh = Math.max(7, ry*0.12);
+    let out = "";
+    for(let i=0;i<count;i++){
+      const a0 = startA + i*pairSpan, a1 = a0 + tooth;
+      const bo0 = vsPt(cx,topCy,rx,ry,a0), bo1 = vsPt(cx,topCy,rx,ry,a1);
+      const to0 = vsRaise(bo0,mh), to1 = vsRaise(bo1,mh);
+      const ti0 = vsPt(cx,topCy-mh,rx-depth,ry-depth,a0), ti1 = vsPt(cx,topCy-mh,rx-depth,ry-depth,a1);
+      out += vsPoly([bo0,bo1,to1,to0], colBase, colShade);
+      out += vsPoly([to0,to1,ti1,ti0], colRim, colShade);
+    }
+    return out;
+  }
+  function vsWallBand(cx,cy,rx,ry,gapDeg,h,colBase,colShade,colRim,topperStyle,gateOpts){
+    const g = vsGateAngles(gapDeg);
+    const topCy = cy - h;
+    const thick = Math.max(7, h*0.42);
+    const irx = Math.max(4, rx-thick), iry = Math.max(4, ry-thick);
+    const ts = vsPt(cx,topCy,rx,ry,g.start), te = vsPt(cx,topCy,rx,ry,g.end);
+    const bs = vsPt(cx,cy,rx,ry,g.start),   be = vsPt(cx,cy,rx,ry,g.end);
+    const its = vsPt(cx,topCy,irx,iry,g.start), ite = vsPt(cx,topCy,irx,iry,g.end);
+    const gradId = "vswg"+Math.abs((cx*1000+cy*7+rx*13+ry*17+h*31)|0).toString(36);
+    let out = `<defs><linearGradient id="${gradId}" x1="0" y1="${topCy.toFixed(1)}" x2="0" y2="${cy.toFixed(1)}" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="${colBase}"/><stop offset="1" stop-color="${colShade}"/>
+      </linearGradient></defs>`;
+    out += `<path d="M ${bs.x.toFixed(1)} ${bs.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${be.x.toFixed(1)} ${be.y.toFixed(1)}" fill="none" stroke="rgba(0,0,0,.32)" stroke-width="${(thick*0.6).toFixed(1)}" stroke-linecap="round" transform="translate(0,2)"/>`;
+    out += `<path d="M ${ts.x.toFixed(1)} ${ts.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${te.x.toFixed(1)} ${te.y.toFixed(1)} L ${be.x.toFixed(1)} ${be.y.toFixed(1)} A ${rx} ${ry} 0 1 0 ${bs.x.toFixed(1)} ${bs.y.toFixed(1)} Z" fill="url(#${gradId})" stroke="${colShade}" stroke-width="1"/>`;
+    for(let k=1;k<=2;k++){
+      const yy = topCy + h*(k/3);
+      const cA = vsPt(cx,yy,rx,ry,g.start), cB = vsPt(cx,yy,rx,ry,g.end);
+      out += `<path d="M ${cA.x.toFixed(1)} ${cA.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${cB.x.toFixed(1)} ${cB.y.toFixed(1)}" fill="none" stroke="rgba(0,0,0,.24)" stroke-width="1"/>`;
+    }
+    out += `<path d="M ${ts.x.toFixed(1)} ${ts.y.toFixed(1)} A ${rx} ${ry} 0 1 1 ${te.x.toFixed(1)} ${te.y.toFixed(1)} L ${ite.x.toFixed(1)} ${ite.y.toFixed(1)} A ${irx} ${iry} 0 1 0 ${its.x.toFixed(1)} ${its.y.toFixed(1)} Z" fill="${colBase}" stroke="${colRim}" stroke-width="1" opacity=".97"/>`;
+    out += `<path d="M ${its.x.toFixed(1)} ${its.y.toFixed(1)} A ${irx} ${iry} 0 1 1 ${ite.x.toFixed(1)} ${ite.y.toFixed(1)}" fill="none" stroke="${colShade}" stroke-width="1.3" opacity=".55"/>`;
+    const topperCount = topperStyle==="merlon" ? Math.max(5, Math.round((360-gapDeg)/15)) : Math.round((360-gapDeg)/9);
+    out += vsWallToppers(cx,topCy,rx,ry,gapDeg,topperCount,topperStyle,colBase,colShade,colRim);
+    const drawGate = !gateOpts || gateOpts.gate!==false;
+    if(!drawGate){
+      for(const [tp,bp] of [[ts,bs],[te,be]]){
+        out += `<rect x="${(tp.x-thick*0.42).toFixed(1)}" y="${tp.y.toFixed(1)}" width="${(thick*0.84).toFixed(1)}" height="${(bp.y-tp.y).toFixed(1)}" fill="${colRim}" stroke="${colShade}" stroke-width="1"/>`;
+      }
+      return out;
+    }
+    out += vsGateDoor(bs, be, h, colRim);
+    const ts_ = Math.max(0.55, Math.min(1.15, h/24));
+    out += vsGateTower(bs.x, bs.y, ts_, colBase, colShade, colShade, gateOpts&&gateOpts.banner);
+    out += vsGateTower(be.x, be.y, ts_, colBase, colShade, colShade, gateOpts&&gateOpts.banner);
+    return out;
+  }
+  function vsGroundEllipse(cx,cy,rx,ry,colA,colB){
+    return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="url(#${colA})" stroke="${colB}" stroke-width="1.5" opacity=".95"/>`;
+  }
+  function vsDefsGrad(id,c1,c2){
+    return `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>`;
+  }
+  const VCX=160, VCY=192;
+  function vsScene({groundGrad, groundEdge, groundRx, groundRy, wall, huts, extraTowers, pines, keepEl}){
+    let defs = `<defs>${vsDefsGrad(groundGrad.id, groundGrad.c1, groundGrad.c2)}</defs>`;
+    let out = `<svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg">${defs}`;
+    out += pines.map(p=>vsPine(p[0],p[1],p[2])).join("");
+    out += vsGroundEllipse(VCX,VCY,groundRx,groundRy,groundGrad.id,groundEdge);
+    if(wall) out += wall;
+    out += huts.join("");
+    if(keepEl) out += keepEl;
+    if(extraTowers) out += extraTowers.join("");
+    out += `</svg>`;
+    return out;
+  }
+
+  const THATCH = { rA:"#c9932f", rB:"#875a1f", wA:"#8a6a48", wB:"#5c4429", door:"#2a1c10" };
+  const TIMBER  = { rA:"#a2622f", rB:"#5c3018", wA:"#6b4423", wB:"#432a15", door:"#1c130a" };
+  const SLATE   = { rA:"#6f6f68", rB:"#3a3a35", wA:"#7a5636", wB:"#4a3320", door:"#150f08" };
+  const STONE   = { rA:"#5a5a55", rB:"#302f2a", wA:"#8f8a7c", wB:"#5c5850", door:"#120d08" };
+  const WOOD_WALL  = { base:"#7c5a36", shade:"#33230f", rim:"#a9855a" };
+  const TIMBER_WALL= { base:"#5f4023", shade:"#28190c", rim:"#8a6238" };
+  const STONE_FOOT = { base:"#6b6660", shade:"#26221c", rim:"#8f8a80" };
+  const STONE_WALL = { base:"#726c60", shade:"#242019", rim:"#a29c8c" };
+
+  return [
+    // Tier 0 · Très faible -- campement isolé, sans palissade.
+    vsScene({
+      groundGrad:{id:"vsg1", c1:"#5c7a3a", c2:"#3f5a26"}, groundEdge:"#2c4018", groundRx:88, groundRy:52,
+      wall:null,
+      huts:[ vsHut(136,188,0.95,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(184,190,0.85,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door) ],
+      pines:[[52,224,0.9],[262,214,0.8],[150,258,0.7],[214,150,0.6]]
+    }),
+    // Tier 1 · Faible -- hameau cerné d'une palissade basse en pieux.
+    vsScene({
+      groundGrad:{id:"vsg2", c1:"#6b8046", c2:"#485c2a"}, groundEdge:"#2c4018", groundRx:104, groundRy:62,
+      wall: vsWallBand(VCX,VCY,98,58,50,18,WOOD_WALL.base,WOOD_WALL.shade,WOOD_WALL.rim,"spike"),
+      huts:[ vsHut(126,188,0.85,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(196,188,0.85,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(160,206,0.78,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(160,170,0.72,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door) ],
+      pines:[[40,226,0.9],[276,210,0.85],[130,266,0.7],[236,150,0.6],[70,140,0.55]]
+    }),
+    // Tier 2 · Moyen -- palissade plus haute, logis commun, bannière rouge au portail.
+    vsScene({
+      groundGrad:{id:"vsg3", c1:"#6e6144", c2:"#493f2a"}, groundEdge:"#2c2417", groundRx:114, groundRy:68,
+      wall: vsWallBand(VCX,VCY,106,63,44,24,TIMBER_WALL.base,TIMBER_WALL.shade,TIMBER_WALL.rim,"spike",{banner:"#8a2e2e"}),
+      huts:[ vsHut(120,184,0.8,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(200,184,0.8,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(126,152,0.7,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsHut(194,152,0.7,THATCH.rA,THATCH.rB,THATCH.wA,THATCH.wB,THATCH.door),
+             vsLonghouse(160,160,0.82,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door) ],
+      pines:[[36,222,0.9],[286,204,0.85],[122,272,0.7],[248,142,0.6]]
+    }),
+    // Tier 3 · Fort -- soubassement de pierre + palissade de bois, deux tours de garde au portail.
+    vsScene({
+      groundGrad:{id:"vsg4", c1:"#6b6459", c2:"#463f36"}, groundEdge:"#241d15", groundRx:122, groundRy:74,
+      wall: vsWallBand(VCX,VCY,113,69,40,10,STONE_FOOT.base,STONE_FOOT.shade,STONE_FOOT.rim,"merlon",{gate:false})
+          + vsWallBand(VCX,VCY,112,64,40,20,TIMBER_WALL.base,TIMBER_WALL.shade,TIMBER_WALL.rim,"spike",{banner:"#8a2e2e"}),
+      huts:[ vsHut(120,180,0.76,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(200,180,0.76,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(160,196,0.74,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(128,148,0.68,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(192,148,0.68,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsLonghouse(160,158,0.86,SLATE.rA,SLATE.rB,SLATE.wA,SLATE.wB,SLATE.door) ],
+      pines:[[30,218,0.85],[296,198,0.8],[112,278,0.65],[258,132,0.55]]
+    }),
+    // Tier 4 · Très fort -- muraille de pierre crénelée, quatre tours d'angle, donjon central.
+    vsScene({
+      groundGrad:{id:"vsg5", c1:"#736c60", c2:"#463f36"}, groundEdge:"#1e1810", groundRx:126, groundRy:78,
+      wall: vsWallBand(VCX,VCY,116,71,34,28,STONE_WALL.base,STONE_WALL.shade,STONE_WALL.rim,"merlon",{banner:"#c9a227"}),
+      huts:[ vsHut(122,180,0.7,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(198,180,0.7,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(122,150,0.62,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door),
+             vsHut(198,150,0.62,TIMBER.rA,TIMBER.rB,TIMBER.wA,TIMBER.wB,TIMBER.door) ],
+      keepEl: vsKeep(160,168,1.0,STONE.rA,STONE.rB,STONE.wA,STONE.wB,"#c9a227"),
+      extraTowers:[ vsTower(vsPt(VCX,VCY-28,116,71,132).x, vsPt(VCX,VCY-28,116,71,132).y, 0.78, STONE.wA, STONE.wB, STONE.rB, "#c9a227"),
+                    vsTower(vsPt(VCX,VCY-28,116,71,48).x,  vsPt(VCX,VCY-28,116,71,48).y,  0.78, STONE.wA, STONE.wB, STONE.rB, "#c9a227"),
+                    vsTower(vsPt(VCX,VCY-28,116,71,164).x, vsPt(VCX,VCY-28,116,71,164).y, 0.66, STONE.wA, STONE.wB, STONE.rB, null),
+                    vsTower(vsPt(VCX,VCY-28,116,71,16).x,  vsPt(VCX,VCY-28,116,71,16).y,  0.66, STONE.wA, STONE.wB, STONE.rB, null) ],
+      pines:[[24,214,0.8],[304,192,0.75]]
+    })
+  ];
+})();
+function villageSceneSvg(tier){
+  return VILLAGE_SCENE_STAGES[Math.max(0, Math.min(VILLAGE_SCENE_STAGES.length-1, tier|0))];
+}
+
 export {
   BUILDING_ART, TIER2_EXTRAS, TIER3_EXTRAS, MATERIAL, materialTier,
   buildingTierExtra, buildingIconSvg, getBuildingArt,
@@ -812,5 +1071,5 @@ export {
   villageTagGlyphSvg, villageTagBadgeSvg,
   mapPseudoRandom, MAP_DECOR_TYPES, mapDecorSvg, mapDecorHtml,
   wallArt, villageWallRing,
-  legendaryCampSceneSvg
+  legendaryCampSceneSvg, villageSceneSvg
 };
