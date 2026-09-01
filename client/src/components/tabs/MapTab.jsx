@@ -31,7 +31,14 @@ export default function MapTab(){
 
   const mv = mapView || { cx: v.x, cy: v.y, ppf: 26 };
   const now = estimateNow(serverTimeOffset);
-  const { worldHtml, minX, minY, worldW, worldH, gridBg } = buildMapMarkup(snapshot, username, mv, selectedVillage, now);
+  // Copie "live" de la vue courante, lue par le gestionnaire de molette (voir onWheel) pour que
+  // plusieurs évènements wheel survenant dans la même frame d'animation se cumulent correctement
+  // avant que React n'ait eu l'occasion de re-rendre entre deux -- voir wheelRafRef ci-dessous.
+  const mvRef = useRef(mv);
+  mvRef.current = mv;
+  const wheelRafRef = useRef(null);
+  const viewport = { width: canvasRef.current?.clientWidth, height: canvasRef.current?.clientHeight };
+  const { worldHtml, minX, minY, worldW, worldH, gridBg } = buildMapMarkup(snapshot, username, mv, selectedVillage, now, viewport);
 
   // Repositionne #mapWorld sous le viewport (équivalent positionMapWorld) et redessine les deux
   // canvas -- après CHAQUE rendu (contenu ou vue de carte changés), pendant qu'on n'est pas en train
@@ -89,20 +96,34 @@ export default function MapTab(){
         }
       }
     }
+    // Un trackpad/souris haute fréquence peut émettre des dizaines d'évènements wheel par seconde ;
+    // appeler setMapView (donc reconstruire tout le balisage de la carte, voir buildMapMarkup) à
+    // chaque évènement saturait le thread principal pendant un geste de zoom (voir le ralentissement
+    // signalé). On accumule donc les deltas dans mvRef.current (lu/écrit de façon synchrone, sans
+    // attendre un re-rendu React) et on ne pousse l'état React qu'UNE fois par frame d'animation,
+    // via requestAnimationFrame -- le zoom reste fluide et cumulatif, mais React ne re-rend plus
+    // qu'au rythme d'affichage de l'écran au lieu du rythme brut des évènements wheel.
     function onWheel(e){
       e.preventDefault();
       const rect = canvasEl.getBoundingClientRect();
-      const oldPpf = mv.ppf;
+      const cur = mvRef.current;
+      const oldPpf = cur.ppf;
       const newPpf = Math.max(12, Math.min(48, oldPpf + (e.deltaY<0?4:-4)));
       if(newPpf===oldPpf) return;
       const cursorX = e.clientX-rect.left, cursorY = e.clientY-rect.top;
-      const worldX = mv.cx + (cursorX-canvasEl.clientWidth/2)/oldPpf;
-      const worldY = mv.cy + (cursorY-canvasEl.clientHeight/2)/oldPpf;
-      setMapView({
+      const worldX = cur.cx + (cursorX-canvasEl.clientWidth/2)/oldPpf;
+      const worldY = cur.cy + (cursorY-canvasEl.clientHeight/2)/oldPpf;
+      mvRef.current = {
         ppf: newPpf,
         cx: worldX - (cursorX-canvasEl.clientWidth/2)/newPpf,
         cy: worldY - (cursorY-canvasEl.clientHeight/2)/newPpf,
-      });
+      };
+      if(wheelRafRef.current==null){
+        wheelRafRef.current = requestAnimationFrame(() => {
+          wheelRafRef.current = null;
+          setMapView(mvRef.current);
+        });
+      }
     }
 
     canvasEl.addEventListener("pointerdown", onPointerDown);
@@ -116,6 +137,7 @@ export default function MapTab(){
       canvasEl.removeEventListener("pointerup", endDrag);
       canvasEl.removeEventListener("pointercancel", endDrag);
       canvasEl.removeEventListener("wheel", onWheel);
+      if(wheelRafRef.current!=null){ cancelAnimationFrame(wheelRafRef.current); wheelRafRef.current=null; }
     };
   });
 
