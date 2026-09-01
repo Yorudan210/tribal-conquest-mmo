@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useGame } from "../GameContext.jsx";
 import { TROOP_ORDER, TROOPS, VILLAGE_TAGS, PERMANENT_FACTIONS } from "../gameData.js";
 import { fmt, fmtTime, estimateNow, RES_ICON, RES_NAME } from "../formulas.js";
-import { villageTagBadgeSvg } from "../legacy/art.js";
+import { villageTagBadgeSvg, legendaryCampSceneSvg } from "../legacy/art.js";
 import { guildRelationFor, TIER_CLASS, TIER_LABEL, FACTION_PIN } from "../legacy/mapRender.js";
 
 // Porte renderVillageActionModal()/wireVillageActionModal()/sendMission()/sendGift()/
@@ -205,6 +205,10 @@ export default function VillageActionModal({
   const rel = t.isPlayer ? guildRelationFor(snapshot, t.guildId) : null;
   const factionInfo = !t.isPlayer && t.faction ? FACTION_PIN[t.faction] : null;
   const raidersCfg = t.faction === "raiders" ? (PERMANENT_FACTIONS || {}).raiders : null;
+  const legendaryCfg = t.faction === "legendary" ? (PERMANENT_FACTIONS || {}).legendary : null;
+  // Illustration isométrique de la citadelle légendaire (Phase 2) -- mémoïsée sur l'id du village
+  // ciblé pour ne pas régénérer ce gros bloc de markup SVG à chaque rafraîchissement du polling.
+  const legendarySceneSvg = useMemo(() => legendaryCfg ? legendaryCampSceneSvg() : null, [legendaryCfg, t.id]);
   return /*#__PURE__*/React.createElement("div", {
     className: "tutorial-backdrop",
     id: "villageActionBackdrop",
@@ -226,7 +230,12 @@ export default function VillageActionModal({
       padding: "4px 8px"
     },
     onClick: closeVillageAction
-  }, "\u2716")), /*#__PURE__*/React.createElement("div", {
+  }, "\u2716")), legendarySceneSvg ? /*#__PURE__*/React.createElement("div", {
+    className: "legendary-camp-scene",
+    dangerouslySetInnerHTML: {
+      __html: legendarySceneSvg
+    }
+  }) : null, /*#__PURE__*/React.createElement("div", {
     className: "flex-between",
     style: {
       margin: "2px 0 8px"
@@ -270,7 +279,17 @@ export default function VillageActionModal({
       padding: "6px 10px",
       margin: "0 0 8px"
     }
-  }, raidersCfg.boostOnVictory.icon, " Victoire = ", raidersCfg.boostOnVictory.name, " : +", Math.round((raidersCfg.boostOnVictory.multiplier - 1) * 100), "% de production pendant ", Math.round(raidersCfg.boostOnVictory.durationSec / 3600), "h sur le village attaquant.") : null, t.isPlayer ? /*#__PURE__*/React.createElement("p", {
+  }, raidersCfg.boostOnVictory.icon, " Victoire = ", raidersCfg.boostOnVictory.name, " : +", Math.round((raidersCfg.boostOnVictory.multiplier - 1) * 100), "% de production pendant ", Math.round(raidersCfg.boostOnVictory.durationSec / 3600), "h sur le village attaquant.") : null, legendaryCfg ? /*#__PURE__*/React.createElement("p", {
+    className: "small",
+    style: {
+      color: "#f2c94c",
+      background: "rgba(242,201,76,.12)",
+      border: "1px solid rgba(242,201,76,.45)",
+      borderRadius: 8,
+      padding: "6px 10px",
+      margin: "0 0 8px"
+    }
+  }, "\uD83D\uDC51 Campement l\xE9gendaire : bien trop fort pour \xEAtre vaincu par un seul village, et ses d\xE9fenses ne se r\xE9g\xE9n\xE8rent jamais -- chaque assaut, gagn\xE9 ou perdu, l'affaiblit durablement. Sa chute r\xE9compense tous les joueurs qui y auront pris part (succ\xE8s Chasseur de l\xE9gende).", t.contributorCount > 0 ? ` Déjà entamé par ${t.contributorCount} joueur${t.contributorCount > 1 ? "s" : ""} différent${t.contributorCount > 1 ? "s" : ""}.` : "") : null, t.isPlayer ? /*#__PURE__*/React.createElement("p", {
     className: "small muted",
     style: {
       background: "rgba(0,0,0,.12)",
