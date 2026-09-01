@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Conquête Tribale — jeu de stratégie navigateur</title>
+<!-- Capture le plus tôt possible l'évènement d'installabilité PWA (Chrome/Edge desktop et Android
+     -- jamais Safari/iOS, qui n'a pas cette API et reste sur la procédure manuelle "Partager > Sur
+     l'écran d'accueil" décrite dans l'onglet Informations). e.preventDefault() empêche la mini-
+     infobulle native du navigateur pour la remplacer par le bouton "Installer" de l'onglet
+     Informations (voir InformationTab.jsx/HelpBox), qui rejoue cet évènement au clic via .prompt().
+     Placé avant tout autre script pour ne rater l'évènement sous aucun prétexte. -->
+<script>
+window.__pwaDeferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  window.__pwaDeferredPrompt = e;
+  window.dispatchEvent(new Event("pwa-install-available"));
+});
+window.addEventListener("appinstalled", () => {
+  window.__pwaDeferredPrompt = null;
+  window.dispatchEvent(new Event("pwa-install-available"));
+});
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
 <!-- PWA (installation sur écran d'accueil mobile) : manifest + icônes + service worker (voir
      public/manifest.json et public/sw.js). Le service worker ne met en cache QUE la coquille
