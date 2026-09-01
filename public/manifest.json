@@ -1,0 +1,19 @@
+{
+  "name": "Conquête Tribale",
+  "short_name": "Conquête Tribale",
+  "description": "Jeu de stratégie médiéval multijoueur en temps réel : bâtissez votre village, entraînez vos troupes et affrontez un monde partagé.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#241a10",
+  "theme_color": "#241a10",
+  "lang": "fr",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
