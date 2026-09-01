@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useGame } from "../../GameContext.jsx";
 import { fmt } from "../../formulas.js";
 import { ACHIEVEMENT_TIER_LABELS, clamp } from "../../gameData.js";
@@ -49,6 +49,34 @@ function HelpBox({ isAdmin, replayTutorial, doAction, call }){
       return next;
     });
   }
+  // Bouton d'installation natif (section "📱 Installer l'application" ci-dessous, voir aussi
+  // helpContent.js/helpInstall) : reflète l'évènement beforeinstallprompt capté au plus tôt dans
+  // public/index.html (window.__pwaDeferredPrompt), qui n'existe QUE sur Chrome/Edge (desktop et
+  // Android) -- jamais Safari/iOS, où seule la procédure manuelle décrite dans le texte de la
+  // section fonctionne. "installed" détecte une app déjà installée (standalone) pour ne pas
+  // proposer un bouton inutile à qui joue déjà depuis l'icône sur son écran d'accueil.
+  const [installState, setInstallState] = useState("unavailable");
+  useEffect(() => {
+    function refresh(){
+      const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+      setInstallState(standalone ? "installed" : (window.__pwaDeferredPrompt ? "available" : "unavailable"));
+    }
+    refresh();
+    window.addEventListener("pwa-install-available", refresh);
+    window.addEventListener("appinstalled", refresh);
+    return () => {
+      window.removeEventListener("pwa-install-available", refresh);
+      window.removeEventListener("appinstalled", refresh);
+    };
+  }, []);
+  const installApp = useCallback(async () => {
+    const evt = window.__pwaDeferredPrompt;
+    if(!evt) return;
+    evt.prompt();
+    try{ await evt.userChoice; }catch{}
+    window.__pwaDeferredPrompt = null;
+    setInstallState("unavailable");
+  }, []);
   return (
     <div>
       <h2>Aide &amp; règles du jeu</h2>
@@ -67,6 +95,13 @@ function HelpBox({ isAdmin, replayTutorial, doAction, call }){
               <div className="acc-body-wrap">
                 <div className="acc-body">
                   <div className="acc-body-inner" dangerouslySetInnerHTML={{__html: sec.html}} />
+                  {sec.id==="helpInstall" && (
+                    installState==="installed"
+                      ? <p className="small" style={{color:"var(--green)", fontWeight:600}}>✅ Application déjà installée sur cet appareil.</p>
+                      : installState==="available"
+                      ? <button className="primary" onClick={installApp}>⬇️ Installer l'application</button>
+                      : <p className="small muted">Le bouton d'installation automatique apparaîtra ici dès que votre navigateur le propose (Chrome/Edge) — sur iPhone/iPad, seule la procédure Safari ci-dessus fonctionne.</p>
+                  )}
                 </div>
               </div>
             </div>
