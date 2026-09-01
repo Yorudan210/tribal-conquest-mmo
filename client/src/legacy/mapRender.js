@@ -90,7 +90,7 @@ export function mapMarkerHTML(m, pos, minX, minY, ppf, foreign){
    mission) + les dimensions du monde visible, à partir de l'état courant. Les deux <canvas> (zones
    d'influence / lignes d'attaque) sont laissés VIDES ici -- MapTab les dessine ensuite via un effet
    (voir drawMapInfluence/drawMapAttackLines, également portés quasi verbatim). */
-export function buildMapMarkup(snapshot, username, mapView, selectedVillage, now){
+export function buildMapMarkup(snapshot, username, mapView, selectedVillage, now, viewport){
   const v = snapshot.village, mv = mapView, ppf = mv.ppf;
   const others = snapshot.villages.filter(t=>t.id!==v.id);
   const xs = others.map(t=>t.x).concat(v.x), ys = others.map(t=>t.y).concat(v.y);
@@ -98,7 +98,22 @@ export function buildMapMarkup(snapshot, username, mapView, selectedVillage, now
   const minY = Math.min(...ys)-3, maxY = Math.max(...ys)+3;
   const worldW = (maxX-minX)*ppf, worldH = (maxY-minY)*ppf;
 
-  const pins = others.map(t=>{
+  // Culling de viewport (perf carte, voir le ralentissement au zoom signalé) : le monde peut contenir
+  // 300+ villages PNJ (barbares + factions permanentes) ; construire l'icône SVG multi-éléments de
+  // CHACUN à chaque rendu -- y compris ceux hors champ -- est le principal coût du zoom/molette, qui
+  // redéclenche ce calcul plusieurs fois par seconde. On ne construit donc le balisage des pins QUE
+  // pour les villages tombant dans le rectangle visible du canvas (+ une marge en cases, pour ne pas
+  // faire "sauter" un pin en bord d'écran pendant un léger glisser). minX/maxX/worldW ci-dessus
+  // restent calculés sur la totalité du monde : ils dimensionnent #mapWorld et son fond quadrillé,
+  // pas ce qui est effectivement dessiné dedans.
+  const viewW = (viewport && viewport.width) || 1600;
+  const viewH = (viewport && viewport.height) || 900;
+  const margin = 6;
+  const viewMinX = mv.cx - viewW/2/ppf - margin, viewMaxX = mv.cx + viewW/2/ppf + margin;
+  const viewMinY = mv.cy - viewH/2/ppf - margin, viewMaxY = mv.cy + viewH/2/ppf + margin;
+  const visibleOthers = others.filter(t => t.x>=viewMinX && t.x<=viewMaxX && t.y>=viewMinY && t.y<=viewMaxY);
+
+  const pins = visibleOthers.map(t=>{
     const left=(t.x-minX)*ppf, top=(t.y-minY)*ppf;
     const sel = selectedVillage===t.id;
     const mine = t.owner===username;
