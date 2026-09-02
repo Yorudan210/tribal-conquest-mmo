@@ -122,6 +122,48 @@
     }
   };
 
+  /* Évènements ROTATIFS (à durée limitée, déclenchés par un admin -- voir adminStartEvent/
+     adminStopEvent, server/gameLogic.js), par opposition aux factions permanentes ci-dessus qui
+     peuplent le monde en continu. Un seul évènement actif à la fois (db.blackArmyEvent -- nom de
+     champ conservé tel quel pour ne rien changer au format déjà utilisé en production, avec un champ
+     "key" supplémentaire pour savoir QUEL thème est actif ; absent = "blackArmy", pour les évènements
+     déjà enregistrés avant l'ajout de ce système générique).
+     "blackArmy" reproduit EXACTEMENT les constantes de l'évènement de lancement d'origine (rangs,
+     multiplicateurs, bornes de configuration, gisement garanti) : aucun changement de comportement
+     pour ce thème. Les nouveaux thèmes suivent le même schéma pour réutiliser tel quel le moteur de
+     spawn générique (spawnEventFaction). */
+  const BLACK_ARMY_NAMES = ["Bastion de l'Armée Noire","Camp maudit","Citadelle noire","Repaire des Corbeaux","Garnison de l'Ombre","Avant-poste noir","Sentinelle noire","Forteresse déchue","Nid de vipères","Tour calcinée"];
+  const GOLDEN_CONVOY_NAMES = ["Convoi doré","Caravane chargée","Chariots du Trésor","Halte du Négociant","Dépôt clandestin","Caravansérail perdu","Wagons scellés","Butin en transit","Escorte désertée","Cache du Marchand"];
+  const EVENT_FACTIONS = {
+    blackArmy: {
+      key:"blackArmy", name:"L'Armée Noire", icon:"🏴", pinClass:"blackarmy",
+      namePool: BLACK_ARMY_NAMES,
+      tierWeights:[0.30,0.25,0.20,0.15,0.10], troopMult:1.8, resMult:2.2, resCapMult:1.5,
+      wallBase:1, wallPerTier:2, wallMax:20,
+      guaranteedResourceBonus:true, resourceBonusPct:0.10,
+      minCount:5, maxCount:150, minMinutes:60, maxMinutes:10080, defaultCount:40, defaultMinutes:4320,
+      achievementStat:"blackArmyDefeated",
+      desc:"Une vague de campements PNJ hostiles, en 5 Rangs (I faible → V redoutable), pour donner un objectif aussi bien aux nouveaux joueurs qu'aux joueurs multi-villages. Chaque victoire rapporte un butin nettement plus riche qu'un barbare ordinaire, et conquérir un campement garantit un gisement de ressource permanent (+10%)."
+    },
+    // "Le Convoi doré" : thème plus accessible et plus rapide que l'Armée Noire -- garnisons délibérément
+    // FAIBLES (troopMult<1, sous le niveau d'un barbare ordinaire) mais un butin considérable (resMult 4.5),
+    // pour un évènement "ruée sur les ressources" qu'un joueur récent peut rejoindre sans risque, avec
+    // beaucoup de campements (jusqu'à 200) et une durée par défaut courte (12h) qui crée l'urgence.
+    // Contrairement à l'Armée Noire, pas de gisement garanti à la conquête : l'intérêt est le pillage
+    // immédiat, pas la valeur à long terme du village conquis -- ce qui différencie clairement les deux
+    // thèmes plutôt que de dupliquer la même récompense sous un autre nom.
+    goldenConvoy: {
+      key:"goldenConvoy", name:"Le Convoi doré", icon:"🌾", pinClass:"convoy",
+      namePool: GOLDEN_CONVOY_NAMES,
+      tierWeights:[0.45,0.30,0.15,0.08,0.02], troopMult:0.6, resMult:4.5, resCapMult:1.2,
+      wallBase:0, wallPerTier:1, wallMax:8,
+      guaranteedResourceBonus:false, resourceBonusPct:0,
+      minCount:10, maxCount:200, minMinutes:30, maxMinutes:2880, defaultCount:60, defaultMinutes:720,
+      achievementStat:"goldenConvoyDefeated",
+      desc:"Une vague de convois marchands immobilisés, à la garnison volontairement faible (plus faible qu'un barbare ordinaire) mais chargés d'un butin considérable -- un évènement \"ruée sur les ressources\" accessible même à un village qui débute, sur une durée plus courte que l'Armée Noire."
+    }
+  };
+
   /* Succès (mêmes catégories, noms et paliers que le jeu officiel "Die Stämme / Tribal Wars",
      dans la limite des mécaniques réellement présentes dans ce clone — voir README pour le détail
      des catégories officielles volontairement omises, faute d'équivalent : pièces d'or/premium,
@@ -150,7 +192,9 @@
     { key:"blackHunter", name:"Chasseur de l'Armée Noire", icon:"💀", stat:"blackArmyDefeated",
       desc:"Remportez des combats contre les campements de l'Armée Noire (évènement de lancement).", tiers:[3,10,25,60] },
     { key:"legendHunter", name:"Chasseur de légende", icon:"👑", stat:"legendaryDefeated",
-      desc:"Participez à la chute d'un campement légendaire, seul ou aux côtés d'autres joueurs.", tiers:[1,3,8,20] }
+      desc:"Participez à la chute d'un campement légendaire, seul ou aux côtés d'autres joueurs.", tiers:[1,3,8,20] },
+    { key:"convoyHunter", name:"Chasseur de convoi", icon:"🌾", stat:"goldenConvoyDefeated",
+      desc:"Remportez des combats contre les convois du Convoi doré (évènement rotatif).", tiers:[3,10,25,60] }
   ];
 
   // Temps de base (baseTime, en secondes, au niveau 0 de Caserne — voir trainTime() ci-dessous) calés
@@ -261,7 +305,7 @@
 
   return {
     BUILDINGS, BUILD_ORDER, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, GUILD_BOOSTS, SERVER_EVENTS,
-    PERMANENT_FACTIONS,
+    PERMANENT_FACTIONS, EVENT_FACTIONS,
     ACHIEVEMENTS, ACHIEVEMENT_TIER_LABELS, COMMANDER_BRANCHES, COMMANDER_MAX_TIER, commanderXpToNext,
     clamp, buildCost, buildTime, prodPerHour, storageCap, farmCap, trainTime, BUILD_TIME_FACTOR, TRAIN_TIME_FACTOR,
     VILLAGE_TAGS, VILLAGE_TAG_KEYS
