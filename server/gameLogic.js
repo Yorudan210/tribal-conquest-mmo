@@ -54,33 +54,29 @@ function publicServerEvents(db){
 }
 
 /* ------------------------------------------------------------------------ */
-/*  Évènement "L'Armée Noire" (lancement officiel du jeu) : une vague de      */
-/*  campements PNJ hostiles, distincts des villages barbares normaux par un   */
-/*  champ "faction" et une couleur noire sur la carte. Un camp reste un       */
-/*  village owner:"barbarian" ordinaire (même combat, même conquête au       */
-/*  Noble, même conversion "semi-vivante" selon son tier) pour réutiliser     */
-/*  tel quel tout le moteur déjà éprouvé -- seuls la génération, l'affichage  */
-/*  et le suivi de succès sont spécifiques. 5 rangs (tier 0 à 4, comme les    */
-/*  barbares) mais nettement plus forts et plus riches, pour donner un        */
-/*  objectif à la fois aux nouveaux joueurs (Rang I, quelques troupes de      */
-/*  départ suffisent) et aux joueurs multi-villages (Rang V, muraille et      */
-/*  garnison consistantes, nécessite béliers/catapultes et une vraie armée).  */
+/*  Évènements PvE ROTATIFS (déclenchés par un admin, un seul actif à la      */
+/*  fois) : une vague de campements PNJ hostiles, distincts des villages      */
+/*  barbares normaux par un champ "faction" et une couleur dédiée sur la      */
+/*  carte. Un camp reste un village owner:"barbarian" ordinaire (même         */
+/*  combat, même conquête au Noble, même conversion "semi-vivante" selon      */
+/*  son tier) pour réutiliser tel quel tout le moteur déjà éprouvé -- seuls   */
+/*  la génération, l'affichage et le suivi de succès sont spécifiques au      */
+/*  thème actif (voir EVENT_FACTIONS, shared/gameData.js).                    */
+/*                                                                            */
+/*  Généralisé à partir de l'évènement de lancement "L'Armée Noire" (5 rangs, */
+/*  tier 0 à 4 comme les barbares, nettement plus forts et plus riches) :     */
+/*  le thème "blackArmy" d'EVENT_FACTIONS reproduit EXACTEMENT ses anciennes  */
+/*  constantes -- aucun changement de comportement pour ce thème. Le champ    */
+/*  "db.blackArmyEvent" garde également son nom d'origine (déjà utilisé en    */
+/*  production) ; un champ "key" supplémentaire (absent = "blackArmy") dit    */
+/*  quel thème est actif, sans nécessiter de migration de data/db.json.       */
 /* ------------------------------------------------------------------------ */
-
-const BLACK_ARMY_NAMES = ["Bastion de l'Armée Noire","Camp maudit","Citadelle noire","Repaire des Corbeaux","Garnison de l'Ombre","Avant-poste noir","Sentinelle noire","Forteresse déchue","Nid de vipères","Tour calcinée"];
-// Répartition des rangs à l'apparition : plus faible (Rang I) = plus fréquent, pour garantir des
-// cibles accessibles à un joueur qui vient tout juste de s'inscrire ; Rang V reste rare et prestigieux.
-const BLACK_ARMY_TIER_WEIGHTS = [0.30, 0.25, 0.20, 0.15, 0.10];
-const BLACK_ARMY_TROOP_MULT = 1.8;   // garnison nettement plus forte qu'un barbare normal de même rang
-const BLACK_ARMY_RES_MULT = 2.2;     // butin nettement plus riche, à la hauteur du risque
-const BLACK_ARMY_MIN_COUNT = 5, BLACK_ARMY_MAX_COUNT = 150;
-const BLACK_ARMY_MIN_MINUTES = 60, BLACK_ARMY_MAX_MINUTES = 10080; // 1h à 7 jours
 
 function isCoordOccupied(db, x, y){
   for(const id in db.villages){ const v=db.villages[id]; if(v.x===x && v.y===y) return true; }
   return false;
 }
-function findFreeBlackArmyCoord(db){
+function findFreeEventCoord(db){
   const w = store.getWorldBounds();
   for(let attempt=0; attempt<500; attempt++){
     const x = w.minX + Math.floor(Math.random()*(w.maxX-w.minX+1));
@@ -90,98 +86,119 @@ function findFreeBlackArmyCoord(db){
   for(let x=w.minX; x<=w.maxX; x++) for(let y=w.minY; y<=w.maxY; y++) if(!isCoordOccupied(db,x,y)) return {x,y};
   return null; // carte pleine : l'appelant doit se contenter de moins de campements que demandé
 }
-function pickBlackArmyTier(){
+function pickEventTier(tierWeights){
   const r = Math.random();
   let acc = 0;
-  for(let i=0;i<BLACK_ARMY_TIER_WEIGHTS.length;i++){ acc += BLACK_ARMY_TIER_WEIGHTS[i]; if(r<acc) return i; }
-  return BLACK_ARMY_TIER_WEIGHTS.length-1;
+  for(let i=0;i<tierWeights.length;i++){ acc += tierWeights[i]; if(r<acc) return i; }
+  return tierWeights.length-1;
 }
 
-/* Fait apparaître jusqu'à "count" campements de l'Armée Noire (peut en placer moins si la carte est
-   pleine). Retourne la liste des identifiants de village créés. */
-function spawnBlackArmy(db, count){
+/* Fait apparaître jusqu'à "count" campements du thème d'évènement "cfg" (une entrée d'EVENT_FACTIONS,
+   voir shared/gameData.js) -- peut en placer moins si la carte est pleine. Retourne la liste des
+   identifiants de village créés. Généralisation de l'ancien spawnBlackArmy(db,count), qui utilisait
+   ces mêmes formules mais avec les constantes de l'Armée Noire codées en dur. */
+function spawnEventFaction(db, cfg, count){
   const ids = [];
   for(let i=0;i<count;i++){
-    const coord = findFreeBlackArmyCoord(db);
+    const coord = findFreeEventCoord(db);
     if(!coord) break;
-    const tier = pickBlackArmyTier();
-    const troopBase = (tier*7 + Math.random()*8) * BLACK_ARMY_TROOP_MULT;
+    const tier = pickEventTier(cfg.tierWeights);
+    const troopBase = (tier*7 + Math.random()*8) * cfg.troopMult;
     const troops = {
       spear: Math.round(troopBase*(0.3+Math.random()*0.4)),
       sword: Math.round(troopBase*(0.2+Math.random()*0.3)),
       archer: Math.round(troopBase*(0.1+Math.random()*0.2)),
       scout:0, light:0, ram:0, catapult:0, noble:0
     };
-    const resBase = (150+tier*250) * BLACK_ARMY_RES_MULT;
+    const resBase = (150+tier*250) * cfg.resMult;
     const bonusRes = ["wood","clay","iron"][Math.floor(Math.random()*3)];
     const id = String(db.nextVillageId++);
     db.villages[id] = {
       id, x:coord.x, y:coord.y,
-      name: BLACK_ARMY_NAMES[Math.floor(Math.random()*BLACK_ARMY_NAMES.length)],
-      owner: "barbarian", tier, faction: "blackArmy",
+      name: cfg.namePool[Math.floor(Math.random()*cfg.namePool.length)],
+      owner: "barbarian", tier, faction: cfg.key,
       resources: {
         wood: Math.round(resBase*(0.7+Math.random()*0.6)),
         clay: Math.round(resBase*(0.7+Math.random()*0.6)),
         iron: Math.round(resBase*(0.7+Math.random()*0.6))
       },
-      resCap: Math.round((600+tier*500)*1.5),
-      troops, wallLevel: Math.min(20, 1+tier*2), hideLevel: 0,
+      resCap: Math.round((600+tier*500)*cfg.resCapMult),
+      troops, wallLevel: Math.min(cfg.wallMax, cfg.wallBase+tier*cfg.wallPerTier), hideLevel: 0,
       loyalty: 100, aggro: {},
-      // Contrairement aux barbares normaux (un sur huit seulement, voir rollResourceBonus dans
-      // store.js), un campement de l'Armée Noire garantit TOUJOURS un gisement bonus : le conquérir
-      // est donc une récompense sûre pour les joueurs équipés pour aller jusqu'au bout.
-      resourceBonus: { res: bonusRes, pct: 0.10 }
+      // Comme l'Armée Noire à l'origine : si le thème le prévoit (guaranteedResourceBonus), le
+      // gisement bonus n'est plus une chance sur huit (voir rollResourceBonus, store.js) mais garanti
+      // -- une récompense sûre pour les joueurs équipés pour aller jusqu'au bout de la conquête.
+      resourceBonus: cfg.guaranteedResourceBonus ? { res: bonusRes, pct: cfg.resourceBonusPct } : null
     };
     ids.push(id);
   }
   return ids;
 }
 
-/* Retire du monde tous les campements de l'Armée Noire pas encore conquis (ceux encore
+/* Retire du monde tous les campements du thème actif pas encore conquis (ceux encore
    owner:"barbarian" -- les villages déjà conquis par un joueur restent évidemment intacts, ce sont
    de vrais villages désormais). Utilisé à la fois par l'arrêt manuel (admin) et par l'expiration
-   automatique (runTick). */
+   automatique (runTick). Généralisation de l'ancien endBlackArmyEvent -- nom de fonction conservé
+   (appelé par runTick) mais le retrait cible désormais le thème réellement actif, pas toujours
+   "blackArmy" ; les événements déjà enregistrés sans champ "key" (avant ce système générique)
+   continuent de retirer des campements "blackArmy", comme avant. */
 function endBlackArmyEvent(db, announce){
   if(!db.blackArmyEvent) return { ok:true, removed:0 };
+  const key = db.blackArmyEvent.key || "blackArmy";
+  const cfg = GameData.EVENT_FACTIONS[key] || GameData.EVENT_FACTIONS.blackArmy;
   let removed = 0;
   for(const id in db.villages){
     const v = db.villages[id];
-    if(v.owner==="barbarian" && v.faction==="blackArmy"){ delete db.villages[id]; removed++; }
+    if(v.owner==="barbarian" && v.faction===key){ delete db.villages[id]; removed++; }
   }
   db.blackArmyEvent.active = false;
   if(announce!==false){
-    adminAnnounce(db, "Système", "🏴 L'Armée Noire se retire du monde. Les "+removed+" campements restants disparaissent -- merci à ceux qui ont pris part à l'évènement de lancement !");
+    adminAnnounce(db, "Système", cfg.icon+" "+cfg.name+" se retire du monde. Les "+removed+" campements restants disparaissent -- merci à ceux qui ont pris part à l'évènement !");
   }
   return { ok:true, removed };
 }
 
-function adminStartBlackArmy(db, count, minutes){
+/* Lance un nouvel évènement rotatif pour le thème "key" (une clé d'EVENT_FACTIONS). Généralisation de
+   l'ancien adminStartBlackArmy(db,count,minutes) -- toujours exporté ci-dessous comme un alias fin qui
+   appelle celle-ci avec key="blackArmy", pour ne rien changer côté route /api/admin/blackarmy/start. */
+function adminStartEvent(db, key, count, minutes){
+  const cfg = GameData.EVENT_FACTIONS && GameData.EVENT_FACTIONS[key];
+  if(!cfg) return { error:"Thème d'évènement inconnu." };
   count = Math.floor(Number(count));
   minutes = Math.floor(Number(minutes));
-  if(db.blackArmyEvent && db.blackArmyEvent.active) return { error:"Un évènement Armée Noire est déjà en cours -- arrêtez-le d'abord pour en relancer un." };
-  if(!Number.isFinite(count) || count<BLACK_ARMY_MIN_COUNT || count>BLACK_ARMY_MAX_COUNT) return { error:"Nombre de campements invalide (doit être entre "+BLACK_ARMY_MIN_COUNT+" et "+BLACK_ARMY_MAX_COUNT+")." };
-  if(!Number.isFinite(minutes) || minutes<BLACK_ARMY_MIN_MINUTES || minutes>BLACK_ARMY_MAX_MINUTES) return { error:"Durée invalide (doit être entre "+BLACK_ARMY_MIN_MINUTES+" et "+BLACK_ARMY_MAX_MINUTES+" minutes)." };
-  const ids = spawnBlackArmy(db, count);
+  if(db.blackArmyEvent && db.blackArmyEvent.active) return { error:"Un évènement est déjà en cours -- arrêtez-le d'abord pour en relancer un." };
+  if(!Number.isFinite(count) || count<cfg.minCount || count>cfg.maxCount) return { error:"Nombre de campements invalide (doit être entre "+cfg.minCount+" et "+cfg.maxCount+")." };
+  if(!Number.isFinite(minutes) || minutes<cfg.minMinutes || minutes>cfg.maxMinutes) return { error:"Durée invalide (doit être entre "+cfg.minMinutes+" et "+cfg.maxMinutes+" minutes)." };
+  const ids = spawnEventFaction(db, cfg, count);
   if(!ids.length) return { error:"Impossible de placer le moindre campement (carte pleine)." };
-  db.blackArmyEvent = { active:true, startAt: now(), endAt: now()+minutes*60, totalSpawned: ids.length, defeatedCount: 0 };
+  db.blackArmyEvent = { key: cfg.key, active:true, startAt: now(), endAt: now()+minutes*60, totalSpawned: ids.length, defeatedCount: 0 };
   adminAnnounce(db, "Système",
-    "🏴 L'ARMÉE NOIRE ENVAHIT LE MONDE ! "+ids.length+" campements viennent d'apparaître sur la carte, reconnaissables à leur couleur noire -- du Rang I (faible, à la portée d'un tout nouveau village) au Rang V (redoutable, prévoyez béliers et catapultes). Chaque victoire rapporte un butin généreux, et conquérir un campement garantit un bonus de ressource permanent. Consultez l'aide (section \"L'Armée Noire\") pour le détail des règles. Retrait des campements restants dans "+minutes+" minutes."
+    cfg.icon+" "+cfg.name.toUpperCase()+" ENVAHIT LE MONDE ! "+ids.length+" campements viennent d'apparaître sur la carte. "+cfg.desc+" Consultez l'aide pour le détail des règles. Retrait des campements restants dans "+minutes+" minutes."
   );
   return { ok:true, spawned: ids.length };
 }
 
-function adminStopBlackArmy(db){
-  if(!db.blackArmyEvent || !db.blackArmyEvent.active) return { error:"Aucun évènement Armée Noire en cours." };
+function adminStopEvent(db){
+  if(!db.blackArmyEvent || !db.blackArmyEvent.active) return { error:"Aucun évènement en cours." };
   return endBlackArmyEvent(db, true);
 }
 
+// Alias conservés pour compatibilité avec les routes /api/admin/blackarmy/* existantes (voir
+// server.js) -- appellent simplement la fonction générique avec key="blackArmy".
+function adminStartBlackArmy(db, count, minutes){ return adminStartEvent(db, "blackArmy", count, minutes); }
+function adminStopBlackArmy(db){ return adminStopEvent(db); }
+
 /* Vue publique de l'évènement en cours (ou du dernier passé), envoyée dans chaque instantané à tous
-   les joueurs -- pas seulement aux admins -- pour afficher la bannière "Encore XhYm". */
+   les joueurs -- pas seulement aux admins -- pour afficher la bannière "Encore XhYm". Inclut désormais
+   le thème actif (key/name/icon) pour que le client puisse afficher le bon nom/icône sans avoir à
+   deviner -- avant ce système générique, "L'Armée Noire" était codé en dur côté client. */
 function publicBlackArmyEvent(db){
   if(!db.blackArmyEvent) return null;
+  const key = db.blackArmyEvent.key || "blackArmy";
+  const cfg = GameData.EVENT_FACTIONS[key] || GameData.EVENT_FACTIONS.blackArmy;
   const active = db.blackArmyEvent.active && now()<db.blackArmyEvent.endAt;
   return {
-    active,
+    active, key, name: cfg.name, icon: cfg.icon,
     remainingSec: active ? Math.max(0, Math.round(db.blackArmyEvent.endAt-now())) : 0,
     totalSpawned: db.blackArmyEvent.totalSpawned||0,
     defeatedCount: db.blackArmyEvent.defeatedCount||0
@@ -213,7 +230,7 @@ function findFreeCoordNearVillage(db, base, radius){
     const y = Math.round(clamp(base.y+r*Math.sin(angle), w.minY, w.maxY));
     if(!isCoordOccupied(db,x,y)) return {x,y};
   }
-  return findFreeBlackArmyCoord(db); // dernier recours : coordonnée libre n'importe où sur la carte
+  return findFreeEventCoord(db); // dernier recours : coordonnée libre n'importe où sur la carte
 }
 
 function countActiveFaction(db, factionKey){
@@ -1214,9 +1231,18 @@ function resolveAttack(db, m){
     bumpStat(db, m.attackerUsername, "attacksWon", 1);
     bumpStat(db, m.attackerUsername, "totalLoot", loot.wood+loot.clay+loot.iron);
     bumpStat(db, m.attackerUsername, "wallLevelsDestroyed", wallDamage);
-    if(target.faction==="blackArmy"){
-      bumpStat(db, m.attackerUsername, "blackArmyDefeated", 1);
-      if(db.blackArmyEvent) db.blackArmyEvent.defeatedCount = (db.blackArmyEvent.defeatedCount||0)+1;
+    // Évènement rotatif (voir EVENT_FACTIONS, shared/gameData.js) : chaque victoire contre un campement
+    // dont la faction correspond à un thème d'évènement crédite le succès dédié de ce thème
+    // (achievementStat) et, si CET évènement précis est celui actuellement/dernièrement actif (même
+    // clé), incrémente son compteur de victoires affiché dans le panneau Admin. Généralisation de
+    // l'ancien traitement, qui ne connaissait que "blackArmy" -- le thème "blackArmy" garde exactement
+    // le même comportement (achievementStat:"blackArmyDefeated").
+    const eventCfg = GameData.EVENT_FACTIONS && GameData.EVENT_FACTIONS[target.faction];
+    if(eventCfg){
+      bumpStat(db, m.attackerUsername, eventCfg.achievementStat, 1);
+      if(db.blackArmyEvent && (db.blackArmyEvent.key||"blackArmy")===target.faction){
+        db.blackArmyEvent.defeatedCount = (db.blackArmyEvent.defeatedCount||0)+1;
+      }
     }
     // Camp de maraudeurs (faction "raiders", voir PERMANENT_FACTIONS) : chaque victoire octroie en
     // plus, au village qui a envoyé l'attaque, le boost temporaire défini par boostOnVictory (même
@@ -1545,7 +1571,7 @@ function doRename(db, username, name){
 /*  Succès (mêmes catégories/paliers que le jeu officiel — voir ACHIEVEMENTS) */
 /* ---------------------------------------------------------------------- */
 
-const EMPTY_STATS = ()=>({ totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, legendaryDefeated:0, opponents:[] });
+const EMPTY_STATS = ()=>({ totalLoot:0, unitsKilled:0, attacksWon:0, supportsSent:0, marketTrades:0, wallLevelsDestroyed:0, blackArmyDefeated:0, legendaryDefeated:0, goldenConvoyDefeated:0, opponents:[] });
 
 /* Incrémente un compteur de succès pour un joueur (no-op silencieux si le compte n'existe pas —
    ex. cible barbare — pour ne jamais avoir à vérifier "est-ce un vrai joueur ?" à chaque appel). */
@@ -1585,7 +1611,8 @@ function computeAchievements(db, username){
     wallLevelsDestroyed: stats.wallLevelsDestroyed||0,
     distinctOpponents: (stats.opponents||[]).length,
     blackArmyDefeated: stats.blackArmyDefeated||0,
-    legendaryDefeated: stats.legendaryDefeated||0
+    legendaryDefeated: stats.legendaryDefeated||0,
+    goldenConvoyDefeated: stats.goldenConvoyDefeated||0
   };
   return ACHIEVEMENTS.map(a=>{
     const value = values[a.stat]||0;
@@ -2731,7 +2758,7 @@ module.exports = {
   adminFinishBuildQueueForVillage, adminFinishTrainQueueForVillage,
   adminBulkUpdateVillages, adminBulkGiveResourcesToVillages, adminBulkFinishQueues,
   adminListServerEvents, adminStartServerEvent, adminStopServerEvent,
-  adminStartBlackArmy, adminStopBlackArmy, adminSeedPermanentFactions,
+  adminStartBlackArmy, adminStopBlackArmy, adminStartEvent, adminStopEvent, adminSeedPermanentFactions,
   doSendSupport, doRecallSupport, doGiveResources, doTransferResourcesBetweenVillages,
   doMarketCreateOffer, doMarketCancelOffer, doMarketAcceptOffer,
   doGuildCreate, doGuildInvite, doGuildAccept, doGuildDecline, doGuildKick, doGuildLeave,

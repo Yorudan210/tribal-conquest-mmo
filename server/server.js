@@ -557,6 +557,25 @@ async function handleApi(req, res, pathname, url){
       store.scheduleSave();
       return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
     }
+    // Évènements PvE rotatifs génériques (voir EVENT_FACTIONS, shared/gameData.js) : même mécanique que
+    // /api/admin/blackarmy/* ci-dessus (toujours conservées telles quelles comme alias), mais
+    // paramétrée par un thème ("key") choisi dans le panneau Admin plutôt que figée sur l'Armée Noire.
+    // Nommée "campevent" (et non "event", déjà pris par les boosts globaux adminStartServerEvent
+    // ci-dessus -- système totalement différent : boosts de production/construction/etc. pour tout le
+    // monde, sans aucun campement PNJ) pour éviter toute collision de route.
+    if(pathname==="/api/admin/campevent/start" && req.method==="POST"){
+      const body = await readBody(req);
+      const result = game.adminStartEvent(db, String(body.key||""), body.count, body.minutes);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, spawned: result.spawned, snapshot: game.buildSnapshot(db, username) });
+    }
+    if(pathname==="/api/admin/campevent/stop" && req.method==="POST"){
+      const result = game.adminStopEvent(db);
+      if(result.error) return sendJson(res, 400, result);
+      store.scheduleSave();
+      return sendJson(res, 200, { ok:true, removed: result.removed, snapshot: game.buildSnapshot(db, username) });
+    }
     // Peuple rétroactivement en bandits/raiders un monde déjà généré avant l'introduction des
     // factions permanentes (voir PERMANENT_FACTIONS, shared/gameData.js) -- un monde neuf les a déjà
     // dès sa création (store.load()), cette route n'est utile qu'une fois, pour rattraper un monde

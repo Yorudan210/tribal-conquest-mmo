@@ -40,7 +40,9 @@ function emptyDb(){
     diplomacy: [],        // [{id, guildA, guildB, type:"pact"|"alliance"|"war", status:"pending"|"active", proposedBy, createdAt}, ...]
     settings: { speedMultiplier: 1 }, // réglages globaux modifiables par un administrateur
     serverEvents: [],     // [{id, key, name, icon, affects, multiplier, startAt, endAt}, ...] évènements admin en cours (voir gameLogic.js)
-    blackArmyEvent: null, // {active, startAt, endAt, totalSpawned, defeatedCount} | null -- évènement "Armée Noire" (voir gameLogic.js)
+    blackArmyEvent: null, // {key, active, startAt, endAt, totalSpawned, defeatedCount} | null -- évènement de campements PvE
+                           // rotatif en cours (voir EVENT_FACTIONS/adminStartEvent, gameLogic.js) ; "key" absent = "blackArmy"
+                           // (nom de champ conservé tel quel, c'était à l'origine uniquement l'évènement "Armée Noire")
     market: [],           // [{id, seller, sellerVillageId, giveRes, giveAmount, wantRes, wantAmount, createdAt}, ...] offres d'échange publiques (voir gameLogic.js)
     lastTickAt: Date.now(),
     nextWorldGrowthAt: Date.now() + 60000
