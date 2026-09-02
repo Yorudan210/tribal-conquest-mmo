@@ -165,9 +165,19 @@ function OverviewBox({ g, v, username, serverTimeOffset, adminSpeed, doAction, c
           <h3>🎁 Faire un don à la guilde</h3>
           <p className="small muted">Chaque don augmente définitivement le bonus de production de TOUS les membres (plafonné à {GUILD_MAX_BONUS_PERCENT_CLIENT}%). Votre Hall de guilde (niveau {hallLvl}) limite chaque don à {1000*hallLvl} ressources au total.</p>
           <div className="inputs" style={{display:"flex", gap:10, flexWrap:"wrap", marginBottom:8}}>
-            <div className="inp">{RES_ICON.wood}<input type="number" min="0" defaultValue="0" ref={donateWood} /></div>
-            <div className="inp">{RES_ICON.clay}<input type="number" min="0" defaultValue="0" ref={donateClay} /></div>
-            <div className="inp">{RES_ICON.iron}<input type="number" min="0" defaultValue="0" ref={donateIron} /></div>
+            {[["wood",donateWood],["clay",donateClay],["iron",donateIron]].map(([r,ref]) => {
+              // Max "à vue" pour CE champ pris isolément : le plus petit entre ce que le village possède
+              // et le plafond du Hall de guilde (1000*niveau) -- ne tient pas compte de ce qui serait
+              // rempli simultanément dans les deux autres champs (comme les max de la Caserne/Empire,
+              // volontairement indépendants champ par champ plutôt qu'un calcul croisé plus complexe).
+              const donateMax = Math.min(Math.floor(v.resources[r]||0), 1000*hallLvl);
+              return (
+                <div className="inp" key={r}>
+                  {RES_ICON[r]}<input type="number" min="0" max={donateMax} defaultValue="0" ref={ref} />
+                  <a href="#" className="small" style={{fontSize:10, marginLeft:4}} onClick={(e)=>{ e.preventDefault(); ref.current.value = donateMax; }}>max {fmt(donateMax)}</a>
+                </div>
+              );
+            })}
           </div>
           <button className="primary" onClick={donate}>Donner</button>
         </div>

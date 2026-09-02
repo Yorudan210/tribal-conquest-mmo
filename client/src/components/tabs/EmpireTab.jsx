@@ -306,6 +306,20 @@ function EmpireTroopRow({ k, v, adminSpeed, onTrain, onDisband }){
   const home = v.troops[k]||0;
   const nobleAlive = k==="noble" ? (v.troops.noble||0)+v.trainQueue.filter(o=>o.troop==="noble").reduce((s,o)=>s+o.count,0) : 0;
 
+  // Même calcul de quantité maximale finançable que dans BarracksTab (voir ce fichier), appliqué ici
+  // au village SÉLECTIONNÉ dans l'onglet Empire plutôt qu'au village actif -- myVillagesDetailed
+  // (server/gameLogic.js) fournit déjà v.pop/v.popMax précalculés par village, donc pas besoin de
+  // repasser par popUsed()/farmCap() côté client comme le fait BarracksTab pour le village actif.
+  const freePop = (v.popMax||0) - (v.pop||0);
+  const maxByWood = t.cost.wood>0 ? Math.floor((v.resources.wood||0)/t.cost.wood) : Infinity;
+  const maxByClay = t.cost.clay>0 ? Math.floor((v.resources.clay||0)/t.cost.clay) : Infinity;
+  const maxByIron = t.cost.iron>0 ? Math.floor((v.resources.iron||0)/t.cost.iron) : Infinity;
+  const maxByPop = t.pop>0 ? Math.floor(Math.max(0,freePop)/t.pop) : Infinity;
+  let maxAffordable = Math.min(maxByWood, maxByClay, maxByIron, maxByPop);
+  if(k==="noble") maxAffordable = Math.min(maxAffordable, Math.max(0, NOBLE_CAP_PER_VILLAGE-nobleAlive));
+  if(!Number.isFinite(maxAffordable)) maxAffordable = 0;
+  maxAffordable = Math.max(0, maxAffordable);
+
   return (
     <div className="troop-row">
       <div className="tname">{t.name}</div>
@@ -316,8 +330,12 @@ function EmpireTroopRow({ k, v, adminSpeed, onTrain, onDisband }){
         <span className="req-note">Nécessite : {lockedEntries.map(([rk,rv]) => (BUILDINGS[rk]?BUILDINGS[rk].name:rk)+" niv. "+rv).join(", ")}</span>
       ) : (
         <>
-          <input type="number" min="0" defaultValue="0" ref={trainRef} />
-          <button onClick={()=>onTrain(v.id, k, Number(trainRef.current.value))}>Entraîner</button>
+          <div style={{display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
+            <input type="number" min="0" max={maxAffordable} defaultValue="0" ref={trainRef} />
+            <a href="#" className="small" style={{fontSize:10}} title="Remplir avec le nombre finançable maintenant (bois/argile/fer + population libre)"
+              onClick={(e)=>{ e.preventDefault(); trainRef.current.value = maxAffordable; }}>max {fmt(maxAffordable)}</a>
+            <button onClick={()=>onTrain(v.id, k, Number(trainRef.current.value))} disabled={maxAffordable<=0} title={maxAffordable<=0 ? "Ressources ou population insuffisantes pour entraîner cette troupe" : undefined}>Entraîner</button>
+          </div>
           {t.note ? <div className="unit-note">{t.note}</div> : null}
           {k==="noble" ? <div className="unit-note">Nobles vivants : {nobleAlive} / {NOBLE_CAP_PER_VILLAGE} dans ce village (1 seul noble peut partir par attaque)</div> : null}
         </>
@@ -336,14 +354,28 @@ function ResourcesBox({ villages, snapshot, doAction, call }){
   if(villages.length<2) return <p className="muted small">Il vous faut au moins 2 villages pour transférer des ressources entre eux.</p>;
   const activeId = snapshot.village.id;
   const defaultTargetId = (villages.find(v=>v.id!==activeId)||villages[0]).id;
-  const sourceRef = useRef(null), targetRef = useRef(null);
+  // Source/destination en state contrôlé (plutôt que des refs comme les montants juste en dessous) :
+  // les liens "max" ont besoin de recalculer une valeur à jour à chaque changement de village
+  // sélectionné, ce qu'un <select> non contrôlé ne permettrait pas de refléter sans rechargement.
+  const [sourceId, setSourceId] = useState(activeId);
+  const [targetId, setTargetId] = useState(defaultTargetId);
   const woodRef = useRef(null), clayRef = useRef(null), ironRef = useRef(null);
 
+  const source = villages.find(v=>v.id===sourceId);
+  const target = villages.find(v=>v.id===targetId);
+  // Max "à vue" par ressource : ce que le village source possède, plafonné par la place encore
+  // libre dans l'entrepôt du village de destination (au-delà, doTransferResourcesBetweenVillages
+  // côté serveur ne fait pas d'erreur mais l'excédent est silencieusement perdu -- voir gameLogic.js).
+  function maxFor(r){
+    if(!source) return 0;
+    const avail = Math.floor(source.resources[r]||0);
+    if(!target || target.id===source.id) return avail;
+    const free = Math.max(0, (target.resCap||0) - Math.floor(target.resources[r]||0));
+    return Math.min(avail, free);
+  }
+
   function transfer(){
-    const srcId = sourceRef.current.value, tgtId = targetRef.current.value;
-    if(!srcId || !tgtId || srcId===tgtId) return;
-    const source = villages.find(v=>v.id===srcId);
-    const target = (snapshot.myVillages||[]).find(mv=>mv.id===tgtId);
+    if(!sourceId || !targetId || sourceId===targetId) return;
     const amt = {};
     let any = false;
     for(const [r, ref] of [["wood",woodRef],["clay",clayRef],["iron",ironRef]]){
@@ -352,7 +384,7 @@ function ResourcesBox({ villages, snapshot, doAction, call }){
       if(n>0){ amt[r]=n; any=true; }
     }
     if(!any) return;
-    doAction(()=>call("/api/village/transfer","POST",{sourceVillageId:srcId, targetVillageId:tgtId, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
+    doAction(()=>call("/api/village/transfer","POST",{sourceVillageId:sourceId, targetVillageId:targetId, wood:amt.wood||0, clay:amt.clay||0, iron:amt.iron||0}),
       "🚚 Ressources transférées"+(source&&target?(" de "+source.name+" vers "+target.name):"")+".", null);
   }
 
@@ -363,23 +395,26 @@ function ResourcesBox({ villages, snapshot, doAction, call }){
       <div style={{display:"flex", gap:14, flexWrap:"wrap", alignItems:"flex-end", marginBottom:10}}>
         <div>
           <label className="small muted">Depuis</label><br/>
-          <select ref={sourceRef} defaultValue={activeId}>
+          <select value={sourceId} onChange={e=>setSourceId(e.target.value)}>
             {villages.map(v => <option key={v.id} value={v.id}>{v.isHome?"🏠 ":"🚩 "}{v.name} ({v.x}|{v.y}) — 🪵{fmt(v.resources.wood)} 🧱{fmt(v.resources.clay)} ⛏️{fmt(v.resources.iron)}</option>)}
           </select>
         </div>
         <div>
           <label className="small muted">Vers</label><br/>
-          <select ref={targetRef} defaultValue={defaultTargetId}>
+          <select value={targetId} onChange={e=>setTargetId(e.target.value)}>
             {villages.map(v => <option key={v.id} value={v.id}>{v.isHome?"🏠 ":"🚩 "}{v.name} ({v.x}|{v.y})</option>)}
           </select>
         </div>
       </div>
       <div className="inputs" style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:8}}>
-        <div className="inp">{RES_ICON.wood}<input type="number" min="0" defaultValue="0" ref={woodRef} /></div>
-        <div className="inp">{RES_ICON.clay}<input type="number" min="0" defaultValue="0" ref={clayRef} /></div>
-        <div className="inp">{RES_ICON.iron}<input type="number" min="0" defaultValue="0" ref={ironRef} /></div>
+        {[["wood",woodRef],["clay",clayRef],["iron",ironRef]].map(([r,ref]) => (
+          <div className="inp" key={r}>
+            {RES_ICON[r]}<input type="number" min="0" max={maxFor(r)} defaultValue="0" ref={ref} />
+            <a href="#" className="small" style={{fontSize:10, marginLeft:4}} onClick={(e)=>{ e.preventDefault(); ref.current.value = maxFor(r); }}>max {fmt(maxFor(r))}</a>
+          </div>
+        ))}
       </div>
-      <button className="primary" onClick={transfer}>🚚 Transférer</button>
+      <button className="primary" onClick={transfer} disabled={!source||!target||source.id===target.id}>🚚 Transférer</button>
     </div>
   );
 }
