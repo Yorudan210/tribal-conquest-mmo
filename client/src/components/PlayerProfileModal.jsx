@@ -70,9 +70,15 @@ export default function PlayerProfileModal(){
               <div className="send-form open">
                 <div className="small muted" style={{marginBottom:6}}>🎁 Envoyer des ressources (livré à sa capitale)</div>
                 <div className="inputs" style={{display:"flex", gap:8, flexWrap:"wrap"}}>
-                  {["wood","clay","iron"].map(r => (
-                    <div className="inp" key={r}>{RES_ICON[r]}<input type="number" min="0" max={Math.floor(snapshot.village.resources[r]||0)} defaultValue="0" id={"profileGift_"+r} /></div>
-                  ))}
+                  {["wood","clay","iron"].map(r => {
+                    const giftMax = Math.floor(snapshot.village.resources[r]||0);
+                    return (
+                      <div className="inp" key={r}>
+                        {RES_ICON[r]}<input type="number" min="0" max={giftMax} defaultValue="0" id={"profileGift_"+r} />
+                        <a href="#" style={{fontSize:10}} onClick={(e)=>{ e.preventDefault(); document.getElementById("profileGift_"+r).value=giftMax; }}>max {giftMax}</a>
+                      </div>
+                    );
+                  })}
                 </div>
                 <button onClick={sendGift}>🎁 Envoyer</button>
               </div>

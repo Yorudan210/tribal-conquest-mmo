@@ -214,9 +214,15 @@ export default function VillageActionModal({ onGotoTab }){
           <div className="send-form open" style={{marginTop:14, paddingTop:10, borderTop:"1px dashed var(--border)"}}>
             <div className="small muted" style={{marginBottom:6}}>🎁 Donner des ressources (immédiat, sans marchand)</div>
             <div className="inputs" style={{display:"flex", gap:10, flexWrap:"wrap"}}>
-              {["wood","clay","iron"].map(r => (
-                <div className="inp" key={r}>{RES_ICON[r]}<input type="number" min="0" max={Math.floor(v.resources[r])} defaultValue="0" id={"gift_"+t.id+"_"+r} /></div>
-              ))}
+              {["wood","clay","iron"].map(r => {
+                const giftMax = Math.floor(v.resources[r]);
+                return (
+                  <div className="inp" key={r}>
+                    {RES_ICON[r]}<input type="number" min="0" max={giftMax} defaultValue="0" id={"gift_"+t.id+"_"+r} />
+                    <a href="#" style={{fontSize:10}} onClick={(e)=>{ e.preventDefault(); document.getElementById("gift_"+t.id+"_"+r).value=giftMax; }}>max {giftMax}</a>
+                  </div>
+                );
+              })}
             </div>
             <button onClick={()=>sendGift(t.id)}>🎁 Envoyer le don</button>
           </div>
