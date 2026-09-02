@@ -2,6 +2,20 @@ import { useGame } from "../GameContext.jsx";
 import { storageCap, farmCap, TROOP_ORDER, TROOPS, BUILDINGS } from "../gameData.js";
 import { fmt, fmtTime, fmtTroops, estimateNow, popUsed, resProdRate, villageResourceBonus, RES_ICON, RES_NAME } from "../formulas.js";
 
+// Accent de couleur de la bannière d'évènement de campements actif (voir EVENT_FACTIONS,
+// shared/gameData.js), même palette que les pins de carte correspondants (.villagePin.blackarmy/
+// .convoy dans styles.css). Une clé absente (thème futur sans entrée ici) retombe sur l'Armée Noire.
+const EVENT_BANNER_ACCENT = {
+  blackArmy: {
+    border: "#9a2b2b",
+    glow: "rgba(154,43,43,.25)"
+  },
+  goldenConvoy: {
+    border: "#c99a1f",
+    glow: "rgba(255,193,7,.25)"
+  }
+};
+
 // Porte renderSidebar() : ressources, troupes stationnées, files de construction/entraînement,
 // missions en cours, attaques entrantes, renforts — chaque action (annuler, rappeler) appelle
 // directement l'API comme avant (doAction), la liste se met à jour au prochain instantané.
@@ -57,23 +71,29 @@ export default function Sidebar({
   }
   return /*#__PURE__*/React.createElement("aside", {
     id: "sidebar"
-  }, ba && ba.active ? /*#__PURE__*/React.createElement("div", {
+  }, ba && ba.active ?
+  /*#__PURE__*/
+  // Bannière générique (voir EVENT_FACTIONS, shared/gameData.js) : le nom/l'icône viennent
+  // désormais du serveur (publicBlackArmyEvent) au lieu d'être codés en dur sur "L'Armée Noire",
+  // pour s'adapter automatiquement à n'importe quel thème rotatif lancé par un admin. L'accent de
+  // couleur suit le même principe, avec l'Armée Noire (rouge sombre) comme repli par défaut.
+  React.createElement("div", {
     className: "box",
     style: {
-      borderColor: "#9a2b2b",
+      borderColor: EVENT_BANNER_ACCENT[ba.key]?.border || "#9a2b2b",
       background: "linear-gradient(180deg, rgba(20,20,24,.55), rgba(20,20,24,.15))",
-      boxShadow: "0 0 14px rgba(154,43,43,.25)"
+      boxShadow: "0 0 14px " + (EVENT_BANNER_ACCENT[ba.key]?.glow || "rgba(154,43,43,.25)")
     }
   }, /*#__PURE__*/React.createElement("h3", {
     style: {
       marginTop: 0
     }
-  }, "\uD83C\uDFF4 L'Arm\xE9e Noire"), /*#__PURE__*/React.createElement("p", {
+  }, ba.icon, " ", ba.name), /*#__PURE__*/React.createElement("p", {
     className: "small",
     style: {
       margin: "2px 0 4px"
     }
-  }, "Rep\xE9rez les villages ", /*#__PURE__*/React.createElement("b", null, "noirs"), " sur la carte \u2014 encore ", /*#__PURE__*/React.createElement("b", null, fmtTime(ba.remainingSec)), " avant leur retrait."), /*#__PURE__*/React.createElement("p", {
+  }, "Rep\xE9rez les villages marqu\xE9s sur la carte \u2014 encore ", /*#__PURE__*/React.createElement("b", null, fmtTime(ba.remainingSec)), " avant leur retrait."), /*#__PURE__*/React.createElement("p", {
     className: "small muted",
     style: {
       margin: 0
