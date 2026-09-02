@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useGame } from "../../GameContext.jsx";
-import { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp } from "../../gameData.js";
-import { fmt, fmtTime, vTrainTime, nobleCount, NOBLE_CAP_PER_VILLAGE } from "../../formulas.js";
+import { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp, farmCap } from "../../gameData.js";
+import { fmt, fmtTime, vTrainTime, nobleCount, NOBLE_CAP_PER_VILLAGE, popUsed } from "../../formulas.js";
 import { troopBadgeSvg } from "../../legacy/art.js";
 
 // Porte renderBarracks() : entraînement/licenciement de troupes. Les compteurs (nombre à
@@ -112,6 +112,22 @@ function TroopRow({
   const lockedEntries = Object.entries(t.requires).filter(([rk, rv]) => (v.buildings[rk] || 0) < rv);
   const locked = lockedEntries.length > 0;
   const home = v.troops[k] || 0;
+
+  // Quantité maximale réellement finançable MAINTENANT pour cette troupe : le minimum entre ce que
+  // permettent le bois/l'argile/le fer disponibles et la population libre (capacité de la Ferme moins
+  // popUsed, même formule que la barre de population de la Sidebar -- voir doTrain, gameLogic.js, côté
+  // serveur, qui applique exactement ces mêmes contraintes et refuse tout l'ordre si l'une d'elles est
+  // dépassée). Pour le Noble, contrainte supplémentaire : au plus NOBLE_CAP_PER_VILLAGE vivants/en
+  // formation à la fois dans ce village.
+  const freePop = farmCap(v.buildings.farm) - popUsed(snapshot, username);
+  const maxByWood = t.cost.wood > 0 ? Math.floor((v.resources.wood || 0) / t.cost.wood) : Infinity;
+  const maxByClay = t.cost.clay > 0 ? Math.floor((v.resources.clay || 0) / t.cost.clay) : Infinity;
+  const maxByIron = t.cost.iron > 0 ? Math.floor((v.resources.iron || 0) / t.cost.iron) : Infinity;
+  const maxByPop = t.pop > 0 ? Math.floor(Math.max(0, freePop) / t.pop) : Infinity;
+  let maxAffordable = Math.min(maxByWood, maxByClay, maxByIron, maxByPop);
+  if (k === "noble") maxAffordable = Math.min(maxAffordable, Math.max(0, NOBLE_CAP_PER_VILLAGE - nobleCount(snapshot, username)));
+  if (!Number.isFinite(maxAffordable)) maxAffordable = 0;
+  maxAffordable = Math.max(0, maxAffordable);
   return /*#__PURE__*/React.createElement("div", {
     className: "troop-row"
   }, /*#__PURE__*/React.createElement("div", {
@@ -145,14 +161,36 @@ function TroopRow({
     className: "cost small"
   }, "\uD83E\uDEB5", fmt(t.cost.wood), " \uD83E\uDDF1", fmt(t.cost.clay), " \u26CF\uFE0F", fmt(t.cost.iron), " \uD83D\uDC65", t.pop, " \u23F1 ", fmtTime(vTrainTime(v, k, adminSpeed))), locked ? /*#__PURE__*/React.createElement("span", {
     className: "req-note"
-  }, "N\xE9cessite : ", lockedEntries.map(([rk, rv]) => (BUILDINGS[rk] ? BUILDINGS[rk].name : rk) + " niv. " + rv).join(", ")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+  }, "N\xE9cessite : ", lockedEntries.map(([rk, rv]) => (BUILDINGS[rk] ? BUILDINGS[rk].name : rk) + " niv. " + rv).join(", ")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "train-row-inputs",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
     type: "number",
     min: "0",
+    max: maxAffordable,
     defaultValue: "0",
     ref: trainRef
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => onTrain(k, Number(trainRef.current.value))
-  }, "Entra\xEEner"), t.note ? /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("a", {
+    href: "#",
+    className: "small",
+    style: {
+      fontSize: 10
+    },
+    title: "Remplir avec le nombre finan\xE7able maintenant (bois/argile/fer + population libre)",
+    onClick: e => {
+      e.preventDefault();
+      trainRef.current.value = maxAffordable;
+    }
+  }, "max ", fmt(maxAffordable)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onTrain(k, Number(trainRef.current.value)),
+    disabled: maxAffordable <= 0,
+    title: maxAffordable <= 0 ? "Ressources ou population insuffisantes pour entraîner cette troupe" : undefined
+  }, "Entra\xEEner")), t.note ? /*#__PURE__*/React.createElement("div", {
     className: "unit-note"
   }, t.note) : null, k === "noble" ? /*#__PURE__*/React.createElement("div", {
     className: "unit-note"
