@@ -13,6 +13,10 @@ export const BLACK_ARMY_RANK_LABEL = ["I", "II", "III", "IV", "V"];
 // Table générique de rendu des factions PvE spéciales (pins carte + badge VillageActionModal).
 // blackArmy garde exactement son comportement d'avant (cls "blackarmy", label "Armée Noire") --
 // bandits/raiders (Phase 1 "variété des cibles PvE") suivent le même pattern.
+// goldenConvoy (évènement rotatif "Le Convoi doré", voir EVENT_FACTIONS shared/gameData.js) suit le
+// même pattern que blackArmy -- généralisé par gameLogic.js (adminStartEvent/adminStopEvent) plutôt
+// que codé en dur, mais chaque thème garde son propre rendu ici (cls "convoy", voir aussi
+// .villagePin.convoy dans styles.css et le kind "convoy" de villageMapIconSvg, legacy/art.js).
 export const FACTION_PIN = {
   blackArmy: {
     cls: "blackarmy",
@@ -33,6 +37,11 @@ export const FACTION_PIN = {
     cls: "legendary",
     icon: "👑",
     label: "Campement légendaire"
+  },
+  goldenConvoy: {
+    cls: "convoy",
+    icon: "🌾",
+    label: "Le Convoi doré"
   }
 };
 export const DIPLOMACY_LABEL = {

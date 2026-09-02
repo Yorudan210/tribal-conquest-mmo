@@ -456,14 +456,18 @@ function villageMapIconSvg(kind, level, hasWall) {
   // de l'Armée Noire (gris/rouge sombre) comme des deux autres factions permanentes -- voir aussi
   // .villagePin.legendary dans le CSS (lueur dorée, plus large que les autres factions).
   const legendary = kind === "legendary";
-  const campKind = barb || bandits || raiders || legendary;
+  // Convoi doré (évènement rotatif, voir EVENT_FACTIONS shared/gameData.js) : palette ambre chaude,
+  // nettement plus saturée que le Campement légendaire (or pâle) pour rester reconnaissable sur la
+  // carte -- voir aussi .villagePin.convoy dans le CSS.
+  const convoy = kind === "convoy";
+  const campKind = barb || bandits || raiders || legendary || convoy;
   // "Armée Noire" : silhouette délibérément assombrie (murs quasi noirs, toit rouge sombre) pour
   // qu'un campement se distingue d'un simple coup d'oeil sur la carte, même sans regarder la
   // couleur du point du pin -- voir aussi villagePin.blackarmy dans le CSS.
-  const roofTop = black ? "#5c1c1c" : legendary ? "#9a2210" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
-  const roofBot = black ? "#280a0a" : legendary ? "#380803" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
-  const doorStroke = black ? "#0a0a0c" : legendary ? "#160e02" : "#2a1c10";
-  const groundCol = black ? "#1c1414" : legendary ? "#1e1404" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
+  const roofTop = black ? "#5c1c1c" : legendary ? "#9a2210" : convoy ? "#a86c10" : bandits ? "#3a2440" : raiders ? "#7a2e14" : barb ? "#5c4530" : "#82402e";
+  const roofBot = black ? "#280a0a" : legendary ? "#380803" : convoy ? "#5c3c08" : bandits ? "#1c1220" : raiders ? "#3a1408" : barb ? "#2e2416" : "#42201a";
+  const doorStroke = black ? "#0a0a0c" : legendary ? "#160e02" : convoy ? "#2c1c04" : "#2a1c10";
+  const groundCol = black ? "#1c1414" : legendary ? "#1e1404" : convoy ? "#241a04" : bandits ? "#2a2030" : raiders ? "#3a2416" : barb ? "#39431f" : "#463822";
   // Chaque hutte vue du dessus (vue à la verticale, comme sur la carte elle-même) : un simple
   // rectangle de toiture scindé par le faîtage en deux pans éclairé/ombré -- plus lisible à la
   // petite taille réelle d'un pin de carte que l'ancienne projection isométrique (qui restait
@@ -501,7 +505,7 @@ function villageMapIconSvg(kind, level, hasWall) {
   // pin suffisent déjà à la distinguer sans surcharger l'icône.
   const centerY = level === 1 ? 9 : 11;
   const centerpiece = level >= 1 && !black ? campKind ? `<g transform="translate(0,${centerY})"><circle r="3.6" fill="none" stroke="${doorStroke}" stroke-width="1.3"/><circle r="2" fill="#e0862c" opacity="0.85"/><circle r="1" fill="#f5c25a"/></g>` : `<g transform="translate(0,${centerY})"><circle r="4.2" fill="none" stroke="#6b5533" stroke-width="1.3"/><circle r="3.1" fill="#241c10" stroke="${doorStroke}" stroke-width="0.6"/></g>` : "";
-  const palisade = hasWall ? `<ellipse cx="0" cy="${groundCy}" rx="${groundRx + 4}" ry="${groundRy + 4}" fill="none" stroke="${black ? '#3a1414' : legendary ? '#6b4a12' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="2.2" stroke-dasharray="3.5 3" opacity="0.85"/>` : "";
+  const palisade = hasWall ? `<ellipse cx="0" cy="${groundCy}" rx="${groundRx + 4}" ry="${groundRy + 4}" fill="none" stroke="${black ? '#3a1414' : legendary ? '#6b4a12' : convoy ? '#6b4a08' : raiders ? '#5a2f18' : bandits ? '#453552' : '#5a4326'}" stroke-width="2.2" stroke-dasharray="3.5 3" opacity="0.85"/>` : "";
   const flag = kind === "mine" ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-13" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-13 9,-9.5 0,-6" fill="#f0cd7c" stroke="#8a6a2a" stroke-width="1"/></g>` : kind === "player" ? `<g transform="translate(0,-23)"><line x1="0" y1="0" x2="0" y2="-10" stroke="#4a3320" stroke-width="1.4"/><polygon points="0,-10 7,-7.3 0,-4.6" fill="#c8c8c8" stroke="#6a6a6a" stroke-width="1"/></g>` : black ? `<g transform="translate(0,-25)"><line x1="0" y1="0" x2="0" y2="-14" stroke="#0a0a0c" stroke-width="1.4"/><polygon points="0,-14 10,-10 0,-6" fill="#1a1a1e" stroke="#9a2b2b" stroke-width="1.2"/></g>` : "";
   return `<svg viewBox="-24 -30 48 40" preserveAspectRatio="xMidYMax meet">${ground}${palisade}${huts}${centerpiece}${flag}</svg>`;
 }
