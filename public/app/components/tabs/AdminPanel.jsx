@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useGame } from "../../GameContext.jsx";
 import { useToast } from "../../ToastContext.jsx";
-import { BUILD_ORDER, BUILDINGS, TROOP_ORDER, TROOPS, SERVER_EVENTS } from "../../gameData.js";
+import { BUILD_ORDER, BUILDINGS, TROOP_ORDER, TROOPS, SERVER_EVENTS, EVENT_FACTIONS } from "../../gameData.js";
 import { fmt, fmtTime, RES_ICON } from "../../formulas.js";
 
 // Porte renderAdmin()/renderAdminBlackArmyBox()/renderAdminBulkVillagesBox()/renderAdminVillagesTable()/
@@ -30,6 +30,7 @@ export default function AdminPanel() {
   const [selectedVillageId, setSelectedVillageId] = useState(null);
   const [bulkScope, setBulkScope] = useState("all");
   const [eventKey, setEventKey] = useState(SERVER_EVENTS[0]?.key || "");
+  const [campEventKey, setCampEventKey] = useState(Object.keys(EVENT_FACTIONS)[0] || "blackArmy");
 
   // Chargement à la demande (une seule fois, à l'ouverture du sous-onglet Admin) -- porte
   // refreshAdminData(), appelée dans l'ancien index.html seulement "si adminPlayers est encore null".
@@ -94,8 +95,10 @@ export default function AdminPanel() {
     adminAction: adminAction,
     call: call,
     toast: toast
-  }), /*#__PURE__*/React.createElement(BlackArmyBox, {
+  }), /*#__PURE__*/React.createElement(EventBox, {
     snapshot: snapshot,
+    campEventKey: campEventKey,
+    setCampEventKey: setCampEventKey,
     adminAction: adminAction,
     call: call,
     toast: toast
@@ -621,40 +624,51 @@ function ServerEventsBox({
     }
   }, def?.desc));
 }
-function BlackArmyBox({
+
+// Généralisation de l'ancienne BlackArmyBox (évènement de lancement figé sur l'Armée Noire) en un
+// sélecteur de thème parmi EVENT_FACTIONS (shared/gameData.js) -- voir gameLogic.js adminStartEvent/
+// adminStopEvent. "blackArmy" reste le thème par défaut et garde exactement son comportement d'avant ;
+// seuls le nom/l'icône affichés et les bornes count/minutes changent selon le thème choisi.
+function EventBox({
   snapshot,
+  campEventKey,
+  setCampEventKey,
   adminAction,
   call,
   toast
 }) {
   const ba = snapshot.blackArmyEvent;
   const active = ba && ba.active;
+  const def = EVENT_FACTIONS[campEventKey] || EVENT_FACTIONS.blackArmy;
+  // Pendant qu'un évènement tourne, le thème réellement actif (ba.key) prime sur la sélection locale
+  // pour l'affichage du badge/texte -- au cas où un autre admin l'aurait lancé avec un thème différent.
+  const activeDef = active ? EVENT_FACTIONS[ba.key] || def : def;
   return /*#__PURE__*/React.createElement("div", {
     className: "box",
     style: {
       marginBottom: 14,
       borderColor: "#9a2b2b"
     }
-  }, /*#__PURE__*/React.createElement("h3", null, "\uD83C\uDFF4 \xC9v\xE8nement : l'Arm\xE9e Noire"), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("h3", null, activeDef.icon, " \xC9v\xE8nements de campements PvE (rotatifs)"), /*#__PURE__*/React.createElement("p", {
     className: "small muted"
-  }, "Fait appara\xEEtre une vague de campements PNJ (pins noirs sur la Carte), plus forts et plus riches que des barbares ordinaires, r\xE9partis en 5 Rangs (I faible \u2192 V redoutable) pour donner un objectif aussi bien aux nouveaux joueurs qu'aux joueurs multi-villages. Une annonce automatique explique les r\xE8gles \xE0 tous. Un seul \xE9v\xE8nement \xE0 la fois."), active ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "Fait appara\xEEtre une vague de campements PNJ (pins de couleur d\xE9di\xE9e sur la Carte), sur le th\xE8me choisi ci-dessous \u2014 chacun avec ses propres forces, sa propre richesse en butin et sa propre dur\xE9e typique. Une annonce automatique explique les r\xE8gles \xE0 tous. Un seul \xE9v\xE8nement \xE0 la fois, tous th\xE8mes confondus."), active ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "event-badges",
     style: {
       marginBottom: 12
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "event-badge admin",
-    title: "🏴 L'Armée Noire — encore " + fmtTime(ba.remainingSec) + " (cliquer pour arrêter)",
-    onClick: () => adminAction(() => call("/api/admin/blackarmy/stop", "POST", {}), "Évènement Armée Noire arrêté.")
-  }, "\uD83C\uDFF4", /*#__PURE__*/React.createElement("span", {
+    title: activeDef.icon + " " + activeDef.name + " — encore " + fmtTime(ba.remainingSec) + " (cliquer pour arrêter)",
+    onClick: () => adminAction(() => call("/api/admin/campevent/stop", "POST", {}), "Évènement " + activeDef.name + " arrêté.")
+  }, activeDef.icon, /*#__PURE__*/React.createElement("span", {
     className: "event-badge-mult"
   }, fmt(ba.totalSpawned), " campements"), /*#__PURE__*/React.createElement("span", {
     className: "event-badge-stop"
   }, "\u2715"))), /*#__PURE__*/React.createElement("p", {
     className: "small muted"
-  }, "Encore ", /*#__PURE__*/React.createElement("b", null, fmtTime(ba.remainingSec)), " avant le retrait automatique des campements non conquis \u2014 ", fmt(ba.defeatedCount), " victoire", ba.defeatedCount > 1 ? "s" : "", " enregistr\xE9e", ba.defeatedCount > 1 ? "s" : "", " jusqu'ici.")) : /*#__PURE__*/React.createElement("p", {
+  }, activeDef.icon, " ", /*#__PURE__*/React.createElement("b", null, activeDef.name), " \u2014 encore ", /*#__PURE__*/React.createElement("b", null, fmtTime(ba.remainingSec)), " avant le retrait automatique des campements non conquis \u2014 ", fmt(ba.defeatedCount), " victoire", ba.defeatedCount > 1 ? "s" : "", " enregistr\xE9e", ba.defeatedCount > 1 ? "s" : "", " jusqu'ici.")) : /*#__PURE__*/React.createElement("p", {
     className: "small muted"
-  }, "Aucun \xE9v\xE8nement Arm\xE9e Noire actif actuellement."), /*#__PURE__*/React.createElement("form", {
+  }, "Aucun \xE9v\xE8nement de campements actif actuellement."), /*#__PURE__*/React.createElement("form", {
     style: {
       display: "flex",
       gap: 12,
@@ -665,8 +679,8 @@ function BlackArmyBox({
     onSubmit: e => {
       e.preventDefault();
       if (active) return;
-      const count = Number(document.getElementById("adminBlackArmyCount").value);
-      const minutes = Number(document.getElementById("adminBlackArmyMinutes").value);
+      const count = Number(document.getElementById("adminCampEventCount").value);
+      const minutes = Number(document.getElementById("adminCampEventMinutes").value);
       if (!count || count <= 0) {
         toast("⚠️ Nombre de campements invalide.");
         return;
@@ -675,32 +689,49 @@ function BlackArmyBox({
         toast("⚠️ Durée invalide.");
         return;
       }
-      adminAction(() => call("/api/admin/blackarmy/start", "POST", {
+      adminAction(() => call("/api/admin/campevent/start", "POST", {
+        key: def.key,
         count,
         minutes
-      }), "🏴 L'Armée Noire envahit le monde !");
+      }), def.icon + " " + def.name + " envahit le monde !");
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "small muted"
+  }, "Th\xE8me"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("select", {
+    value: campEventKey,
+    onChange: e => setCampEventKey(e.target.value),
+    disabled: active
+  }, Object.values(EVENT_FACTIONS).map(f => /*#__PURE__*/React.createElement("option", {
+    key: f.key,
+    value: f.key
+  }, f.icon, " ", f.name)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "small muted"
   }, "Nombre de campements"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("input", {
     type: "number",
-    id: "adminBlackArmyCount",
-    min: "5",
-    max: "150",
-    defaultValue: 40
+    id: "adminCampEventCount",
+    min: def.minCount,
+    max: def.maxCount,
+    defaultValue: def.defaultCount,
+    key: "count_" + def.key
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "small muted"
   }, "Dur\xE9e (minutes)"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("input", {
     type: "number",
-    id: "adminBlackArmyMinutes",
-    min: "60",
-    max: "10080",
-    defaultValue: 4320
+    id: "adminCampEventMinutes",
+    min: def.minMinutes,
+    max: def.maxMinutes,
+    defaultValue: def.defaultMinutes,
+    key: "minutes_" + def.key
   })), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     className: "primary",
     disabled: active
-  }, "\uD83C\uDFF4 Lancer l'Arm\xE9e Noire")));
+  }, def.icon, " Lancer ", def.name)), /*#__PURE__*/React.createElement("p", {
+    className: "small muted",
+    style: {
+      marginTop: 8
+    }
+  }, def.desc));
 }
 
 /* Peuple rétroactivement un monde déjà généré en repaires de brigands/camps de maraudeurs (Phase 1
