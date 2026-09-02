@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useGame } from "../../GameContext.jsx";
 import { useToast } from "../../ToastContext.jsx";
-import { BUILD_ORDER, BUILDINGS, TROOP_ORDER, TROOPS, SERVER_EVENTS } from "../../gameData.js";
+import { BUILD_ORDER, BUILDINGS, TROOP_ORDER, TROOPS, SERVER_EVENTS, EVENT_FACTIONS } from "../../gameData.js";
 import { fmt, fmtTime, RES_ICON } from "../../formulas.js";
 
 // Porte renderAdmin()/renderAdminBlackArmyBox()/renderAdminBulkVillagesBox()/renderAdminVillagesTable()/
@@ -25,6 +25,7 @@ export default function AdminPanel(){
   const [selectedVillageId, setSelectedVillageId] = useState(null);
   const [bulkScope, setBulkScope] = useState("all");
   const [eventKey, setEventKey] = useState(SERVER_EVENTS[0]?.key || "");
+  const [campEventKey, setCampEventKey] = useState(Object.keys(EVENT_FACTIONS)[0] || "blackArmy");
 
   // Chargement à la demande (une seule fois, à l'ouverture du sous-onglet Admin) -- porte
   // refreshAdminData(), appelée dans l'ancien index.html seulement "si adminPlayers est encore null".
@@ -71,7 +72,7 @@ export default function AdminPanel(){
       <GiveAllBox adminAction={adminAction} call={call} toast={toast} />
       <BulkVillagesBox bulkScope={bulkScope} setBulkScope={setBulkScope} adminAction={adminAction} call={call} toast={toast} />
       <ServerEventsBox snapshot={snapshot} eventKey={eventKey} setEventKey={setEventKey} adminAction={adminAction} call={call} toast={toast} />
-      <BlackArmyBox snapshot={snapshot} adminAction={adminAction} call={call} toast={toast} />
+      <EventBox snapshot={snapshot} campEventKey={campEventKey} setCampEventKey={setCampEventKey} adminAction={adminAction} call={call} toast={toast} />
       <PermanentFactionsBox adminAction={adminAction} call={call} />
       <MissionsBox missions={missions} adminAction={adminAction} call={call} />
 
@@ -319,43 +320,58 @@ function ServerEventsBox({ snapshot, eventKey, setEventKey, adminAction, call, t
   );
 }
 
-function BlackArmyBox({ snapshot, adminAction, call, toast }){
+// Généralisation de l'ancienne BlackArmyBox (évènement de lancement figé sur l'Armée Noire) en un
+// sélecteur de thème parmi EVENT_FACTIONS (shared/gameData.js) -- voir gameLogic.js adminStartEvent/
+// adminStopEvent. "blackArmy" reste le thème par défaut et garde exactement son comportement d'avant ;
+// seuls le nom/l'icône affichés et les bornes count/minutes changent selon le thème choisi.
+function EventBox({ snapshot, campEventKey, setCampEventKey, adminAction, call, toast }){
   const ba = snapshot.blackArmyEvent;
   const active = ba && ba.active;
+  const def = EVENT_FACTIONS[campEventKey] || EVENT_FACTIONS.blackArmy;
+  // Pendant qu'un évènement tourne, le thème réellement actif (ba.key) prime sur la sélection locale
+  // pour l'affichage du badge/texte -- au cas où un autre admin l'aurait lancé avec un thème différent.
+  const activeDef = active ? (EVENT_FACTIONS[ba.key] || def) : def;
   return (
     <div className="box" style={{marginBottom:14, borderColor:"#9a2b2b"}}>
-      <h3>🏴 Évènement : l'Armée Noire</h3>
-      <p className="small muted">Fait apparaître une vague de campements PNJ (pins noirs sur la Carte), plus forts et plus riches que des barbares ordinaires, répartis en 5 Rangs (I faible → V redoutable) pour donner un objectif aussi bien aux nouveaux joueurs qu'aux joueurs multi-villages. Une annonce automatique explique les règles à tous. Un seul évènement à la fois.</p>
+      <h3>{activeDef.icon} Évènements de campements PvE (rotatifs)</h3>
+      <p className="small muted">Fait apparaître une vague de campements PNJ (pins de couleur dédiée sur la Carte), sur le thème choisi ci-dessous — chacun avec ses propres forces, sa propre richesse en butin et sa propre durée typique. Une annonce automatique explique les règles à tous. Un seul évènement à la fois, tous thèmes confondus.</p>
       {active ? (
         <>
           <div className="event-badges" style={{marginBottom:12}}>
-            <span className="event-badge admin" title={"🏴 L'Armée Noire — encore "+fmtTime(ba.remainingSec)+" (cliquer pour arrêter)"}
-              onClick={()=>adminAction(()=>call("/api/admin/blackarmy/stop","POST",{}), "Évènement Armée Noire arrêté.")}>
-              🏴<span className="event-badge-mult">{fmt(ba.totalSpawned)} campements</span><span className="event-badge-stop">✕</span>
+            <span className="event-badge admin" title={activeDef.icon+" "+activeDef.name+" — encore "+fmtTime(ba.remainingSec)+" (cliquer pour arrêter)"}
+              onClick={()=>adminAction(()=>call("/api/admin/campevent/stop","POST",{}), "Évènement "+activeDef.name+" arrêté.")}>
+              {activeDef.icon}<span className="event-badge-mult">{fmt(ba.totalSpawned)} campements</span><span className="event-badge-stop">✕</span>
             </span>
           </div>
-          <p className="small muted">Encore <b>{fmtTime(ba.remainingSec)}</b> avant le retrait automatique des campements non conquis — {fmt(ba.defeatedCount)} victoire{ba.defeatedCount>1?"s":""} enregistrée{ba.defeatedCount>1?"s":""} jusqu'ici.</p>
+          <p className="small muted">{activeDef.icon} <b>{activeDef.name}</b> — encore <b>{fmtTime(ba.remainingSec)}</b> avant le retrait automatique des campements non conquis — {fmt(ba.defeatedCount)} victoire{ba.defeatedCount>1?"s":""} enregistrée{ba.defeatedCount>1?"s":""} jusqu'ici.</p>
         </>
-      ) : <p className="small muted">Aucun évènement Armée Noire actif actuellement.</p>}
+      ) : <p className="small muted">Aucun évènement de campements actif actuellement.</p>}
       <form style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end"}} inert={active ? "" : undefined} onSubmit={e=>{
         e.preventDefault();
         if(active) return;
-        const count = Number(document.getElementById("adminBlackArmyCount").value);
-        const minutes = Number(document.getElementById("adminBlackArmyMinutes").value);
+        const count = Number(document.getElementById("adminCampEventCount").value);
+        const minutes = Number(document.getElementById("adminCampEventMinutes").value);
         if(!count || count<=0){ toast("⚠️ Nombre de campements invalide."); return; }
         if(!minutes || minutes<=0){ toast("⚠️ Durée invalide."); return; }
-        adminAction(()=>call("/api/admin/blackarmy/start","POST",{count, minutes}), "🏴 L'Armée Noire envahit le monde !");
+        adminAction(()=>call("/api/admin/campevent/start","POST",{key:def.key, count, minutes}), def.icon+" "+def.name+" envahit le monde !");
       }}>
         <div>
+          <label className="small muted">Thème</label><br/>
+          <select value={campEventKey} onChange={e=>setCampEventKey(e.target.value)} disabled={active}>
+            {Object.values(EVENT_FACTIONS).map(f => <option key={f.key} value={f.key}>{f.icon} {f.name}</option>)}
+          </select>
+        </div>
+        <div>
           <label className="small muted">Nombre de campements</label><br/>
-          <input type="number" id="adminBlackArmyCount" min="5" max="150" defaultValue={40} />
+          <input type="number" id="adminCampEventCount" min={def.minCount} max={def.maxCount} defaultValue={def.defaultCount} key={"count_"+def.key} />
         </div>
         <div>
           <label className="small muted">Durée (minutes)</label><br/>
-          <input type="number" id="adminBlackArmyMinutes" min="60" max="10080" defaultValue={4320} />
+          <input type="number" id="adminCampEventMinutes" min={def.minMinutes} max={def.maxMinutes} defaultValue={def.defaultMinutes} key={"minutes_"+def.key} />
         </div>
-        <button type="submit" className="primary" disabled={active}>🏴 Lancer l'Armée Noire</button>
+        <button type="submit" className="primary" disabled={active}>{def.icon} Lancer {def.name}</button>
       </form>
+      <p className="small muted" style={{marginTop:8}}>{def.desc}</p>
     </div>
   );
 }
