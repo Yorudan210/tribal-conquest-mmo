@@ -33,6 +33,7 @@ export const {
   TRAIN_TIME_FACTOR,
   VILLAGE_TAGS,
   VILLAGE_TAG_KEYS,
-  PERMANENT_FACTIONS
+  PERMANENT_FACTIONS,
+  EVENT_FACTIONS
 } = GameData;
 export default GameData;
