@@ -266,28 +266,34 @@ function OverviewBox({
       flexWrap: "wrap",
       marginBottom: 8
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.wood, /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    defaultValue: "0",
-    ref: donateWood
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.clay, /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    defaultValue: "0",
-    ref: donateClay
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.iron, /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    defaultValue: "0",
-    ref: donateIron
-  }))), /*#__PURE__*/React.createElement("button", {
+  }, [["wood", donateWood], ["clay", donateClay], ["iron", donateIron]].map(([r, ref]) => {
+    // Max "à vue" pour CE champ pris isolément : le plus petit entre ce que le village possède
+    // et le plafond du Hall de guilde (1000*niveau) -- ne tient pas compte de ce qui serait
+    // rempli simultanément dans les deux autres champs (comme les max de la Caserne/Empire,
+    // volontairement indépendants champ par champ plutôt qu'un calcul croisé plus complexe).
+    const donateMax = Math.min(Math.floor(v.resources[r] || 0), 1000 * hallLvl);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "inp",
+      key: r
+    }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "0",
+      max: donateMax,
+      defaultValue: "0",
+      ref: ref
+    }), /*#__PURE__*/React.createElement("a", {
+      href: "#",
+      className: "small",
+      style: {
+        fontSize: 10,
+        marginLeft: 4
+      },
+      onClick: e => {
+        e.preventDefault();
+        ref.current.value = donateMax;
+      }
+    }, "max ", fmt(donateMax)));
+  })), /*#__PURE__*/React.createElement("button", {
     className: "primary",
     onClick: donate
   }, "Donner")) : /*#__PURE__*/React.createElement("p", {

@@ -523,6 +523,20 @@ function EmpireTroopRow({
   const locked = lockedEntries.length > 0;
   const home = v.troops[k] || 0;
   const nobleAlive = k === "noble" ? (v.troops.noble || 0) + v.trainQueue.filter(o => o.troop === "noble").reduce((s, o) => s + o.count, 0) : 0;
+
+  // Même calcul de quantité maximale finançable que dans BarracksTab (voir ce fichier), appliqué ici
+  // au village SÉLECTIONNÉ dans l'onglet Empire plutôt qu'au village actif -- myVillagesDetailed
+  // (server/gameLogic.js) fournit déjà v.pop/v.popMax précalculés par village, donc pas besoin de
+  // repasser par popUsed()/farmCap() côté client comme le fait BarracksTab pour le village actif.
+  const freePop = (v.popMax || 0) - (v.pop || 0);
+  const maxByWood = t.cost.wood > 0 ? Math.floor((v.resources.wood || 0) / t.cost.wood) : Infinity;
+  const maxByClay = t.cost.clay > 0 ? Math.floor((v.resources.clay || 0) / t.cost.clay) : Infinity;
+  const maxByIron = t.cost.iron > 0 ? Math.floor((v.resources.iron || 0) / t.cost.iron) : Infinity;
+  const maxByPop = t.pop > 0 ? Math.floor(Math.max(0, freePop) / t.pop) : Infinity;
+  let maxAffordable = Math.min(maxByWood, maxByClay, maxByIron, maxByPop);
+  if (k === "noble") maxAffordable = Math.min(maxAffordable, Math.max(0, NOBLE_CAP_PER_VILLAGE - nobleAlive));
+  if (!Number.isFinite(maxAffordable)) maxAffordable = 0;
+  maxAffordable = Math.max(0, maxAffordable);
   return /*#__PURE__*/React.createElement("div", {
     className: "troop-row"
   }, /*#__PURE__*/React.createElement("div", {
@@ -535,14 +549,35 @@ function EmpireTroopRow({
     className: "cost small"
   }, "\uD83E\uDEB5", fmt(t.cost.wood), " \uD83E\uDDF1", fmt(t.cost.clay), " \u26CF\uFE0F", fmt(t.cost.iron), " \uD83D\uDC65", t.pop, " \u23F1 ", fmtTime(vTrainTime(v, k, adminSpeed))), locked ? /*#__PURE__*/React.createElement("span", {
     className: "req-note"
-  }, "N\xE9cessite : ", lockedEntries.map(([rk, rv]) => (BUILDINGS[rk] ? BUILDINGS[rk].name : rk) + " niv. " + rv).join(", ")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+  }, "N\xE9cessite : ", lockedEntries.map(([rk, rv]) => (BUILDINGS[rk] ? BUILDINGS[rk].name : rk) + " niv. " + rv).join(", ")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
     type: "number",
     min: "0",
+    max: maxAffordable,
     defaultValue: "0",
     ref: trainRef
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => onTrain(v.id, k, Number(trainRef.current.value))
-  }, "Entra\xEEner"), t.note ? /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("a", {
+    href: "#",
+    className: "small",
+    style: {
+      fontSize: 10
+    },
+    title: "Remplir avec le nombre finan\xE7able maintenant (bois/argile/fer + population libre)",
+    onClick: e => {
+      e.preventDefault();
+      trainRef.current.value = maxAffordable;
+    }
+  }, "max ", fmt(maxAffordable)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onTrain(v.id, k, Number(trainRef.current.value)),
+    disabled: maxAffordable <= 0,
+    title: maxAffordable <= 0 ? "Ressources ou population insuffisantes pour entraîner cette troupe" : undefined
+  }, "Entra\xEEner")), t.note ? /*#__PURE__*/React.createElement("div", {
     className: "unit-note"
   }, t.note) : null, k === "noble" ? /*#__PURE__*/React.createElement("div", {
     className: "unit-note"
@@ -571,17 +606,28 @@ function ResourcesBox({
   }, "Il vous faut au moins 2 villages pour transf\xE9rer des ressources entre eux.");
   const activeId = snapshot.village.id;
   const defaultTargetId = (villages.find(v => v.id !== activeId) || villages[0]).id;
-  const sourceRef = useRef(null),
-    targetRef = useRef(null);
+  // Source/destination en state contrôlé (plutôt que des refs comme les montants juste en dessous) :
+  // les liens "max" ont besoin de recalculer une valeur à jour à chaque changement de village
+  // sélectionné, ce qu'un <select> non contrôlé ne permettrait pas de refléter sans rechargement.
+  const [sourceId, setSourceId] = useState(activeId);
+  const [targetId, setTargetId] = useState(defaultTargetId);
   const woodRef = useRef(null),
     clayRef = useRef(null),
     ironRef = useRef(null);
+  const source = villages.find(v => v.id === sourceId);
+  const target = villages.find(v => v.id === targetId);
+  // Max "à vue" par ressource : ce que le village source possède, plafonné par la place encore
+  // libre dans l'entrepôt du village de destination (au-delà, doTransferResourcesBetweenVillages
+  // côté serveur ne fait pas d'erreur mais l'excédent est silencieusement perdu -- voir gameLogic.js).
+  function maxFor(r) {
+    if (!source) return 0;
+    const avail = Math.floor(source.resources[r] || 0);
+    if (!target || target.id === source.id) return avail;
+    const free = Math.max(0, (target.resCap || 0) - Math.floor(target.resources[r] || 0));
+    return Math.min(avail, free);
+  }
   function transfer() {
-    const srcId = sourceRef.current.value,
-      tgtId = targetRef.current.value;
-    if (!srcId || !tgtId || srcId === tgtId) return;
-    const source = villages.find(v => v.id === srcId);
-    const target = (snapshot.myVillages || []).find(mv => mv.id === tgtId);
+    if (!sourceId || !targetId || sourceId === targetId) return;
     const amt = {};
     let any = false;
     for (const [r, ref] of [["wood", woodRef], ["clay", clayRef], ["iron", ironRef]]) {
@@ -594,8 +640,8 @@ function ResourcesBox({
     }
     if (!any) return;
     doAction(() => call("/api/village/transfer", "POST", {
-      sourceVillageId: srcId,
-      targetVillageId: tgtId,
+      sourceVillageId: sourceId,
+      targetVillageId: targetId,
       wood: amt.wood || 0,
       clay: amt.clay || 0,
       iron: amt.iron || 0
@@ -620,16 +666,16 @@ function ResourcesBox({
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "small muted"
   }, "Depuis"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("select", {
-    ref: sourceRef,
-    defaultValue: activeId
+    value: sourceId,
+    onChange: e => setSourceId(e.target.value)
   }, villages.map(v => /*#__PURE__*/React.createElement("option", {
     key: v.id,
     value: v.id
   }, v.isHome ? "🏠 " : "🚩 ", v.name, " (", v.x, "|", v.y, ") \u2014 \uD83E\uDEB5", fmt(v.resources.wood), " \uD83E\uDDF1", fmt(v.resources.clay), " \u26CF\uFE0F", fmt(v.resources.iron))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "small muted"
   }, "Vers"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("select", {
-    ref: targetRef,
-    defaultValue: defaultTargetId
+    value: targetId,
+    onChange: e => setTargetId(e.target.value)
   }, villages.map(v => /*#__PURE__*/React.createElement("option", {
     key: v.id,
     value: v.id
@@ -642,29 +688,29 @@ function ResourcesBox({
       alignItems: "center",
       marginBottom: 8
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.wood, /*#__PURE__*/React.createElement("input", {
+  }, [["wood", woodRef], ["clay", clayRef], ["iron", ironRef]].map(([r, ref]) => /*#__PURE__*/React.createElement("div", {
+    className: "inp",
+    key: r
+  }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
     type: "number",
     min: "0",
+    max: maxFor(r),
     defaultValue: "0",
-    ref: woodRef
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.clay, /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    defaultValue: "0",
-    ref: clayRef
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "inp"
-  }, RES_ICON.iron, /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    defaultValue: "0",
-    ref: ironRef
-  }))), /*#__PURE__*/React.createElement("button", {
+    ref: ref
+  }), /*#__PURE__*/React.createElement("a", {
+    href: "#",
+    className: "small",
+    style: {
+      fontSize: 10,
+      marginLeft: 4
+    },
+    onClick: e => {
+      e.preventDefault();
+      ref.current.value = maxFor(r);
+    }
+  }, "max ", fmt(maxFor(r)))))), /*#__PURE__*/React.createElement("button", {
     className: "primary",
-    onClick: transfer
+    onClick: transfer,
+    disabled: !source || !target || source.id === target.id
   }, "\uD83D\uDE9A Transf\xE9rer"));
 }
