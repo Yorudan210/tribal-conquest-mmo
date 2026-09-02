@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useGame } from "../../GameContext.jsx";
-import { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp } from "../../gameData.js";
-import { fmt, fmtTime, vTrainTime, nobleCount, NOBLE_CAP_PER_VILLAGE } from "../../formulas.js";
+import { BUILDINGS, TROOPS, TROOP_ORDER, INFANTRY, CAVALRY, ARCHERS, clamp, farmCap } from "../../gameData.js";
+import { fmt, fmtTime, vTrainTime, nobleCount, NOBLE_CAP_PER_VILLAGE, popUsed } from "../../formulas.js";
 import { troopBadgeSvg } from "../../legacy/art.js";
 
 // Porte renderBarracks() : entraînement/licenciement de troupes. Les compteurs (nombre à
@@ -78,6 +78,22 @@ function TroopRow({ k, v, snapshot, username, adminSpeed, onTrain, onDisband }){
   const locked = lockedEntries.length>0;
   const home = v.troops[k]||0;
 
+  // Quantité maximale réellement finançable MAINTENANT pour cette troupe : le minimum entre ce que
+  // permettent le bois/l'argile/le fer disponibles et la population libre (capacité de la Ferme moins
+  // popUsed, même formule que la barre de population de la Sidebar -- voir doTrain, gameLogic.js, côté
+  // serveur, qui applique exactement ces mêmes contraintes et refuse tout l'ordre si l'une d'elles est
+  // dépassée). Pour le Noble, contrainte supplémentaire : au plus NOBLE_CAP_PER_VILLAGE vivants/en
+  // formation à la fois dans ce village.
+  const freePop = farmCap(v.buildings.farm) - popUsed(snapshot, username);
+  const maxByWood = t.cost.wood>0 ? Math.floor((v.resources.wood||0)/t.cost.wood) : Infinity;
+  const maxByClay = t.cost.clay>0 ? Math.floor((v.resources.clay||0)/t.cost.clay) : Infinity;
+  const maxByIron = t.cost.iron>0 ? Math.floor((v.resources.iron||0)/t.cost.iron) : Infinity;
+  const maxByPop = t.pop>0 ? Math.floor(Math.max(0,freePop)/t.pop) : Infinity;
+  let maxAffordable = Math.min(maxByWood, maxByClay, maxByIron, maxByPop);
+  if(k==="noble") maxAffordable = Math.min(maxAffordable, Math.max(0, NOBLE_CAP_PER_VILLAGE-nobleCount(snapshot, username)));
+  if(!Number.isFinite(maxAffordable)) maxAffordable = 0;
+  maxAffordable = Math.max(0, maxAffordable);
+
   return (
     <div className="troop-row">
       <div className="thead">
@@ -97,8 +113,12 @@ function TroopRow({ k, v, snapshot, username, adminSpeed, onTrain, onDisband }){
         <span className="req-note">Nécessite : {lockedEntries.map(([rk,rv]) => (BUILDINGS[rk]?BUILDINGS[rk].name:rk)+" niv. "+rv).join(", ")}</span>
       ) : (
         <>
-          <input type="number" min="0" defaultValue="0" ref={trainRef} />
-          <button onClick={()=>onTrain(k, Number(trainRef.current.value))}>Entraîner</button>
+          <div className="train-row-inputs" style={{display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
+            <input type="number" min="0" max={maxAffordable} defaultValue="0" ref={trainRef} />
+            <a href="#" className="small" style={{fontSize:10}} title="Remplir avec le nombre finançable maintenant (bois/argile/fer + population libre)"
+              onClick={(e)=>{ e.preventDefault(); trainRef.current.value = maxAffordable; }}>max {fmt(maxAffordable)}</a>
+            <button onClick={()=>onTrain(k, Number(trainRef.current.value))} disabled={maxAffordable<=0} title={maxAffordable<=0 ? "Ressources ou population insuffisantes pour entraîner cette troupe" : undefined}>Entraîner</button>
+          </div>
           {t.note ? <div className="unit-note">{t.note}</div> : null}
           {k==="noble" ? (
             <div className="unit-note">Nobles vivants : {nobleCount(snapshot, username)} / {NOBLE_CAP_PER_VILLAGE} dans ce village (1 seul noble peut partir par attaque)</div>
