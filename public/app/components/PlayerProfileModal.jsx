@@ -134,16 +134,28 @@ export default function PlayerProfileModal() {
       gap: 8,
       flexWrap: "wrap"
     }
-  }, ["wood", "clay", "iron"].map(r => /*#__PURE__*/React.createElement("div", {
-    className: "inp",
-    key: r
-  }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    max: Math.floor(snapshot.village.resources[r] || 0),
-    defaultValue: "0",
-    id: "profileGift_" + r
-  })))), /*#__PURE__*/React.createElement("button", {
+  }, ["wood", "clay", "iron"].map(r => {
+    const giftMax = Math.floor(snapshot.village.resources[r] || 0);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "inp",
+      key: r
+    }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "0",
+      max: giftMax,
+      defaultValue: "0",
+      id: "profileGift_" + r
+    }), /*#__PURE__*/React.createElement("a", {
+      href: "#",
+      style: {
+        fontSize: 10
+      },
+      onClick: e => {
+        e.preventDefault();
+        document.getElementById("profileGift_" + r).value = giftMax;
+      }
+    }, "max ", giftMax));
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: sendGift
   }, "\uD83C\uDF81 Envoyer")), /*#__PURE__*/React.createElement("button", {
     className: "primary",

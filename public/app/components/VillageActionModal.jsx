@@ -361,16 +361,28 @@ export default function VillageActionModal({
       gap: 10,
       flexWrap: "wrap"
     }
-  }, ["wood", "clay", "iron"].map(r => /*#__PURE__*/React.createElement("div", {
-    className: "inp",
-    key: r
-  }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "0",
-    max: Math.floor(v.resources[r]),
-    defaultValue: "0",
-    id: "gift_" + t.id + "_" + r
-  })))), /*#__PURE__*/React.createElement("button", {
+  }, ["wood", "clay", "iron"].map(r => {
+    const giftMax = Math.floor(v.resources[r]);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "inp",
+      key: r
+    }, RES_ICON[r], /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "0",
+      max: giftMax,
+      defaultValue: "0",
+      id: "gift_" + t.id + "_" + r
+    }), /*#__PURE__*/React.createElement("a", {
+      href: "#",
+      style: {
+        fontSize: 10
+      },
+      onClick: e => {
+        e.preventDefault();
+        document.getElementById("gift_" + t.id + "_" + r).value = giftMax;
+      }
+    }, "max ", giftMax));
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => sendGift(t.id)
   }, "\uD83C\uDF81 Envoyer le don")) : null, /*#__PURE__*/React.createElement(TagPicker, {
     villageId: t.id,
